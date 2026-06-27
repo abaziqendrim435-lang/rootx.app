@@ -6,18 +6,19 @@ import { Zap, X, Globe, GitBranch } from 'lucide-react';
 const footerLinks = {
   Product: [
     { label: 'Agent Marketplace', href: '/agents' },
-    { label: 'Request Setup', href: '/request' },
-    { label: 'Pricing', href: '/agents' },
+    { label: 'Request Setup',     href: '/request' },
+    { label: 'Pricing',           href: '/pricing' },
+    { label: 'Dashboard',         href: '/dashboard' },
   ],
   Company: [
-    { label: 'About', href: '/' },
-    { label: 'Blog', href: '/' },
-    { label: 'Careers', href: '/' },
+    { label: 'About',    href: '/#features' },
+    { label: 'Agents',   href: '/agents' },
+    { label: 'Pricing',  href: '/pricing' },
   ],
   Legal: [
-    { label: 'Privacy Policy', href: '/' },
-    { label: 'Terms of Service', href: '/' },
-    { label: 'Cookie Policy', href: '/' },
+    { label: 'Privacy Policy',   href: '/privacy' },
+    { label: 'Terms of Service', href: '/terms' },
+    { label: 'Cookie Policy',    href: '/privacy#cookies' },
   ],
 };
 

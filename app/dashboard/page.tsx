@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   Sparkles, ArrowRight,
   Zap, History, ArrowUpRight,
+  Bot, BarChart3, Bookmark, HeadphonesIcon, Settings, CreditCard,
 } from 'lucide-react';
 import StatsCards from '@/components/dashboard/StatsCards';
 import GenerationCard from '@/components/dashboard/GenerationCard';
@@ -151,7 +152,49 @@ export default function DashboardPage() {
         <StatsCards stats={stats} />
       )}
 
+      {/* ── Dashboard quick-nav grid ─────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-bold mb-4">Your Dashboard</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[
+            { href: '/dashboard/agents',  icon: Bot,             label: 'My Agents',    desc: 'View & launch your agents',    color: '#ef4444' },
+            { href: '/dashboard/usage',   icon: BarChart3,       label: 'Usage Stats',  desc: 'Generations & quota',          color: '#60a5fa' },
+            { href: '/dashboard/history', icon: History,         label: 'History',      desc: 'All past generations',         color: '#f59e0b' },
+            { href: '/dashboard/saved',   icon: Bookmark,        label: 'Saved Items',  desc: 'Bookmarked outputs',           color: '#22c55e' },
+            { href: '/billing',           icon: CreditCard,      label: 'Billing',      desc: 'Plan & payment details',       color: '#a855f7' },
+            { href: '/dashboard/tickets', icon: HeadphonesIcon,  label: 'Support',      desc: 'Help & support tickets',       color: '#f97316' },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-2xl p-4 flex flex-col gap-3 transition-all duration-300 group"
+              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', textDecoration: 'none' }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = `${item.color}44`;
+                (e.currentTarget as HTMLElement).style.background = `${item.color}07`;
+                (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)';
+                (e.currentTarget as HTMLElement).style.background = 'var(--color-surface)';
+                (e.currentTarget as HTMLElement).style.transform = 'none';
+              }}
+            >
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                style={{ background: `${item.color}15`, border: `1px solid ${item.color}25` }}>
+                <item.icon size={17} style={{ color: item.color }} />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">{item.label}</p>
+                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: '#52525b' }}>{item.desc}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {/* ── Quick launch ────────────────────────────────────── */}
+
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">Quick Launch</h2>

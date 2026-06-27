@@ -3,16 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  History,
-  Bookmark,
-  ShoppingCart,
-  PenTool,
-  Zap,
-  ChevronRight,
-  X,
-  LogOut,
-  CreditCard,
+  LayoutDashboard, History, Bookmark, Zap, ChevronRight,
+  X, LogOut, CreditCard, Bot, BarChart3, HeadphonesIcon,
+  Settings, User,
 } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 
@@ -20,17 +13,25 @@ const sidebarSections = [
   {
     label: 'Overview',
     items: [
-      { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { href: '/dashboard/history', icon: History, label: 'Generation History' },
-      { href: '/dashboard/saved', icon: Bookmark, label: 'Saved Items' },
-      { href: '/billing', icon: CreditCard, label: 'Billing & Plan' },
+      { href: '/dashboard',         icon: LayoutDashboard,   label: 'Dashboard' },
+      { href: '/dashboard/usage',   icon: BarChart3,         label: 'Usage Stats' },
     ],
   },
   {
-    label: 'AI Agents',
+    label: 'My Workspace',
     items: [
-      { href: '/agents/content-creator-agent', icon: PenTool, label: 'Content Creator' },
-      { href: '/agents/shopify-ai-agent', icon: ShoppingCart, label: 'Shopify Agent' },
+      { href: '/dashboard/agents',  icon: Bot,               label: 'My Agents' },
+      { href: '/dashboard/history', icon: History,           label: 'Generation History' },
+      { href: '/dashboard/saved',   icon: Bookmark,          label: 'Saved Items' },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { href: '/billing',                icon: CreditCard,        label: 'Billing & Plan' },
+      { href: '/profile',                icon: User,              label: 'Profile' },
+      { href: '/dashboard/tickets',      icon: HeadphonesIcon,    label: 'Support Tickets' },
+      { href: '/dashboard/settings',     icon: Settings,          label: 'Settings' },
     ],
   },
 ];
@@ -95,7 +96,7 @@ export default function DashboardSidebar({ isOpen, onClose, onLogout, userEmail 
         {/* Nav sections */}
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           {sidebarSections.map((section) => (
-            <div key={section.label} className="mb-6">
+            <div key={section.label} className="mb-5">
               <p
                 className="px-3 mb-1.5 text-xs font-bold uppercase tracking-widest"
                 style={{ color: '#3f3f46' }}
@@ -110,7 +111,7 @@ export default function DashboardSidebar({ isOpen, onClose, onLogout, userEmail 
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
                       style={{
                         background: isActive ? 'rgba(220,38,38,0.12)' : 'transparent',
                         color: isActive ? '#ef4444' : '#71717a',
@@ -141,13 +142,13 @@ export default function DashboardSidebar({ isOpen, onClose, onLogout, userEmail 
           ))}
         </nav>
 
-        {/* Bottom: user + logout + browse agents */}
+        {/* Bottom: user + logout */}
         <div className="p-4 flex-shrink-0 flex flex-col gap-2" style={{ borderTop: '1px solid var(--color-border)' }}>
           {/* User email chip → links to profile */}
           {userEmail && (
             <Link
               href="/profile"
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-150 group"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-150"
               style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid var(--color-border)',

@@ -285,8 +285,9 @@ export default function LoginPage() {
         {/* Footer */}
         <p className="text-center text-xs mt-6" style={{ color: '#3f3f46' }}>
           By signing in you agree to our{' '}
-          <span style={{ color: '#52525b' }}>Terms of Service</span> and{' '}
-          <span style={{ color: '#52525b' }}>Privacy Policy</span>.
+          <Link href="/terms" style={{ color: '#52525b', textDecoration: 'underline' }}>Terms of Service</Link>
+          {' '}and{' '}
+          <Link href="/privacy" style={{ color: '#52525b', textDecoration: 'underline' }}>Privacy Policy</Link>.
         </p>
       </div>
     </div>

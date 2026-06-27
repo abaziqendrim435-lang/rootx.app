@@ -9,8 +9,9 @@ export interface Agent {
   description: string;
   icon: string; // emoji or icon identifier
   category: string;
-  price: number;
-  priceLabel: string;
+  plan: 'pro' | 'business'; // which subscription plan unlocks this agent
+  price?: number;            // kept for legacy use only
+  priceLabel?: string;       // kept for legacy use only
   features: string[];
   useCases: string[];
   badge?: string; // e.g. "Popular", "New"

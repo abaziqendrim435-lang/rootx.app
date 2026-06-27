@@ -1,6 +1,7 @@
 // ============================================================
-// RootX — Mock Agent Data (10 AI Agents)
-// Replace with Supabase query when database is connected
+// RootX — Agent Data
+// Pricing: Free ($0) · Pro ($29/mo) · Business ($99/mo)
+// Each agent is unlocked by a subscription plan.
 // ============================================================
 
 import { Agent } from './types';
@@ -14,8 +15,7 @@ export const agents: Agent[] = [
       'A fully autonomous AI agent that manages your Shopify store end-to-end. It handles product listings, inventory alerts, order processing communications, abandoned cart recovery, and dynamic pricing — all without manual effort.',
     icon: '🛒',
     category: 'E-Commerce',
-    price: 297,
-    priceLabel: '$297/mo',
+    plan: 'pro',
     features: [
       'Automated product description generation',
       'Inventory level monitoring & alerts',
@@ -40,8 +40,7 @@ export const agents: Agent[] = [
       'An intelligent sales prospecting agent that identifies ideal customers, sends personalized outreach, follows up automatically, and qualifies leads before handing them off to your sales team. Works 24/7 without fatigue.',
     icon: '🎯',
     category: 'Sales',
-    price: 397,
-    priceLabel: '$397/mo',
+    plan: 'business',
     features: [
       'LinkedIn & email prospecting automation',
       'AI-powered lead scoring & qualification',
@@ -66,8 +65,7 @@ export const agents: Agent[] = [
       'An AI-powered content engine that researches trending topics, writes SEO-optimized blog posts, creates social media captions, generates video scripts, and maintains your brand voice across all channels — consistently.',
     icon: '✍️',
     category: 'Marketing',
-    price: 297,
-    priceLabel: '$297/mo',
+    plan: 'pro',
     features: [
       'SEO blog post writing (2,000+ words)',
       'Social media caption generation',
@@ -91,8 +89,7 @@ export const agents: Agent[] = [
       'A smart customer service AI that understands your products, policies, and FAQs to handle support tickets, live chat, and email inquiries instantly — escalating only the complex cases to your human team.',
     icon: '🤝',
     category: 'Support',
-    price: 197,
-    priceLabel: '$197/mo',
+    plan: 'pro',
     features: [
       'Instant ticket response & resolution',
       'Live chat integration (Intercom, Zendesk)',
@@ -117,8 +114,7 @@ export const agents: Agent[] = [
       'A powerful AI research analyst that scours the web, academic databases, and industry reports to compile comprehensive research briefs, competitive analyses, market insights, and data-driven summaries — on demand.',
     icon: '🔬',
     category: 'Intelligence',
-    price: 297,
-    priceLabel: '$297/mo',
+    plan: 'pro',
     features: [
       'Web & academic database research',
       'Competitor analysis reports',
@@ -142,8 +138,7 @@ export const agents: Agent[] = [
       'An intelligent finance agent that monitors cash flow, categorizes expenses, generates financial reports, flags anomalies, forecasts revenue, and provides actionable insights — giving you CFO-level visibility at a fraction of the cost.',
     icon: '💰',
     category: 'Finance',
-    price: 397,
-    priceLabel: '$397/mo',
+    plan: 'business',
     features: [
       'Cash flow monitoring & forecasting',
       'Expense categorization & tagging',
@@ -167,8 +162,7 @@ export const agents: Agent[] = [
       'An AI agent that designs, builds, and deploys your entire website — from landing pages to full multi-page sites. It gathers your requirements, generates the design, writes the copy, and publishes it live.',
     icon: '🌐',
     category: 'Development',
-    price: 997,
-    priceLabel: '$997 one-time',
+    plan: 'business',
     features: [
       'Automated website design generation',
       'AI-written copy & content',
@@ -193,8 +187,7 @@ export const agents: Agent[] = [
       'A specialized AI agent for brick-and-mortar businesses that manages Google Business Profile, local SEO, review responses, appointment booking, local ad campaigns, and neighborhood marketing — fully automated.',
     icon: '📍',
     category: 'Local Marketing',
-    price: 197,
-    priceLabel: '$197/mo',
+    plan: 'pro',
     features: [
       'Google Business Profile optimization',
       'Automated review response & generation',
@@ -218,8 +211,7 @@ export const agents: Agent[] = [
       'An AI email marketing agent that builds, segments, and manages your entire email list strategy. It writes compelling campaigns, sets up automated flows, A/B tests subject lines, and maximizes open rates and revenue.',
     icon: '📧',
     category: 'Marketing',
-    price: 197,
-    priceLabel: '$197/mo',
+    plan: 'pro',
     features: [
       'Welcome, nurture & win-back sequences',
       'List segmentation & personalization',
@@ -243,8 +235,7 @@ export const agents: Agent[] = [
       'A comprehensive social media AI that creates platform-native content, schedules posts at optimal times, engages with your audience, analyzes performance, and executes growth strategies across Instagram, X, LinkedIn, and TikTok.',
     icon: '📱',
     category: 'Social Media',
-    price: 297,
-    priceLabel: '$297/mo',
+    plan: 'pro',
     features: [
       'Multi-platform content creation',
       'Optimal-time post scheduling',

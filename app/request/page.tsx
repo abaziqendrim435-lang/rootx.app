@@ -258,7 +258,7 @@ function RequestFormInner() {
                     </option>
                     {agents.map((agent) => (
                       <option key={agent.id} value={agent.id} style={{ background: '#0f0f12' }}>
-                        {agent.icon} {agent.name} — {agent.priceLabel}
+                        {agent.icon} {agent.name} — {agent.plan === 'pro' ? 'Pro Plan' : 'Business Plan'}
                       </option>
                     ))}
                   </select>
@@ -349,11 +349,11 @@ function RequestFormInner() {
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-3xl">{selectedAgentData.icon}</span>
                     <div>
-                      <p className="font-semibold">{selectedAgentData.name}</p>
-                      <p className="text-sm font-bold" style={{ color: '#ef4444' }}>
-                        {selectedAgentData.priceLabel}
-                      </p>
-                    </div>
+                       <p className="font-semibold">{selectedAgentData.name}</p>
+                       <p className="text-sm font-bold" style={{ color: selectedAgentData.plan === 'pro' ? '#f59e0b' : '#60a5fa' }}>
+                         {selectedAgentData.plan === 'pro' ? '⭐ Pro Plan · $29/mo' : '🏢 Business Plan · $99/mo'}
+                       </p>
+                     </div>
                   </div>
                   <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>
                     {selectedAgentData.tagline}

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Zap } from 'lucide-react';
+import { ArrowRight, Zap, Star, Building2 } from 'lucide-react';
 import { Agent } from '@/lib/types';
 
 interface AgentCardProps {
@@ -10,15 +10,27 @@ interface AgentCardProps {
   onRequestSetup?: (agentId: string) => void;
 }
 
-const pricingTierColor = (price: number) => {
-  if (price <= 197) return '#22c55e';
-  if (price <= 297) return '#ef4444';
-  if (price <= 397) return '#f97316';
-  return '#a855f7';
-};
+const PLAN_CONFIG = {
+  pro: {
+    label: 'Pro Plan',
+    sublabel: 'Included in Pro · $29/mo',
+    color: '#f59e0b',
+    bg: 'rgba(245,158,11,0.1)',
+    border: 'rgba(245,158,11,0.25)',
+    icon: <Star size={11} />,
+  },
+  business: {
+    label: 'Business Plan',
+    sublabel: 'Included in Business · $99/mo',
+    color: '#60a5fa',
+    bg: 'rgba(96,165,250,0.1)',
+    border: 'rgba(96,165,250,0.25)',
+    icon: <Building2 size={11} />,
+  },
+} as const;
 
 export default function AgentCard({ agent, variant = 'default', onRequestSetup }: AgentCardProps) {
-  const isOneTime = agent.priceLabel.includes('one-time');
+  const planConfig = PLAN_CONFIG[agent.plan];
 
   return (
     <div
@@ -112,7 +124,7 @@ export default function AgentCard({ agent, variant = 'default', onRequestSetup }
           </p>
         </div>
 
-        {/* Feature bullets — always exactly 3 lines */}
+        {/* Feature bullets */}
         {variant === 'default' && (
           <ul className="flex flex-col gap-2">
             {agent.features.slice(0, 3).map((f) => (
@@ -127,39 +139,30 @@ export default function AgentCard({ agent, variant = 'default', onRequestSetup }
           </ul>
         )}
 
-        {/* Spacer to push footer down */}
+        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Price + CTAs */}
+        {/* Plan label + CTAs */}
         <div
           className="pt-4 flex flex-col gap-3"
           style={{ borderTop: '1px solid var(--color-border)' }}
         >
-          {/* Pricing row */}
-          <div className="flex items-end justify-between">
-            <div>
-              <span
-                className="font-black text-xl leading-none"
-                style={{ color: pricingTierColor(agent.price) }}
-              >
-                {agent.priceLabel.split('/')[0].split(' ')[0]}
-              </span>
-              <span className="text-xs ml-1" style={{ color: '#52525b' }}>
-                {isOneTime ? 'one-time' : '/mo'}
-              </span>
+          {/* Plan chip */}
+          <div className="flex items-center justify-between">
+            <div
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+              style={{
+                background: planConfig.bg,
+                border: `1px solid ${planConfig.border}`,
+                color: planConfig.color,
+              }}
+            >
+              {planConfig.icon}
+              {planConfig.label}
             </div>
-            {isOneTime && (
-              <span
-                className="text-xs px-2 py-0.5 rounded-full"
-                style={{
-                  background: 'rgba(168,85,247,0.12)',
-                  color: '#a855f7',
-                  border: '1px solid rgba(168,85,247,0.25)',
-                }}
-              >
-                One-time fee
-              </span>
-            )}
+            <span className="text-xs" style={{ color: '#52525b' }}>
+              {agent.plan === 'pro' ? '$29/mo' : '$99/mo'}
+            </span>
           </div>
 
           {/* CTA Buttons */}

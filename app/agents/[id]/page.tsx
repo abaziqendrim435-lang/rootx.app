@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Check, ChevronRight, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Zap, Star, Building2 } from 'lucide-react';
 import { agents, getAgentById } from '@/lib/agents';
 import type { Metadata } from 'next';
 import ContentCreatorDemo from '@/components/ContentCreatorDemo';
@@ -144,7 +144,7 @@ export default async function AgentDetailPage({ params }: PageProps) {
               )}
             </div>
 
-            {/* Right: pricing card */}
+            {/* Right: plan card */}
             <div
               className="w-full lg:w-80 rounded-2xl p-8 flex-shrink-0"
               style={{
@@ -154,30 +154,50 @@ export default async function AgentDetailPage({ params }: PageProps) {
                 top: '88px',
               }}
             >
+              {/* Plan info */}
               <div className="mb-6">
-                <p className="text-sm mb-1" style={{ color: '#71717a' }}>Starting at</p>
-                <div className="text-4xl font-bold" style={{ color: '#ef4444' }}>
-                  {agent.priceLabel}
+                <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#52525b' }}>
+                  Included in
+                </p>
+                <div className="flex items-center gap-3 mb-2">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{
+                      background: agent.plan === 'pro' ? 'rgba(245,158,11,0.12)' : 'rgba(96,165,250,0.12)',
+                      border: agent.plan === 'pro' ? '1px solid rgba(245,158,11,0.25)' : '1px solid rgba(96,165,250,0.25)',
+                      color: agent.plan === 'pro' ? '#f59e0b' : '#60a5fa',
+                    }}
+                  >
+                    {agent.plan === 'pro' ? <Star size={18} /> : <Building2 size={18} />}
+                  </div>
+                  <div>
+                    <p className="font-black text-xl leading-none">
+                      {agent.plan === 'pro' ? 'Pro Plan' : 'Business Plan'}
+                    </p>
+                    <p className="text-sm mt-0.5" style={{ color: '#71717a' }}>
+                      {agent.plan === 'pro' ? '$29 / month' : '$99 / month'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs mt-2" style={{ color: '#52525b' }}>
-                  Includes setup, training & 30-day support
+                <p className="text-xs mt-3 leading-relaxed" style={{ color: '#52525b' }}>
+                  Includes setup, training &amp; 30-day support
                 </p>
               </div>
 
               <Link
                 href={`/request?agent=${agent.id}`}
-                className="btn-primary w-full mb-4 animate-pulse-glow"
+                className="btn-primary w-full mb-3 animate-pulse-glow"
                 style={{ justifyContent: 'center' }}
               >
                 <Zap size={16} />
-                Buy / Request Setup
+                Request Setup
               </Link>
               <Link
-                href="/request"
+                href="/pricing"
                 className="btn-secondary w-full"
                 style={{ justifyContent: 'center' }}
               >
-                Ask a Question
+                View all plans
               </Link>
 
               <div

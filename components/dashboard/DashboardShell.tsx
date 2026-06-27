@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { Menu, LogOut } from 'lucide-react';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import { useAuth } from '@/components/AuthProvider';
@@ -10,10 +10,28 @@ import PlanBadge from '@/components/PlanBadge';
 import { usePlan } from '@/lib/use-plan';
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Desktop: default open; Mobile: default closed
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout, isSupabaseEnabled } = useAuth();
   const { planId, loading: planLoading } = usePlan(user?.id);
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Detect desktop on mount & resize
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    setSidebarOpen(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setSidebarOpen(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Close sidebar on mobile when navigating
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setSidebarOpen(false);
+    }
+  }, [pathname]);
 
   async function handleLogout() {
     await logout();
@@ -30,16 +48,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         userEmail={user?.email ?? null}
       />
 
-      {/* Main content area */}
+      {/* Main content area — shifts right on desktop when sidebar open */}
       <div
-        className="transition-all duration-300"
+        className="transition-all duration-300 min-h-screen flex flex-col"
         style={{ marginLeft: sidebarOpen ? '240px' : '0' }}
       >
         {/* Top bar */}
         <div
-          className="sticky top-0 z-20 flex items-center gap-4 px-6 h-16"
+          className="sticky top-0 z-20 flex items-center gap-4 px-4 md:px-6 h-16 flex-shrink-0"
           style={{
-            background: 'rgba(7,7,9,0.92)',
+            background: 'rgba(7,7,9,0.94)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             borderBottom: '1px solid var(--color-border)',
@@ -48,7 +66,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 flex-shrink-0"
             style={{
               background: 'rgba(255,255,255,0.05)',
               border: '1px solid var(--color-border)',
@@ -67,15 +85,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <Menu size={16} />
           </button>
           <div className="h-4 w-px" style={{ background: 'var(--color-border)' }} />
-          <span className="text-sm font-medium" style={{ color: '#52525b' }}>
+          <span className="text-sm font-medium hidden sm:inline" style={{ color: '#52525b' }}>
             RootX Dashboard
           </span>
 
           <div className="flex-1" />
 
           {/* User section */}
-          <div className="flex items-center gap-3">
-            {/* Mode badge */}
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Connection status badge */}
             {isSupabaseEnabled && user ? (
               <div
                 className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
@@ -86,7 +104,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 }}
               >
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
-                Connected
+                Live
               </div>
             ) : (
               <div
@@ -98,18 +116,18 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 }}
               >
                 <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#ef4444' }} />
-                Local mode
+                Demo
               </div>
             )}
 
             {/* Plan badge */}
             {!planLoading && (
-              <div className="hidden sm:block">
+              <div className="hidden md:block">
                 <PlanBadge planId={planId} size="sm" />
               </div>
             )}
 
-            {/* User avatar chip → links to profile */}
+            {/* User avatar → profile */}
             {user?.email && (
               <UserAvatar email={user.email} size={30} href="/profile" />
             )}
@@ -133,6 +151,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)';
                 }}
                 title="Sign out"
+                aria-label="Sign out"
               >
                 <LogOut size={15} />
               </button>
@@ -141,7 +160,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         </div>
 
         {/* Page content */}
-        <div className="p-6 md:p-8">{children}</div>
+        <div className="flex-1 p-4 md:p-6 lg:p-8">
+          {children}
+        </div>
       </div>
     </div>
   );
