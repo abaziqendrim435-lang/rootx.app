@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, History, Bookmark, Zap, ChevronRight,
   X, LogOut, CreditCard, Bot, BarChart3, HeadphonesIcon,
-  Settings, User,
+  Settings, User, ShoppingCart,
 } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 
@@ -20,6 +20,7 @@ const sidebarSections = [
   {
     label: 'My Workspace',
     items: [
+      { href: '/dashboard/shopify', icon: ShoppingCart,      label: 'Shopify Agent' },
       { href: '/dashboard/agents',  icon: Bot,               label: 'My Agents' },
       { href: '/dashboard/history', icon: History,           label: 'Generation History' },
       { href: '/dashboard/saved',   icon: Bookmark,          label: 'Saved Items' },

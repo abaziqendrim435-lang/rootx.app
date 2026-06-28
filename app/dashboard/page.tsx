@@ -35,9 +35,9 @@ const quickLaunchAgents = [
     id: 'shopify-ai-agent',
     name: 'Shopify Agent',
     icon: '🛒',
-    desc: 'Product titles, SEO descriptions, pricing & TikTok ads',
+    desc: 'Connect your store, generate AI content, push to Shopify',
     color: '#22c55e',
-    href: '/agents/shopify-ai-agent',
+    href: '/dashboard/shopify',
   },
 ];
 

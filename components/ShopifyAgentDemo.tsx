@@ -734,7 +734,7 @@ export default function ShopifyAgentDemo() {
                 style={{ whiteSpace: 'nowrap' }}
               >
                 <Zap size={16} />
-                Request Setup — $297/mo
+                Request Setup — Pro Plan
               </a>
             </div>
           </div>
