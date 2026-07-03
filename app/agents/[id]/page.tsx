@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Check, ChevronRight, Zap, Star, Building2 } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Zap, Star, Building2, Plug } from 'lucide-react';
 import { agents, getAgentById } from '@/lib/agents';
 import type { Metadata } from 'next';
 import ContentCreatorDemo from '@/components/ContentCreatorDemo';
@@ -184,21 +184,43 @@ export default async function AgentDetailPage({ params }: PageProps) {
                 </p>
               </div>
 
-              <Link
-                href={`/request?agent=${agent.id}`}
-                className="btn-primary w-full mb-3 animate-pulse-glow"
-                style={{ justifyContent: 'center' }}
-              >
-                <Zap size={16} />
-                Request Setup
-              </Link>
-              <Link
-                href="/pricing"
-                className="btn-secondary w-full"
-                style={{ justifyContent: 'center' }}
-              >
-                View all plans
-              </Link>
+              {isShopify ? (
+                <>
+                  <a
+                    href="#connect-store"
+                    className="btn-primary w-full mb-3 animate-pulse-glow"
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <Plug size={16} />
+                    Connect Shopify Store
+                  </a>
+                  <Link
+                    href={`/request?agent=${agent.id}`}
+                    className="btn-secondary w-full"
+                    style={{ justifyContent: 'center' }}
+                  >
+                    Request Setup Instead
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href={`/request?agent=${agent.id}`}
+                    className="btn-primary w-full mb-3 animate-pulse-glow"
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <Zap size={16} />
+                    Request Setup
+                  </Link>
+                  <Link
+                    href="/pricing"
+                    className="btn-secondary w-full"
+                    style={{ justifyContent: 'center' }}
+                  >
+                    View all plans
+                  </Link>
+                </>
+              )}
 
               <div
                 className="mt-6 pt-6 flex flex-col gap-2"
@@ -216,9 +238,13 @@ export default async function AgentDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* ── Live AI Demo ─────────────────────────────────────── */}
+      {/* ── Live AI Demo / Connect ─────────────────────────────── */}
       {isContentCreator && <ContentCreatorDemo />}
-      {isShopify && <ShopifyAgentDemo />}
+      {isShopify && (
+        <div id="connect-store">
+          <ShopifyAgentDemo />
+        </div>
+      )}
 
       {/* ── Features + Use Cases ──────────────────────────────── */}
       <section className="py-16">
@@ -285,14 +311,29 @@ export default async function AgentDetailPage({ params }: PageProps) {
                   border: '1px solid rgba(220,38,38,0.2)',
                 }}
               >
-                <p className="font-semibold text-lg mb-2">Ready to get started?</p>
-                <p className="text-sm mb-6" style={{ color: '#71717a' }}>
-                  Submit your setup request and our team will reach out within 24 hours.
-                </p>
-                <Link href={`/request?agent=${agent.id}`} className="btn-primary">
-                  <Zap size={16} />
-                  Request Setup Now
-                </Link>
+                {isShopify ? (
+                  <>
+                    <p className="font-semibold text-lg mb-2">Ready to connect your store?</p>
+                    <p className="text-sm mb-6" style={{ color: '#71717a' }}>
+                      Connect your Shopify store and start generating AI-optimized product content in minutes.
+                    </p>
+                    <a href="#connect-store" className="btn-primary">
+                      <Plug size={16} />
+                      Connect Shopify Store
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold text-lg mb-2">Ready to get started?</p>
+                    <p className="text-sm mb-6" style={{ color: '#71717a' }}>
+                      Submit your setup request and our team will reach out within 24 hours.
+                    </p>
+                    <Link href={`/request?agent=${agent.id}`} className="btn-primary">
+                      <Zap size={16} />
+                      Request Setup Now
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>
