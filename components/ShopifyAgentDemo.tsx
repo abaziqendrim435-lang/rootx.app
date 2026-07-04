@@ -6,7 +6,7 @@ import {
   Store, Plug, Loader2, CheckCircle2, AlertTriangle, Eye, EyeOff,
   ShoppingCart, Sparkles, ArrowRight, RefreshCw, Search, X,
   Package, Tag, FileText, Copy, Check, Edit3, ExternalLink,
-  ChevronDown, ChevronUp, ImageIcon, Unplug, Zap, Key, Shield,
+  ImageIcon, Unplug, Zap, Key, Shield,
 } from 'lucide-react';
 import { saveGeneration } from '@/lib/dashboard-storage';
 import type {
@@ -589,7 +589,6 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
   const [editedTitle, setEditedTitle] = useState('');
   const [editedBody, setEditedBody] = useState('');
   const [editedTags, setEditedTags] = useState('');
-  const [showOriginal, setShowOriginal] = useState(true);
   const { copiedId, copy } = useCopy();
 
   async function handleGenerate() {
@@ -655,7 +654,6 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
         throw new Error(d.error || 'Push failed');
       }
       setPushStatus('done');
-      setTimeout(() => onPushed(), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Push failed');
       setPushStatus('error');
@@ -663,6 +661,65 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
   }
 
   const img = product.images?.[0];
+  const shopifyProductUrl = `https://${credentials.storeDomain}/admin/products/${product.id}`;
+
+  /* ── Before/After comparison row ─────────────────────────── */
+  function ComparisonField({ label, icon, color, before, after, fieldId, editValue, onEditChange, multiline }: {
+    label: string; icon: React.ReactNode; color: string;
+    before: string; after: string; fieldId: string;
+    editValue?: string; onEditChange?: (v: string) => void; multiline?: boolean;
+  }) {
+    return (
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+        {/* Field header */}
+        <div className="flex items-center justify-between px-4 py-2.5"
+          style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color }}>
+            {icon} {label}
+          </span>
+          <CopyBtn text={editMode && editValue !== undefined ? editValue : after} id={fieldId} copiedId={copiedId} onCopy={copy} />
+        </div>
+        {/* Before / After grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2">
+          {/* Before */}
+          <div className="px-4 py-3" style={{ background: 'rgba(255,255,255,0.01)', borderRight: '1px solid var(--color-border)' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold px-2 py-0.5 rounded"
+                style={{ background: 'rgba(113,113,122,0.12)', color: '#71717a' }}>BEFORE</span>
+            </div>
+            {multiline ? (
+              <div className="text-sm leading-relaxed" style={{ color: '#71717a' }}
+                dangerouslySetInnerHTML={{ __html: before || '<em style="color:#3f3f46">No description</em>' }} />
+            ) : (
+              <p className="text-sm" style={{ color: '#71717a' }}>{before || '—'}</p>
+            )}
+          </div>
+          {/* After */}
+          <div className="px-4 py-3" style={{ background: 'rgba(34,197,94,0.02)' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold px-2 py-0.5 rounded"
+                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>AFTER</span>
+              <Sparkles size={10} style={{ color: '#22c55e' }} />
+            </div>
+            {editMode && editValue !== undefined && onEditChange ? (
+              multiline ? (
+                <textarea value={editValue} onChange={(e) => onEditChange(e.target.value)}
+                  className="input-field w-full" rows={5} style={{ fontSize: '0.85rem', resize: 'vertical' }} />
+              ) : (
+                <input type="text" value={editValue} onChange={(e) => onEditChange(e.target.value)}
+                  className="input-field w-full" style={{ fontSize: '0.9rem', fontWeight: 600 }} />
+              )
+            ) : multiline ? (
+              <div className="text-sm leading-relaxed prose-invert" style={{ color: '#e4e4e7' }}
+                dangerouslySetInnerHTML={{ __html: after }} />
+            ) : (
+              <p className="text-sm font-semibold" style={{ color: '#f8f8f8' }}>{after}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
@@ -748,9 +805,24 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
             </div>
           )}
 
-          {/* Results */}
+          {/* ══════════════ AI Results Panel ══════════════ */}
           {status === 'done' && result && (
             <div className="flex flex-col gap-5">
+              {/* Success header */}
+              <div className="flex items-center gap-3 p-4 rounded-xl"
+                style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(34,197,94,0.15)' }}>
+                  <CheckCircle2 size={18} style={{ color: '#22c55e' }} />
+                </div>
+                <div>
+                  <p className="font-bold text-sm" style={{ color: '#86efac' }}>AI content generated successfully!</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#52525b' }}>
+                    Review the before &amp; after comparison below. Edit if needed, then push to your Shopify store.
+                  </p>
+                </div>
+              </div>
+
               {result.isDemo && (
                 <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
                   style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
@@ -763,12 +835,6 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
 
               {/* Toolbar */}
               <div className="flex items-center gap-3 flex-wrap">
-                <button onClick={() => setShowOriginal(!showOriginal)}
-                  className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
-                  {showOriginal ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  {showOriginal ? 'Hide' : 'Show'} original
-                </button>
                 <button onClick={() => setEditMode(!editMode)}
                   className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
                   style={{
@@ -776,7 +842,7 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
                     border: `1px solid ${editMode ? 'rgba(220,38,38,0.25)' : 'var(--color-border)'}`,
                     color: editMode ? '#ef4444' : '#71717a',
                   }}>
-                  <Edit3 size={12} /> {editMode ? 'Editing' : 'Edit before push'}
+                  <Edit3 size={12} /> {editMode ? 'Editing Mode' : 'Edit before push'}
                 </button>
                 <button onClick={handleGenerate}
                   className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
@@ -785,110 +851,192 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
                 </button>
               </div>
 
-              {/* Title */}
-              <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef4444' }}>
-                    <ShoppingCart size={11} className="inline mr-1" /> Product Title
-                  </span>
-                  <CopyBtn text={editMode ? editedTitle : result.title} id="title" copiedId={copiedId} onCopy={copy} />
-                </div>
-                {showOriginal && (
-                  <p className="text-xs mb-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', color: '#52525b', border: '1px dashed var(--color-border)' }}>
-                    <span style={{ color: '#3f3f46' }}>Original:</span> {product.title}
-                  </p>
-                )}
-                {editMode ? (
-                  <input type="text" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)}
-                    className="input-field" style={{ fontSize: '0.95rem', fontWeight: 600 }} />
-                ) : (
-                  <p className="font-semibold" style={{ color: '#f8f8f8' }}>{result.title}</p>
-                )}
-              </div>
+              {/* ── Before / After Comparisons ─────────────── */}
 
-              {/* Description */}
-              <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#f97316' }}>
-                    <FileText size={11} className="inline mr-1" /> Description
-                  </span>
-                  <CopyBtn text={editMode ? editedBody : result.bodyHtml} id="body" copiedId={copiedId} onCopy={copy} />
-                </div>
-                {editMode ? (
-                  <textarea value={editedBody} onChange={(e) => setEditedBody(e.target.value)}
-                    className="input-field" rows={6} style={{ fontSize: '0.85rem', resize: 'vertical' }} />
-                ) : (
-                  <div className="text-sm leading-relaxed prose-invert" style={{ color: '#a1a1aa' }}
-                    dangerouslySetInnerHTML={{ __html: result.bodyHtml }} />
-                )}
-              </div>
+              {/* Product Title */}
+              <ComparisonField
+                label="Product Title"
+                icon={<ShoppingCart size={11} />}
+                color="#ef4444"
+                before={product.title}
+                after={result.title}
+                fieldId="title"
+                editValue={editedTitle}
+                onEditChange={setEditedTitle}
+              />
 
-              {/* SEO */}
+              {/* Product Description */}
+              <ComparisonField
+                label="Product Description"
+                icon={<FileText size={11} />}
+                color="#f97316"
+                before={product.body_html || ''}
+                after={result.bodyHtml}
+                fieldId="body"
+                editValue={editedBody}
+                onEditChange={setEditedBody}
+                multiline
+              />
+
+              {/* SEO Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>SEO Title</span>
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center justify-between px-4 py-2.5"
+                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
+                      <Search size={11} /> SEO Title
+                    </span>
                     <CopyBtn text={result.seoTitle} id="seo-t" copiedId={copiedId} onCopy={copy} size="xs" />
                   </div>
-                  <p className="text-sm font-medium" style={{ color: '#f8f8f8' }}>{result.seoTitle}</p>
-                  <p className="text-xs mt-1" style={{ color: '#3f3f46' }}>{result.seoTitle.length}/60 chars</p>
+                  <div className="px-4 py-3">
+                    <p className="text-sm font-medium" style={{ color: '#f8f8f8' }}>{result.seoTitle}</p>
+                    <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                      <div className="h-full rounded-full transition-all" style={{
+                        width: `${Math.min((result.seoTitle.length / 60) * 100, 100)}%`,
+                        background: result.seoTitle.length <= 60 ? '#22c55e' : '#ef4444',
+                      }} />
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: result.seoTitle.length <= 60 ? '#22c55e' : '#ef4444' }}>
+                      {result.seoTitle.length}/60 characters {result.seoTitle.length <= 60 ? '✓' : '— too long'}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>SEO Description</span>
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center justify-between px-4 py-2.5"
+                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>
+                      <FileText size={11} /> Meta Description
+                    </span>
                     <CopyBtn text={result.seoDescription} id="seo-d" copiedId={copiedId} onCopy={copy} size="xs" />
                   </div>
-                  <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.seoDescription}</p>
-                  <p className="text-xs mt-1" style={{ color: '#3f3f46' }}>{result.seoDescription.length}/160 chars</p>
+                  <div className="px-4 py-3">
+                    <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.seoDescription}</p>
+                    <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                      <div className="h-full rounded-full transition-all" style={{
+                        width: `${Math.min((result.seoDescription.length / 160) * 100, 100)}%`,
+                        background: result.seoDescription.length <= 160 ? '#22c55e' : '#ef4444',
+                      }} />
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: result.seoDescription.length <= 160 ? '#22c55e' : '#ef4444' }}>
+                      {result.seoDescription.length}/160 characters {result.seoDescription.length <= 160 ? '✓' : '— too long'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* Tags */}
-              <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
-                    <Tag size={11} className="inline mr-1" /> Tags
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                <div className="flex items-center justify-between px-4 py-2.5"
+                  style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                  <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
+                    <Tag size={11} /> Product Tags
                   </span>
                   <CopyBtn text={editMode ? editedTags : result.tags.join(', ')} id="tags" copiedId={copiedId} onCopy={copy} />
                 </div>
-                {editMode ? (
-                  <input type="text" value={editedTags} onChange={(e) => setEditedTags(e.target.value)}
-                    className="input-field" placeholder="tag1, tag2, tag3" />
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {result.tags.map((tag) => (
-                      <span key={tag} className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                        style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                        {tag}
-                      </span>
-                    ))}
+                <div className="grid grid-cols-1 md:grid-cols-2">
+                  {/* Before tags */}
+                  <div className="px-4 py-3" style={{ borderRight: '1px solid var(--color-border)' }}>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded mb-2 inline-block"
+                      style={{ background: 'rgba(113,113,122,0.12)', color: '#71717a' }}>BEFORE</span>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {(product.tags || '').split(',').filter(Boolean).map((tag) => (
+                        <span key={tag} className="px-2 py-0.5 rounded-lg text-xs"
+                          style={{ background: 'rgba(113,113,122,0.08)', border: '1px solid rgba(113,113,122,0.15)', color: '#71717a' }}>
+                          {tag.trim()}
+                        </span>
+                      ))}
+                      {!product.tags && <span className="text-xs" style={{ color: '#3f3f46' }}>No tags</span>}
+                    </div>
                   </div>
-                )}
-              </div>
-
-              {/* Push to Shopify */}
-              <div className="rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
-                style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.08) 0%, rgba(0,0,0,0) 100%)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                <div>
-                  <p className="font-bold mb-0.5">Push to Shopify</p>
-                  <p className="text-xs" style={{ color: '#71717a' }}>Update this product on your store with the AI-generated content</p>
+                  {/* After tags */}
+                  <div className="px-4 py-3" style={{ background: 'rgba(34,197,94,0.02)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded"
+                        style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>AFTER</span>
+                      <Sparkles size={10} style={{ color: '#22c55e' }} />
+                    </div>
+                    {editMode ? (
+                      <input type="text" value={editedTags} onChange={(e) => setEditedTags(e.target.value)}
+                        className="input-field w-full mt-1" placeholder="tag1, tag2, tag3" />
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {result.tags.map((tag) => (
+                          <span key={tag} className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                            style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <button onClick={handlePush} disabled={pushStatus === 'pushing' || pushStatus === 'done'}
-                  className="btn-primary flex-shrink-0"
-                  style={{ padding: '0.6rem 1.5rem', opacity: pushStatus === 'pushing' || pushStatus === 'done' ? 0.6 : 1 }}>
-                  {pushStatus === 'pushing' ? <><Loader2 size={15} className="animate-spin" /> Pushing…</> :
-                   pushStatus === 'done' ? <><CheckCircle2 size={15} /> Updated!</> :
-                   <><ArrowRight size={15} /> Push to Shopify</>}
-                </button>
               </div>
 
-              {pushStatus === 'done' && (
-                <div className="flex items-center gap-3 p-3.5 rounded-xl"
-                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                  <CheckCircle2 size={16} style={{ color: '#22c55e' }} />
-                  <p className="text-sm font-medium" style={{ color: '#86efac' }}>Product updated successfully on Shopify!</p>
+              {/* ── Push to Shopify ───────────────────────── */}
+              {pushStatus !== 'done' && (
+                <div className="rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
+                  style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.08) 0%, rgba(0,0,0,0) 100%)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  <div>
+                    <p className="font-bold mb-0.5 flex items-center gap-2">
+                      <ArrowRight size={14} style={{ color: '#ef4444' }} /> Push to Shopify
+                    </p>
+                    <p className="text-xs" style={{ color: '#71717a' }}>
+                      Update this product on your live store with the AI-generated content above
+                    </p>
+                  </div>
+                  <button onClick={handlePush} disabled={pushStatus === 'pushing'}
+                    className="btn-primary flex-shrink-0"
+                    style={{ padding: '0.7rem 1.8rem', fontSize: '0.9rem', opacity: pushStatus === 'pushing' ? 0.7 : 1 }}>
+                    {pushStatus === 'pushing' ? <><Loader2 size={16} className="animate-spin" /> Updating Shopify…</> :
+                     pushStatus === 'error' ? <><RefreshCw size={16} /> Try Again</> :
+                     <><ArrowRight size={16} /> Push to Shopify</>}
+                  </button>
                 </div>
               )}
+
+              {/* ── Push SUCCESS ──────────────────────────── */}
+              {pushStatus === 'done' && (
+                <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(34,197,94,0.3)' }}>
+                  <div className="px-5 py-4 flex items-center gap-4"
+                    style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.04) 100%)' }}>
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                      <CheckCircle2 size={24} style={{ color: '#22c55e' }} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold" style={{ color: '#86efac' }}>
+                        Product updated successfully in Shopify!
+                      </p>
+                      <p className="text-sm mt-0.5" style={{ color: '#52525b' }}>
+                        All AI-generated content has been applied to your live product listing.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between px-5 py-3"
+                    style={{ background: 'var(--color-surface)', borderTop: '1px solid rgba(34,197,94,0.15)' }}>
+                    <a href={shopifyProductUrl} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm font-semibold transition-all"
+                      style={{ color: '#22c55e' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = '#86efac')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = '#22c55e')}>
+                      <ExternalLink size={14} /> Open Shopify product
+                    </a>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { setPushStatus('idle'); handleGenerate(); }}
+                        className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                        <RefreshCw size={12} /> Generate Again
+                      </button>
+                      <button onClick={onPushed}
+                        className="flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
+                        <Check size={12} /> Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {pushStatus === 'error' && (
                 <div className="flex items-center gap-3 p-3.5 rounded-xl"
                   style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)' }}>
@@ -1021,26 +1169,52 @@ export default function ShopifyAgentDemo() {
 
         {/* Connected header bar */}
         {credentials && (
-          <div className="flex items-center justify-between flex-wrap gap-4 mb-8 p-4 rounded-2xl"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
-                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
-                Connected
+          <div className="mb-8 rounded-2xl overflow-hidden"
+            style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, var(--color-surface) 60%)' }}>
+            {/* Success banner */}
+            <div className="flex items-center gap-3 px-5 py-3"
+              style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
+              <CheckCircle2 size={18} style={{ color: '#22c55e' }} />
+              <p className="text-sm font-semibold" style={{ color: '#86efac' }}>
+                Your Shopify store is connected successfully.
+              </p>
+            </div>
+            {/* Store details */}
+            <div className="flex items-center justify-between flex-wrap gap-4 px-5 py-4">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center"
+                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  <Store size={20} style={{ color: '#22c55e' }} />
+                </div>
+                <div>
+                  <p className="font-bold">{credentials.shopName || credentials.storeDomain}</p>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="flex items-center gap-1.5 text-xs" style={{ color: '#22c55e' }}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e', boxShadow: '0 0 6px rgba(34,197,94,0.5)' }} />
+                      Connected
+                    </span>
+                    <span className="text-xs" style={{ color: '#52525b' }}>•</span>
+                    <span className="text-xs font-medium" style={{ color: '#71717a' }}>
+                      {products.length} product{products.length !== 1 ? 's' : ''} loaded
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-sm">{credentials.shopName || credentials.storeDomain}</p>
-                <p className="text-xs" style={{ color: '#52525b' }}>{products.length} products loaded</p>
+              <div className="flex items-center gap-2">
+                <a href={`https://${credentials.storeDomain}/admin`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                  <ExternalLink size={12} /> Open Shopify Admin
+                </a>
+                <button onClick={handleDisconnect}
+                  className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
+                  <Unplug size={12} /> Disconnect
+                </button>
               </div>
             </div>
-            <button onClick={handleDisconnect}
-              className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
-              <Unplug size={12} /> Disconnect
-            </button>
           </div>
         )}
 
