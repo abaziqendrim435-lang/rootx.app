@@ -63,7 +63,8 @@ export async function GET(req: NextRequest) {
   const state = url.searchParams.get('state');
   const hmac = url.searchParams.get('hmac');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`;
+  // The appUrl MUST match the Application URL configured in Shopify.
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
   const errorRedirect = (msg: string) =>
     NextResponse.redirect(`${appUrl}/agents/shopify-ai-agent?oauth_error=${encodeURIComponent(msg)}#connect-store`);
 

@@ -80,7 +80,9 @@ export async function POST(req: NextRequest) {
     });
 
     // ── Build the Shopify OAuth authorization URL ─────────────
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`;
+    // The redirect_uri MUST match the "Allowed redirection URL" in the
+    // Shopify app settings exactly — including protocol and host.
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
     const redirectUri = `${appUrl}/api/shopify/oauth/callback`;
 
     const authUrl = new URL(`https://${storeDomain}/admin/oauth/authorize`);
