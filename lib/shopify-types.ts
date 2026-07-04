@@ -76,5 +76,7 @@ export interface ProductsResponse {
 /** Response from POST /api/shopify/update */
 export interface UpdateResponse {
   success: boolean;
+  /** The product as confirmed by Shopify after update (only on success) */
+  product?: ShopifyProduct;
   error?: string;
 }

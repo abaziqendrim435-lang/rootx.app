@@ -142,7 +142,7 @@ export async function upsertCredentials(
 
 // ── Shopify Admin API wrapper ─────────────────────────────────
 
-const SHOPIFY_API_VERSION = '2024-01';
+const SHOPIFY_API_VERSION = '2025-07';
 
 /** Options for a Shopify Admin API call */
 interface ShopifyFetchOptions {

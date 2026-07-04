@@ -11,6 +11,7 @@ import {
 import { saveGeneration } from '@/lib/dashboard-storage';
 import type {
   ShopifyProduct, ShopifyCredentials, AIProductGeneration,
+  UpdateResponse,
 } from '@/lib/shopify-types';
 
 // ════════════════════════════════════════════════════════════════
@@ -589,6 +590,7 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
   const [editedTitle, setEditedTitle] = useState('');
   const [editedBody, setEditedBody] = useState('');
   const [editedTags, setEditedTags] = useState('');
+  const [verifiedProduct, setVerifiedProduct] = useState<ShopifyProduct | null>(null);
   const { copiedId, copy } = useCopy();
 
   async function handleGenerate() {
@@ -636,6 +638,8 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
 
   async function handlePush() {
     setPushStatus('pushing');
+    setError('');
+    setVerifiedProduct(null);
     try {
       const res = await fetch('/api/shopify/update', {
         method: 'POST',
@@ -649,9 +653,13 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
           accessToken: credentials.accessToken,
         }),
       });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || 'Push failed');
+      const data: UpdateResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response from server' }));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Push failed (HTTP ${res.status})`);
+      }
+      // Store the Shopify-confirmed product
+      if (data.product) {
+        setVerifiedProduct(data.product);
       }
       setPushStatus('done');
     } catch (err) {
@@ -1008,10 +1016,43 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
                         Product updated successfully in Shopify!
                       </p>
                       <p className="text-sm mt-0.5" style={{ color: '#52525b' }}>
-                        All AI-generated content has been applied to your live product listing.
+                        Verified — the content below was confirmed by Shopify&apos;s servers.
                       </p>
                     </div>
                   </div>
+
+                  {/* ── Verified from Shopify ─────────────── */}
+                  {verifiedProduct && (
+                    <div className="px-5 py-4 flex flex-col gap-3"
+                      style={{ borderTop: '1px solid rgba(34,197,94,0.12)', background: 'rgba(34,197,94,0.02)' }}>
+                      <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
+                        <CheckCircle2 size={10} className="inline mr-1" /> Confirmed on Shopify
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                          <p className="text-xs font-semibold mb-0.5" style={{ color: '#71717a' }}>Title</p>
+                          <p className="text-sm font-medium" style={{ color: '#f8f8f8' }}>{verifiedProduct.title}</p>
+                        </div>
+                        <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                          <p className="text-xs font-semibold mb-0.5" style={{ color: '#71717a' }}>Description</p>
+                          <div className="text-sm" style={{ color: '#a1a1aa' }}
+                            dangerouslySetInnerHTML={{ __html: verifiedProduct.body_html || '<em>No description</em>' }} />
+                        </div>
+                        <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                          <p className="text-xs font-semibold mb-0.5" style={{ color: '#71717a' }}>Tags</p>
+                          <div className="flex flex-wrap gap-1">
+                            {(verifiedProduct.tags || '').split(',').filter(Boolean).map((tag) => (
+                              <span key={tag} className="px-2 py-0.5 rounded text-xs"
+                                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                                {tag.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between px-5 py-3"
                     style={{ background: 'var(--color-surface)', borderTop: '1px solid rgba(34,197,94,0.15)' }}>
                     <a href={shopifyProductUrl} target="_blank" rel="noopener noreferrer"
@@ -1022,7 +1063,7 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
                       <ExternalLink size={14} /> Open Shopify product
                     </a>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => { setPushStatus('idle'); handleGenerate(); }}
+                      <button onClick={() => { setPushStatus('idle'); setVerifiedProduct(null); handleGenerate(); }}
                         className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg"
                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
                         <RefreshCw size={12} /> Generate Again
