@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, hasStripeConfig, PLANS, type PlanId } from '@/lib/stripe';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Server-side Supabase (uses anon key — reads user from auth header)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
-);
+// Server-side Supabase — lazily created to avoid crashing at import time
+// when env vars are not yet available (e.g. during static page collection).
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!url || !key || url.includes('your_supabase')) return null;
+  if (!_supabase) _supabase = createClient(url, key);
+  return _supabase;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,11 +41,14 @@ export async function POST(req: NextRequest) {
 
     // Look up or create Stripe customer
     let customerId: string | undefined;
-    const { data: sub } = await supabase
-      .from('subscriptions')
-      .select('stripe_customer_id')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const sb = getSupabase();
+    const { data: sub } = sb
+      ? await sb
+          .from('subscriptions')
+          .select('stripe_customer_id')
+          .eq('user_id', userId)
+          .maybeSingle()
+      : { data: null };
 
     if (sub?.stripe_customer_id) {
       customerId = sub.stripe_customer_id;
