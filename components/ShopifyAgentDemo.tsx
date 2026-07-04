@@ -161,8 +161,11 @@ function ConnectStep({ onConnected, oauthError }: {
       const data = await res.json();
       if (!res.ok || !data.authUrl) throw new Error(data.error || 'Failed to start OAuth flow');
 
-      // Redirect to Shopify authorization page
-      window.location.href = data.authUrl;
+      // Redirect to Shopify authorization page.
+      // MUST use top-level navigation — Shopify login sets X-Frame-Options: DENY
+      // and will refuse to load inside an iframe or embedded window.
+      const top = window.top ?? window;
+      top.location.href = data.authUrl;
     } catch (err) {
       setOauthErr(err instanceof Error ? err.message : 'OAuth failed');
       setOauthStatus('error');
