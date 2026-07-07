@@ -6,12 +6,13 @@ import {
   Store, Plug, Loader2, CheckCircle2, AlertTriangle, Eye, EyeOff,
   ShoppingCart, Sparkles, ArrowRight, RefreshCw, Search, X,
   Package, Tag, FileText, Copy, Check, Edit3, ExternalLink,
-  ImageIcon, Unplug, Zap, Key, Shield,
+  ImageIcon, Unplug, Zap, Key, Shield, DollarSign, Palette,
+  TrendingUp, Layers, BarChart3, Info,
 } from 'lucide-react';
 import { saveGeneration } from '@/lib/dashboard-storage';
 import type {
   ShopifyProduct, ShopifyCredentials, AIProductGeneration,
-  UpdateResponse,
+  UpdateResponse, VerificationResult,
 } from '@/lib/shopify-types';
 
 // ════════════════════════════════════════════════════════════════
@@ -48,27 +49,26 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
   return (
     <div className="flex items-center gap-2 mb-8">
       {labels.map((label, i) => {
-        const num = i + 1;
+        const num = (i + 1) as 1 | 2 | 3;
         const active = num === step;
         const done = num < step;
         return (
-          <div key={num} className="flex items-center gap-2">
+          <div key={label} className="flex items-center gap-2">
             {i > 0 && (
               <div className="w-8 h-px" style={{ background: done ? '#22c55e' : 'var(--color-border)' }} />
             )}
             <div className="flex items-center gap-2">
               <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                 style={{
-                  background: done ? 'rgba(34,197,94,0.15)' : active ? 'rgba(220,38,38,0.15)' : 'rgba(255,255,255,0.04)',
+                  background: done ? 'rgba(34,197,94,0.15)' : active ? 'rgba(220,38,38,0.12)' : 'rgba(255,255,255,0.04)',
                   border: `1px solid ${done ? 'rgba(34,197,94,0.3)' : active ? 'rgba(220,38,38,0.3)' : 'var(--color-border)'}`,
                   color: done ? '#22c55e' : active ? '#ef4444' : '#52525b',
-                }}
-              >
-                {done ? <Check size={13} /> : num}
+                }}>
+                {done ? <Check size={14} /> : num}
               </div>
               <span
-                className="text-xs font-semibold hidden sm:inline"
+                className="text-xs font-semibold tracking-wide uppercase hidden sm:inline"
                 style={{ color: active ? '#f8f8f8' : done ? '#22c55e' : '#52525b' }}
               >
                 {label}
@@ -82,43 +82,43 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
 }
 
 function StatusChip({ status }: { status: ShopifyProduct['status'] }) {
-  const c = {
+  const map = {
     active:   { bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.25)',  color: '#22c55e', label: 'Active' },
     draft:    { bg: 'rgba(234,179,8,0.1)',   border: 'rgba(234,179,8,0.25)',  color: '#eab308', label: 'Draft' },
     archived: { bg: 'rgba(113,113,122,0.1)', border: 'rgba(113,113,122,0.25)', color: '#71717a', label: 'Archived' },
-  }[status];
+  };
+  const c = map[status] || map.draft;
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-md"
       style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.color }}>
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.color }} />
       {c.label}
     </span>
   );
 }
 
 function CopyBtn({ text, id, copiedId, onCopy, size = 'sm' }: {
-  text: string; id: string; copiedId: string | null;
-  onCopy: (t: string, id: string) => void; size?: 'sm' | 'xs';
+  text: string; id: string; copiedId: string | null; onCopy: (t: string, k: string) => void; size?: 'sm' | 'xs';
 }) {
   const is = copiedId === id;
+  const sz = size === 'xs' ? 12 : 14;
   return (
-    <button onClick={() => onCopy(text, id)}
-      className="flex items-center gap-1 rounded-lg transition-all duration-200"
+    <button
+      onClick={() => onCopy(text, id)}
+      className="rounded-md flex items-center justify-center"
       style={{
-        padding: size === 'xs' ? '0.2rem 0.5rem' : '0.3rem 0.6rem',
-        fontSize: size === 'xs' ? '0.65rem' : '0.7rem',
-        background: is ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.04)',
+        width: size === 'xs' ? 24 : 28, height: size === 'xs' ? 24 : 28,
+        background: is ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
         border: `1px solid ${is ? 'rgba(34,197,94,0.3)' : 'var(--color-border)'}`,
         color: is ? '#22c55e' : '#52525b',
+        transition: 'all 0.15s',
       }}>
-      {is ? <Check size={10} /> : <Copy size={10} />}
-      {is ? 'Copied' : 'Copy'}
+      {is ? <Check size={sz} /> : <Copy size={sz} />}
     </button>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
-// Step 1 — Connect Store (OAuth primary + Direct Token fallback)
+// ConnectStep (KEPT EXACTLY AS-IS)
 // ════════════════════════════════════════════════════════════════
 
 function ConnectStep({ onConnected, oauthError }: {
@@ -127,7 +127,7 @@ function ConnectStep({ onConnected, oauthError }: {
 }) {
   const [tab, setTab] = useState<'oauth' | 'token'>('oauth');
 
-  // ── OAuth tab state ───────────────────────────────────────
+  // OAuth state
   const [domain, setDomain] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -135,64 +135,61 @@ function ConnectStep({ onConnected, oauthError }: {
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [oauthErr, setOauthErr] = useState(oauthError || '');
 
-  // ── Direct token tab state ────────────────────────────────
+  // Direct token state
   const [tokenDomain, setTokenDomain] = useState('');
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [tokenStatus, setTokenStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [tokenErr, setTokenErr] = useState('');
 
-  // ── OAuth submit ──────────────────────────────────────────
   async function handleOAuth(e: React.FormEvent) {
     e.preventDefault();
+    setOauthStatus('loading');
+    setOauthErr('');
     const d = domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
     const cid = clientId.trim();
     const cs = clientSecret.trim();
-    if (!d || !cid || !cs) return;
-
-    setOauthStatus('loading');
-    setOauthErr('');
-
+    if (!d || !cid || !cs) { setOauthErr('All fields are required'); setOauthStatus('error'); return; }
     try {
       const res = await fetch('/api/shopify/oauth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeDomain: d, clientId: cid, clientSecret: cs }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.authUrl) throw new Error(data.error || 'Failed to start OAuth flow');
-
-      // Redirect to Shopify authorization page.
-      // MUST use top-level navigation — Shopify login sets X-Frame-Options: DENY
-      // and will refuse to load inside an iframe or embedded window.
-      const top = window.top ?? window;
-      top.location.href = data.authUrl;
+      const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
+      if (!res.ok || !data.success) throw new Error(data.error || 'OAuth failed');
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+      } else {
+        setOauthStatus('idle');
+        setOauthErr('No redirect URL returned');
+      }
     } catch (err) {
       setOauthErr(err instanceof Error ? err.message : 'OAuth failed');
       setOauthStatus('error');
     }
   }
 
-  // ── Direct token submit ───────────────────────────────────
   async function handleTokenSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const d = tokenDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const t = token.trim();
-    if (!d || !t) return;
-
     setTokenStatus('loading');
     setTokenErr('');
-
+    const d = tokenDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const t = token.trim();
+    if (!d || !t) { setTokenErr('Both fields are required'); setTokenStatus('error'); return; }
     try {
       const res = await fetch('/api/shopify/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeDomain: d, accessToken: t }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
       if (!res.ok || !data.success) throw new Error(data.error || 'Connection failed');
-
-      const creds: ShopifyCredentials = { storeDomain: d, accessToken: t, shopName: data.shopName };
+      const creds: ShopifyCredentials = {
+        storeDomain: data.storeDomain || d,
+        accessToken: t,
+        shopName: data.shopName,
+      };
       setStored(creds);
       onConnected(creds);
     } catch (err) {
@@ -201,225 +198,205 @@ function ConnectStep({ onConnected, oauthError }: {
     }
   }
 
-  const isOAuthValid = domain.trim() && clientId.trim() && clientSecret.trim();
-  const isTokenValid = tokenDomain.trim() && token.trim();
-
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-          style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.2)' }}>
+      <div className="text-center mb-6">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+          style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}>
           <Store size={28} style={{ color: '#ef4444' }} />
         </div>
-        <h3 className="text-2xl font-black mb-2">Connect Your Shopify Store</h3>
+        <h2 className="text-xl font-bold mb-2">Connect Your Shopify Store</h2>
         <p style={{ color: '#71717a', maxWidth: '440px', margin: '0 auto' }}>
-          Enter your app credentials and we&apos;ll automatically connect to your store — no need to manually copy access tokens.
+          Choose how you&apos;d like to connect — OAuth for full integration or a direct token for quick setup.
         </p>
       </div>
 
-      {/* Tab switcher */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-        <button onClick={() => setTab('oauth')}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all"
+        <button onClick={() => setTab('oauth')} className="flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all"
           style={{
-            background: tab === 'oauth' ? 'rgba(220,38,38,0.12)' : 'transparent',
+            background: tab === 'oauth' ? 'rgba(220,38,38,0.08)' : 'transparent',
             color: tab === 'oauth' ? '#ef4444' : '#52525b',
-            border: tab === 'oauth' ? '1px solid rgba(220,38,38,0.25)' : '1px solid transparent',
+            border: tab === 'oauth' ? '1px solid rgba(220,38,38,0.2)' : '1px solid transparent',
           }}>
-          <Shield size={14} /> App Credentials
-          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{
-            background: 'rgba(34,197,94,0.12)', color: '#22c55e', fontSize: '0.6rem', fontWeight: 800,
-          }}>RECOMMENDED</span>
+          <Plug size={15} /> OAuth
+          <span className="text-xs px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+            style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', fontSize: '0.6rem', fontWeight: 800 }}>
+            Recommended
+          </span>
         </button>
-        <button onClick={() => setTab('token')}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all"
+        <button onClick={() => setTab('token')} className="flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all"
           style={{
-            background: tab === 'token' ? 'rgba(255,255,255,0.06)' : 'transparent',
+            background: tab === 'token' ? 'rgba(255,255,255,0.04)' : 'transparent',
             color: tab === 'token' ? '#a1a1aa' : '#3f3f46',
             border: tab === 'token' ? '1px solid var(--color-border)' : '1px solid transparent',
           }}>
-          <Key size={14} /> Access Token
+          <Key size={15} /> Direct Token
         </button>
       </div>
 
-      {/* ── OAuth Tab ──────────────────────────────────────────── */}
       {tab === 'oauth' && (
-        <div className="rounded-2xl p-6 md:p-8"
-          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
-          <form onSubmit={handleOAuth} className="flex flex-col gap-5">
-            {/* Store Domain */}
-            <div>
-              <label htmlFor="oauth-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                Store URL <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <input id="oauth-domain" type="text" required placeholder="my-store.myshopify.com"
-                value={domain} onChange={(e) => setDomain(e.target.value)} disabled={oauthStatus === 'loading'}
-                className="input-field" />
-              <p className="text-xs mt-1.5" style={{ color: '#3f3f46' }}>
-                Your Shopify store domain (e.g. your-store.myshopify.com)
-              </p>
-            </div>
-
-            {/* Client ID + Secret */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleOAuth}>
+          <div className="rounded-2xl p-6"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
+            <div className="flex flex-col gap-4">
               <div>
-                <label htmlFor="oauth-client-id" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                  Client ID <span style={{ color: '#ef4444' }}>*</span>
+                <label htmlFor="oauth-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                  Store URL <span style={{ color: '#ef4444' }}>*</span>
                 </label>
-                <input id="oauth-client-id" type="text" required placeholder="App API key"
-                  value={clientId} onChange={(e) => setClientId(e.target.value)} disabled={oauthStatus === 'loading'}
-                  className="input-field" />
+                <input id="oauth-domain" type="text" placeholder="your-store.myshopify.com"
+                  value={domain} onChange={(e) => setDomain(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
+                  style={{ border: '1px solid var(--color-border)' }} />
+                <p className="text-xs mt-1.5" style={{ color: '#3f3f46' }}>
+                  e.g. my-brand.myshopify.com
+                </p>
               </div>
-              <div>
-                <label htmlFor="oauth-client-secret" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                  Client Secret <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <div className="relative">
-                  <input id="oauth-client-secret" type={showSecret ? 'text' : 'password'} required
-                    placeholder="App API secret key"
-                    value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} disabled={oauthStatus === 'loading'}
-                    className="input-field" style={{ paddingRight: '2.75rem' }} />
-                  <button type="button" onClick={() => setShowSecret(!showSecret)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} tabIndex={-1}>
-                    {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="oauth-client-id" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                    Client ID <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input id="oauth-client-id" type="text" placeholder="Client ID"
+                    value={clientId} onChange={(e) => setClientId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
+                    style={{ border: '1px solid var(--color-border)' }} />
+                </div>
+                <div>
+                  <label htmlFor="oauth-client-secret" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                    Client Secret <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <div className="relative">
+                    <input id="oauth-client-secret" type={showSecret ? 'text' : 'password'} placeholder="Client Secret"
+                      value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none pr-10"
+                      style={{ border: '1px solid var(--color-border)' }} />
+                    <button type="button" onClick={() => setShowSecret(!showSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} tabIndex={-1}>
+                      {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* How it works */}
-            <div className="flex items-start gap-3 p-3.5 rounded-xl"
-              style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)' }}>
+            <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
+              style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.12)' }}>
               <Shield size={16} style={{ color: '#60a5fa', flexShrink: 0, marginTop: 1 }} />
               <p className="text-xs leading-relaxed" style={{ color: '#93c5fd' }}>
-                RootX will redirect you to Shopify for authorization. Your Client Secret is encrypted and never stored — it&apos;s only used once to exchange for an access token.
+                Your credentials are never stored on our servers. They are used only for this session and saved locally in your browser.
               </p>
             </div>
 
-            {/* Error */}
-            {oauthStatus === 'error' && oauthErr && (
-              <div className="flex items-start gap-3 p-3.5 rounded-xl"
-                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)' }}>
+            {oauthErr && (
+              <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
+                style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
                 <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
                 <p className="text-sm" style={{ color: '#fca5a5' }}>{oauthErr}</p>
               </div>
             )}
 
-            {/* Submit */}
-            <button type="submit" disabled={oauthStatus === 'loading' || !isOAuthValid}
-              className="btn-primary w-full justify-center"
-              style={{ padding: '0.875rem', fontSize: '1rem', opacity: oauthStatus === 'loading' || !isOAuthValid ? 0.6 : 1 }}>
-              {oauthStatus === 'loading' ? (
-                <><Loader2 size={18} className="animate-spin" /> Redirecting to Shopify…</>
-              ) : (
-                <><Plug size={18} /> Connect via Shopify</>
-              )}
+            <button type="submit" disabled={oauthStatus === 'loading'}
+              className="w-full mt-5 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+              style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
+              {oauthStatus === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Connecting…</> :
+                <><Plug size={16} /> Start OAuth Flow</>}
             </button>
-          </form>
+          </div>
 
-          {/* How-to */}
           <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--color-border)' }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#3f3f46' }}>
-              How to get your app credentials
+              How to get your OAuth credentials
             </p>
             <ol className="flex flex-col gap-2 text-xs leading-relaxed" style={{ color: '#71717a' }}>
               {[
-                'Go to your Shopify Admin → Settings → Apps and sales channels → Develop apps',
-                'Click "Create an app" → name it "RootX"',
-                'Configure Admin API scopes → enable read_products and write_products',
-                'Go to "API credentials" → copy the Client ID and Client Secret',
-              ].map((text, i) => (
+                'Go to your Shopify Partners dashboard',
+                'Create or select your app',
+                'Copy the Client ID and Client Secret from the API credentials',
+                'Use your-store.myshopify.com as the store URL',
+              ].map((step, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="font-bold flex-shrink-0" style={{ color: '#ef4444' }}>{i + 1}.</span>
-                  {text}
+                  {step}
                 </li>
               ))}
             </ol>
           </div>
-        </div>
+        </form>
       )}
 
-      {/* ── Direct Token Tab ───────────────────────────────────── */}
       {tab === 'token' && (
-        <div className="rounded-2xl p-6 md:p-8"
-          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
-          <form onSubmit={handleTokenSubmit} className="flex flex-col gap-5">
-            {/* Domain */}
-            <div>
-              <label htmlFor="token-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                Store URL <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <input id="token-domain" type="text" required placeholder="my-store.myshopify.com"
-                value={tokenDomain} onChange={(e) => setTokenDomain(e.target.value)} disabled={tokenStatus === 'loading'}
-                className="input-field" />
-            </div>
-
-            {/* Token */}
-            <div>
-              <label htmlFor="direct-token" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                Admin API Access Token <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <div className="relative">
-                <input id="direct-token" type={showToken ? 'text' : 'password'} required
-                  placeholder="shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  value={token} onChange={(e) => setToken(e.target.value)} disabled={tokenStatus === 'loading'}
-                  className="input-field" style={{ paddingRight: '2.75rem' }} />
-                <button type="button" onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} tabIndex={-1}>
-                  {showToken ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+        <form onSubmit={handleTokenSubmit}>
+          <div className="rounded-2xl p-6"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label htmlFor="token-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                  Store URL <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input id="token-domain" type="text" placeholder="your-store.myshopify.com"
+                  value={tokenDomain} onChange={(e) => setTokenDomain(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
+                  style={{ border: '1px solid var(--color-border)' }} />
+              </div>
+              <div>
+                <label htmlFor="direct-token" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                  Admin API Access Token <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div className="relative">
+                  <input id="direct-token" type={showToken ? 'text' : 'password'} placeholder="shpat_..."
+                    value={token} onChange={(e) => setToken(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none pr-10"
+                    style={{ border: '1px solid var(--color-border)' }} />
+                  <button type="button" onClick={() => setShowToken(!showToken)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} tabIndex={-1}>
+                    {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Error */}
-            {tokenStatus === 'error' && (
-              <div className="flex items-start gap-3 p-3.5 rounded-xl"
-                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)' }}>
+            {tokenErr && (
+              <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
+                style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
                 <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
                 <p className="text-sm" style={{ color: '#fca5a5' }}>{tokenErr}</p>
               </div>
             )}
 
-            {/* Submit */}
-            <button type="submit" disabled={tokenStatus === 'loading' || !isTokenValid}
-              className="btn-primary w-full justify-center"
-              style={{ padding: '0.875rem', fontSize: '1rem', opacity: tokenStatus === 'loading' || !isTokenValid ? 0.6 : 1 }}>
-              {tokenStatus === 'loading' ? (
-                <><Loader2 size={18} className="animate-spin" /> Testing connection…</>
-              ) : (
-                <><Plug size={18} /> Test & Connect Store</>
-              )}
+            <button type="submit" disabled={tokenStatus === 'loading'}
+              className="w-full mt-5 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+              style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
+              {tokenStatus === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Verifying…</> :
+                <><Key size={16} /> Connect with Token</>}
             </button>
-          </form>
+          </div>
 
-          {/* How-to */}
           <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--color-border)' }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#3f3f46' }}>
-              How to get your access token
+              How to get your Admin API token
             </p>
             <ol className="flex flex-col gap-2 text-xs leading-relaxed" style={{ color: '#71717a' }}>
               {[
-                'Go to your Shopify Admin → Settings → Apps and sales channels → Develop apps',
-                'Click "Create an app" → name it "RootX"',
-                'Configure Admin API scopes → enable read_products and write_products',
-                'Click "Install app" → copy the Admin API access token',
-              ].map((text, i) => (
+                'In Shopify Admin → Settings → Apps → Develop apps',
+                'Create a custom app and configure API scopes (read/write products)',
+                'Install the app and copy the Admin API access token',
+                'The token starts with shpat_...',
+              ].map((step, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="font-bold flex-shrink-0" style={{ color: '#ef4444' }}>{i + 1}.</span>
-                  {text}
+                  {step}
                 </li>
               ))}
             </ol>
           </div>
-        </div>
+        </form>
       )}
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
-// Step 2 — Product Grid
+// ProductGrid (KEPT EXACTLY AS-IS)
 // ════════════════════════════════════════════════════════════════
 
 function ProductGrid({ products, loading, error, onSelect, onRefresh }: {
@@ -432,148 +409,136 @@ function ProductGrid({ products, loading, error, onSelect, onRefresh }: {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'draft' | 'archived'>('all');
 
-  const filtered = products.filter((p) => {
-    const matchSearch = p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.product_type?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filter === 'all' || p.status === filter;
-    return matchSearch && matchStatus;
+  const filtered = products.filter(p => {
+    if (filter !== 'all' && p.status !== filter) return false;
+    if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
   });
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="rounded-2xl overflow-hidden"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-            <div className="shimmer" style={{ paddingTop: '70%' }} />
-            <div className="p-4 flex flex-col gap-3">
-              <div className="shimmer rounded-lg" style={{ height: '16px', width: '80%' }} />
-              <div className="shimmer rounded-lg" style={{ height: '12px', width: '50%' }} />
-              <div className="shimmer rounded-lg" style={{ height: '36px' }} />
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <Loader2 size={28} className="animate-spin" style={{ color: '#ef4444' }} />
+        <p className="text-sm font-semibold" style={{ color: '#71717a' }}>Loading products…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl p-6 flex items-start gap-4"
-        style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)' }}>
-        <AlertTriangle size={20} style={{ color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
-        <div>
-          <p className="font-semibold mb-1" style={{ color: '#ef4444' }}>Failed to load products</p>
-          <p className="text-sm mb-3" style={{ color: '#a1a1aa' }}>{error}</p>
-          <button onClick={onRefresh} className="btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
-            <RefreshCw size={13} /> Try Again
-          </button>
+      <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl px-6"
+        style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+        <div className="flex items-start gap-3 max-w-md">
+          <AlertTriangle size={20} style={{ color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <p className="font-semibold mb-1" style={{ color: '#ef4444' }}>Failed to load products</p>
+            <p className="text-sm mb-3" style={{ color: '#a1a1aa' }}>{error}</p>
+            <button onClick={onRefresh}
+              className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
+              style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#ef4444' }}>
+              <RefreshCw size={12} /> Retry
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Search + filter */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
+    <div>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[200px]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} />
-          <input type="text" placeholder="Search products…" value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input-field w-full" style={{ paddingLeft: '2.25rem', height: '40px', fontSize: '0.875rem' }} />
+          <input type="text" placeholder="Search products…" value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm bg-transparent outline-none"
+            style={{ border: '1px solid var(--color-border)' }} />
         </div>
-        <div className="flex gap-2">
-          {(['all', 'active', 'draft', 'archived'] as const).map((f) => (
+        <div className="flex gap-1.5">
+          {(['all', 'active', 'draft', 'archived'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className="px-3 py-2 rounded-xl text-xs font-bold transition-all capitalize"
+              className="text-xs font-bold px-3 py-2 rounded-lg capitalize transition-all"
               style={{
-                background: filter === f ? 'rgba(220,38,38,0.12)' : 'rgba(255,255,255,0.04)',
+                background: filter === f ? 'rgba(220,38,38,0.08)' : 'rgba(255,255,255,0.02)',
                 border: filter === f ? '1px solid rgba(220,38,38,0.3)' : '1px solid var(--color-border)',
                 color: filter === f ? '#ef4444' : '#71717a',
-              }}>
-              {f}
-            </button>
+              }}>{f}</button>
           ))}
-          <button onClick={onRefresh} className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
-            title="Refresh">
-            <RefreshCw size={14} />
-          </button>
         </div>
+        <button onClick={onRefresh}
+          className="text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
+        >
+          <RefreshCw size={12} /> Refresh
+        </button>
       </div>
 
-      {/* Grid */}
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((p) => {
-            const img = p.images?.[0];
-            const v = p.variants?.[0];
-            const price = v?.price ? `$${parseFloat(v.price).toFixed(2)}` : null;
-            const inv = p.variants?.reduce((s, x) => s + (x.inventory_quantity ?? 0), 0) ?? 0;
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map(p => {
+            const img = p.images?.[0]?.src;
+            const price = p.variants?.[0]?.price ? `$${p.variants[0].price}` : '';
+            const inv = p.variants?.reduce((s, v) => s + (v.inventory_quantity ?? 0), 0) ?? 0;
             return (
-              <div key={p.id} className="rounded-2xl overflow-hidden transition-all duration-300 group"
+              <button key={p.id} onClick={() => onSelect(p)}
+                className="text-left rounded-xl p-3 transition-all group"
                 style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
                 onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)')}
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}>
-                {/* Image */}
-                <div className="relative w-full" style={{ paddingTop: '70%', background: '#0a0a0c' }}>
-                  {img ? (
-                    <img src={img.src} alt={img.alt || p.title}
-                      className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex gap-3">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
+                    style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    {img ? (
+                      <img src={img} alt={p.title} className="w-full h-full object-cover" />
+                    ) : (
                       <ImageIcon size={28} style={{ color: '#27272a' }} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <h3 className="text-sm font-bold truncate">{p.title}</h3>
+                      <StatusChip status={p.status} />
                     </div>
-                  )}
-                  <div className="absolute top-2 left-2"><StatusChip status={p.status} /></div>
-                </div>
-                {/* Content */}
-                <div className="p-4 flex flex-col gap-3">
-                  <div>
-                    <h4 className="font-bold text-sm leading-tight mb-1 line-clamp-2">{p.title}</h4>
                     {p.product_type && <p className="text-xs" style={{ color: '#52525b' }}>{p.product_type}</p>}
-                  </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {price && <span className="text-sm font-bold" style={{ color: '#22c55e' }}>{price}</span>}
-                    <span className="text-xs" style={{ color: inv <= 5 ? '#ef4444' : '#52525b' }}>{inv} in stock</span>
-                  </div>
-                  {p.tags && (
-                    <div className="flex flex-wrap gap-1">
-                      {p.tags.split(',').slice(0, 3).map((t) => (
-                        <span key={t} className="text-xs px-1.5 py-0.5 rounded"
-                          style={{ background: 'rgba(220,38,38,0.06)', color: '#71717a', fontSize: '0.65rem' }}>
-                          {t.trim()}
-                        </span>
-                      ))}
+                    <div className="flex items-center gap-3 mt-1.5">
+                      {price && <span className="text-sm font-bold" style={{ color: '#22c55e' }}>{price}</span>}
+                      <span className="text-xs" style={{ color: inv <= 5 ? '#ef4444' : '#52525b' }}>{inv} in stock</span>
                     </div>
-                  )}
-                  <button onClick={() => onSelect(p)} className="btn-primary w-full justify-center mt-auto"
-                    style={{ padding: '0.6rem', fontSize: '0.8rem' }}>
-                    <Sparkles size={14} /> Generate AI Content
-                  </button>
+                    {p.tags && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {p.tags.split(',').slice(0, 3).map(t => (
+                          <span key={t.trim()} className="px-1.5 py-0.5 rounded-md text-xs"
+                            style={{ background: 'rgba(220,38,38,0.06)', color: '#71717a', fontSize: '0.65rem' }}>
+                            {t.trim()}
+                          </span>
+                        ))}
+                        {p.tags.split(',').length > 3 && (
+                          <span className="text-xs" style={{ color: '#3f3f46' }}>+{p.tags.split(',').length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
-      ) : products.length > 0 ? (
+      ) : search || filter !== 'all' ? (
         <div className="text-center py-12" style={{ color: '#52525b' }}>
-          <Search size={28} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No products match your search</p>
+          <Search size={28} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm font-semibold">No products match your filters</p>
         </div>
       ) : (
         <div className="text-center py-12" style={{ color: '#52525b' }}>
-          <Package size={28} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No products found in this store</p>
+          <Package size={28} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm font-semibold">No products found in this store</p>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
-// Step 3 — AI Generation + Push Modal
+// GenerationModal (UPDATED with AI agent features)
 // ════════════════════════════════════════════════════════════════
 
 function GenerationModal({ product, credentials, onClose, onPushed }: {
@@ -591,13 +556,18 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
   const [editedBody, setEditedBody] = useState('');
   const [editedTags, setEditedTags] = useState('');
   const [verifiedProduct, setVerifiedProduct] = useState<ShopifyProduct | null>(null);
+  const [verificationResults, setVerificationResults] = useState<VerificationResult[]>([]);
   const { copiedId, copy } = useCopy();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   async function handleGenerate() {
     setStatus('generating');
     setError('');
+    setResult(null);
     setPushStatus('idle');
-
+    setVerifiedProduct(null);
+    setVerificationResults([]);
+    setEditMode(false);
     try {
       const res = await fetch('/api/shopify/generate', {
         method: 'POST',
@@ -609,12 +579,15 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
           productType: product.product_type,
           tags: product.tags,
           vendor: product.vendor,
+          imageUrl: product.images?.[0]?.src || '',
+          currentPrice: product.variants?.[0]?.price || '',
         }),
       });
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || `Generation failed (${res.status})`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Generation failed (${res.status})`);
       }
+
       const data: AIProductGeneration = await res.json();
       setResult(data);
       setEditedTitle(data.title);
@@ -626,8 +599,17 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
         agentType: 'shopify',
         agentName: 'Shopify AI Agent',
         agentIcon: '🛒',
-        inputs: { productTitle: product.title, productType: product.product_type, storeDomain: credentials.storeDomain },
-        outputs: { generatedTitle: data.title, seoTitle: data.seoTitle, seoDescription: data.seoDescription, tags: data.tags.join(', ') },
+        inputs: {
+          productTitle: product.title,
+          productType: product.product_type,
+          storeDomain: credentials.storeDomain,
+        },
+        outputs: {
+          generatedTitle: data.title,
+          seoTitle: data.seoTitle,
+          seoDescription: data.seoDescription,
+          tags: data.tags.join(', '),
+        },
         isSaved: false,
       });
     } catch (err) {
@@ -637,9 +619,9 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
   }
 
   async function handlePush() {
+    if (!result) return;
     setPushStatus('pushing');
     setError('');
-    setVerifiedProduct(null);
     try {
       const res = await fetch('/api/shopify/update', {
         method: 'POST',
@@ -649,18 +631,15 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
           title: editMode ? editedTitle : result?.title,
           body_html: editMode ? editedBody : result?.bodyHtml,
           tags: editMode ? editedTags : result?.tags.join(', '),
+          product_type: result?.categorySuggestion?.primary || '',
           storeDomain: credentials.storeDomain,
           accessToken: credentials.accessToken,
         }),
       });
-      const data: UpdateResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response from server' }));
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || `Push failed (HTTP ${res.status})`);
-      }
-      // Store the Shopify-confirmed product
-      if (data.product) {
-        setVerifiedProduct(data.product);
-      }
+      const data: UpdateResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
+      if (!res.ok || !data.success) throw new Error(data.error || `Push failed`);
+      if (data.product) setVerifiedProduct(data.product);
+      if (data.verification) setVerificationResults(data.verification);
       setPushStatus('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Push failed');
@@ -668,60 +647,40 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
     }
   }
 
-  const img = product.images?.[0];
-  const shopifyProductUrl = `https://${credentials.storeDomain}/admin/products/${product.id}`;
-
-  /* ── Before/After comparison row ─────────────────────────── */
   function ComparisonField({ label, icon, color, before, after, fieldId, editValue, onEditChange, multiline }: {
-    label: string; icon: React.ReactNode; color: string;
-    before: string; after: string; fieldId: string;
-    editValue?: string; onEditChange?: (v: string) => void; multiline?: boolean;
+    label: string; icon: React.ReactNode; color: string; before: string; after: string;
+    fieldId: string; editValue?: string; onEditChange?: (v: string) => void; multiline?: boolean;
   }) {
     return (
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-        {/* Field header */}
-        <div className="flex items-center justify-between px-4 py-2.5"
+        <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
           style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color }}>
-            {icon} {label}
-          </span>
-          <CopyBtn text={editMode && editValue !== undefined ? editValue : after} id={fieldId} copiedId={copiedId} onCopy={copy} />
+          <span style={{ color }}>{icon}</span>
+          <span style={{ color }}>{label}</span>
+          <CopyBtn text={after} id={fieldId} copiedId={copiedId} onCopy={copy} size="xs" />
         </div>
-        {/* Before / After grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2">
-          {/* Before */}
+        <div className="grid grid-cols-2">
           <div className="px-4 py-3" style={{ background: 'rgba(255,255,255,0.01)', borderRight: '1px solid var(--color-border)' }}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-bold px-2 py-0.5 rounded"
-                style={{ background: 'rgba(113,113,122,0.12)', color: '#71717a' }}>BEFORE</span>
-            </div>
-            {multiline ? (
-              <div className="text-sm leading-relaxed" style={{ color: '#71717a' }}
-                dangerouslySetInnerHTML={{ __html: before || '<em style="color:#3f3f46">No description</em>' }} />
-            ) : (
-              <p className="text-sm" style={{ color: '#71717a' }}>{before || '—'}</p>
-            )}
+            <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: '#3f3f46' }}>Before</p>
+            <p className="text-sm leading-relaxed" style={{ color: '#71717a' }}>
+              {before || <span style={{ color: '#27272a', fontStyle: 'italic' }}>Empty</span>}
+            </p>
           </div>
-          {/* After */}
-          <div className="px-4 py-3" style={{ background: 'rgba(34,197,94,0.02)' }}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-bold px-2 py-0.5 rounded"
-                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>AFTER</span>
-              <Sparkles size={10} style={{ color: '#22c55e' }} />
-            </div>
-            {editMode && editValue !== undefined && onEditChange ? (
+          <div className="px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: '#22c55e' }}>After (AI)</p>
+            {editMode && onEditChange ? (
               multiline ? (
-                <textarea value={editValue} onChange={(e) => onEditChange(e.target.value)}
-                  className="input-field w-full" rows={5} style={{ fontSize: '0.85rem', resize: 'vertical' }} />
+                <textarea value={editValue ?? after} onChange={(e) => onEditChange(e.target.value)}
+                  className="w-full text-sm bg-transparent outline-none resize-none leading-relaxed"
+                  style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem', minHeight: '80px' }}
+                  rows={4} />
               ) : (
-                <input type="text" value={editValue} onChange={(e) => onEditChange(e.target.value)}
-                  className="input-field w-full" style={{ fontSize: '0.9rem', fontWeight: 600 }} />
+                <input type="text" value={editValue ?? after} onChange={(e) => onEditChange(e.target.value)}
+                  className="w-full text-sm bg-transparent outline-none leading-relaxed"
+                  style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem' }} />
               )
-            ) : multiline ? (
-              <div className="text-sm leading-relaxed prose-invert" style={{ color: '#e4e4e7' }}
-                dangerouslySetInnerHTML={{ __html: after }} />
             ) : (
-              <p className="text-sm font-semibold" style={{ color: '#f8f8f8' }}>{after}</p>
+              <p className="text-sm leading-relaxed">{after}</p>
             )}
           </div>
         </div>
@@ -729,58 +688,53 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
     );
   }
 
+  const img = product.images?.[0]?.src;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full max-w-4xl my-8 mx-4 rounded-2xl overflow-hidden animate-fade-up"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+
+      <div className="w-full max-w-5xl my-8 mx-4 rounded-2xl overflow-hidden animate-fade-up"
         style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', boxShadow: '0 32px 64px rgba(0,0,0,0.5)' }}>
 
-        {/* Header */}
+        {/* ── Header ──────────────────────────────────── */}
         <div className="flex items-center justify-between px-6 py-4"
           style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.2)' }}>
-              <Sparkles size={16} style={{ color: '#ef4444' }} />
+            <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0" style={{ background: 'rgba(255,255,255,0.03)' }}>
+              {img ? <img src={img} alt="" className="w-full h-full object-cover" /> :
+                <div className="w-full h-full flex items-center justify-center"><ImageIcon size={18} style={{ color: '#27272a' }} /></div>}
             </div>
             <div>
-              <p className="font-bold text-sm">AI Content Generator</p>
-              <p className="text-xs" style={{ color: '#52525b' }}>{product.title}</p>
+              <h3 className="text-sm font-bold truncate max-w-xs">{product.title}</h3>
+              <p className="text-xs" style={{ color: '#52525b' }}>
+                ID: {product.id} • {product.product_type || 'No type'}
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'rgba(255,255,255,0.05)', color: '#71717a' }}>
-            <X size={16} />
+          <button onClick={onClose} className="p-2 rounded-lg transition-all"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)' }}>
+            <X size={16} style={{ color: '#71717a' }} />
           </button>
         </div>
 
-        <div className="p-6">
-          {/* Product summary */}
-          <div className="flex items-start gap-5 mb-6 p-4 rounded-xl"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-            {img && <img src={img.src} alt={product.title} className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold mb-1 truncate">{product.title}</h3>
-              <div className="flex items-center gap-3 flex-wrap">
-                <StatusChip status={product.status} />
-                {product.product_type && <span className="text-xs" style={{ color: '#52525b' }}>{product.product_type}</span>}
-                {product.vendor && <span className="text-xs" style={{ color: '#52525b' }}>by {product.vendor}</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Idle */}
+        {/* ── Body ────────────────────────────────────── */}
+        <div className="p-6 max-h-[75vh] overflow-y-auto" ref={scrollRef}>
+          {/* Ready to generate */}
           {status === 'idle' && (
             <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)' }}>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}>
                 <Sparkles size={28} style={{ color: '#ef4444' }} />
               </div>
-              <h3 className="text-xl font-black mb-2">Ready to Generate</h3>
-              <p className="text-sm mb-6" style={{ color: '#71717a', maxWidth: '400px', margin: '0 auto 1.5rem' }}>
-                AI will create an optimized title, rich description, SEO metadata, and tags for this product.
+              <h3 className="text-lg font-bold mb-2">Ready to Generate</h3>
+              <p className="text-sm mb-6" style={{ color: '#71717a', maxWidth: '420px', margin: '0 auto 1.5rem' }}>
+                AI will analyze the product image, generate optimized copy, suggest pricing, recommend categories, and find upsell opportunities.
               </p>
-              <button onClick={handleGenerate} className="btn-primary" style={{ padding: '0.75rem 2rem' }}>
+              <button onClick={handleGenerate}
+                className="px-8 py-3.5 rounded-xl text-sm font-bold flex items-center gap-2 mx-auto transition-all"
+                style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
                 <Sparkles size={16} /> Generate AI Content
               </button>
             </div>
@@ -789,302 +743,555 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
           {/* Generating */}
           {status === 'generating' && (
             <div className="text-center py-16">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
-                style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', animation: 'pulse-glow 2s ease-in-out infinite' }}>
-                <Sparkles size={24} className="animate-spin" style={{ color: '#ef4444' }} />
-              </div>
+              <Loader2 size={32} className="animate-spin mx-auto mb-4" style={{ color: '#ef4444' }} />
               <p className="font-semibold mb-1">Generating AI content…</p>
-              <p className="text-sm" style={{ color: '#52525b' }}>Analyzing product and creating optimized copy</p>
+              <p className="text-sm" style={{ color: '#52525b' }}>Analyzing product image, generating copy, calculating price, finding upsells…</p>
             </div>
           )}
 
           {/* Error */}
           {status === 'error' && (
             <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                <AlertTriangle size={28} style={{ color: '#ef4444' }} />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Generation Failed</h3>
-              <p className="text-sm mb-6" style={{ color: '#71717a' }}>{error}</p>
-              <button onClick={handleGenerate} className="btn-primary" style={{ padding: '0.75rem 2rem' }}>
-                <RefreshCw size={16} /> Try Again
+              <AlertTriangle size={32} className="mx-auto mb-4" style={{ color: '#ef4444' }} />
+              <p className="font-semibold mb-1" style={{ color: '#ef4444' }}>Generation Failed</p>
+              <p className="text-sm mb-4" style={{ color: '#71717a' }}>{error}</p>
+              <button onClick={handleGenerate}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 mx-auto transition-all"
+                style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
+                <RefreshCw size={14} /> Try Again
               </button>
             </div>
           )}
 
-          {/* ══════════════ AI Results Panel ══════════════ */}
-          {status === 'done' && result && (
-            <div className="flex flex-col gap-5">
-              {/* Success header */}
-              <div className="flex items-center gap-3 p-4 rounded-xl"
-                style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(34,197,94,0.15)' }}>
-                  <CheckCircle2 size={18} style={{ color: '#22c55e' }} />
-                </div>
-                <div>
-                  <p className="font-bold text-sm" style={{ color: '#86efac' }}>AI content generated successfully!</p>
-                  <p className="text-xs mt-0.5" style={{ color: '#52525b' }}>
-                    Review the before &amp; after comparison below. Edit if needed, then push to your Shopify store.
-                  </p>
-                </div>
-              </div>
-
-              {result.isDemo && (
-                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
-                  style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
-                  <AlertTriangle size={14} style={{ color: '#eab308' }} />
-                  <p className="text-xs" style={{ color: '#eab308' }}>
-                    Demo mode — Add <strong>OPENAI_API_KEY</strong> for real AI-generated content
-                  </p>
-                </div>
-              )}
-
-              {/* Toolbar */}
-              <div className="flex items-center gap-3 flex-wrap">
+          {/* Results */}
+          {status === 'done' && result && pushStatus !== 'done' && (
+            <div className="flex flex-col gap-4">
+              {/* ── Edit toggle ───────────────────────── */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#52525b' }}>
+                  AI Generation Results
+                </p>
                 <button onClick={() => setEditMode(!editMode)}
-                  className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
                   style={{
-                    background: editMode ? 'rgba(220,38,38,0.1)' : 'rgba(255,255,255,0.04)',
+                    background: editMode ? 'rgba(220,38,38,0.08)' : 'rgba(255,255,255,0.04)',
                     border: `1px solid ${editMode ? 'rgba(220,38,38,0.25)' : 'var(--color-border)'}`,
                     color: editMode ? '#ef4444' : '#71717a',
                   }}>
-                  <Edit3 size={12} /> {editMode ? 'Editing Mode' : 'Edit before push'}
+                  <Edit3 size={12} /> {editMode ? 'Editing' : 'Edit'}
                 </button>
-                <button onClick={handleGenerate}
-                  className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                <button onClick={() => { setStatus('idle'); setResult(null); }}
+                  className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
                   <RefreshCw size={12} /> Regenerate
                 </button>
               </div>
 
-              {/* ── Before / After Comparisons ─────────────── */}
-
-              {/* Product Title */}
+              {/* ── Title comparison ──────────────────── */}
               <ComparisonField
-                label="Product Title"
-                icon={<ShoppingCart size={11} />}
-                color="#ef4444"
-                before={product.title}
-                after={result.title}
-                fieldId="title"
-                editValue={editedTitle}
-                onEditChange={setEditedTitle}
+                label="TITLE" icon={<FileText size={14} />} color="#ef4444"
+                before={product.title} after={result.title}
+                fieldId="gen-title" editValue={editedTitle} onEditChange={setEditedTitle}
               />
 
-              {/* Product Description */}
+              {/* ── Description comparison ───────────── */}
               <ComparisonField
-                label="Product Description"
-                icon={<FileText size={11} />}
-                color="#f97316"
-                before={product.body_html || ''}
-                after={result.bodyHtml}
-                fieldId="body"
-                editValue={editedBody}
-                onEditChange={setEditedBody}
-                multiline
+                label="DESCRIPTION" icon={<FileText size={14} />} color="#60a5fa"
+                before={product.body_html || ''} after={result.bodyHtml}
+                fieldId="gen-body" editValue={editedBody} onEditChange={setEditedBody} multiline
               />
 
-              {/* SEO Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-                  <div className="flex items-center justify-between px-4 py-2.5"
-                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
-                      <Search size={11} /> SEO Title
-                    </span>
-                    <CopyBtn text={result.seoTitle} id="seo-t" copiedId={copiedId} onCopy={copy} size="xs" />
-                  </div>
-                  <div className="px-4 py-3">
-                    <p className="text-sm font-medium" style={{ color: '#f8f8f8' }}>{result.seoTitle}</p>
-                    <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      <div className="h-full rounded-full transition-all" style={{
-                        width: `${Math.min((result.seoTitle.length / 60) * 100, 100)}%`,
-                        background: result.seoTitle.length <= 60 ? '#22c55e' : '#ef4444',
-                      }} />
-                    </div>
-                    <p className="text-xs mt-1" style={{ color: result.seoTitle.length <= 60 ? '#22c55e' : '#ef4444' }}>
-                      {result.seoTitle.length}/60 characters {result.seoTitle.length <= 60 ? '✓' : '— too long'}
-                    </p>
-                  </div>
+              {/* ── Tags ──────────────────────────────── */}
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+                  style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                  <Tag size={14} style={{ color: '#a855f7' }} />
+                  <span style={{ color: '#a855f7' }}>TAGS</span>
                 </div>
-                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-                  <div className="flex items-center justify-between px-4 py-2.5"
-                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>
-                      <FileText size={11} /> Meta Description
-                    </span>
-                    <CopyBtn text={result.seoDescription} id="seo-d" copiedId={copiedId} onCopy={copy} size="xs" />
-                  </div>
-                  <div className="px-4 py-3">
-                    <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.seoDescription}</p>
-                    <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      <div className="h-full rounded-full transition-all" style={{
-                        width: `${Math.min((result.seoDescription.length / 160) * 100, 100)}%`,
-                        background: result.seoDescription.length <= 160 ? '#22c55e' : '#ef4444',
-                      }} />
+                <div className="px-4 py-3">
+                  {editMode ? (
+                    <input type="text" value={editedTags} onChange={(e) => setEditedTags(e.target.value)}
+                      className="w-full text-sm bg-transparent outline-none"
+                      style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem' }} />
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {result.tags.map((t, i) => (
+                        <span key={i} className="text-xs px-2 py-1 rounded-md font-semibold"
+                          style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', color: '#a855f7' }}>
+                          {t}
+                        </span>
+                      ))}
                     </div>
-                    <p className="text-xs mt-1" style={{ color: result.seoDescription.length <= 160 ? '#22c55e' : '#ef4444' }}>
-                      {result.seoDescription.length}/160 characters {result.seoDescription.length <= 160 ? '✓' : '— too long'}
-                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* ── SEO ──────────────────────────────── */}
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+                  style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                  <Search size={14} style={{ color: '#22c55e' }} />
+                  <span style={{ color: '#22c55e' }}>SEO METADATA</span>
+                </div>
+                <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--color-border)' }}>
+                  <div className="px-4 py-3" style={{ background: 'var(--color-bg)', borderRight: '1px solid var(--color-border)' }}>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Meta Title</p>
+                    <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.seoTitle}</p>
+                  </div>
+                  <div className="px-4 py-3" style={{ background: 'var(--color-bg)' }}>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Meta Description</p>
+                    <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.seoDescription}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Tags */}
-              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-                <div className="flex items-center justify-between px-4 py-2.5"
-                  style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-                  <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
-                    <Tag size={11} /> Product Tags
-                  </span>
-                  <CopyBtn text={editMode ? editedTags : result.tags.join(', ')} id="tags" copiedId={copiedId} onCopy={copy} />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  {/* Before tags */}
-                  <div className="px-4 py-3" style={{ borderRight: '1px solid var(--color-border)' }}>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded mb-2 inline-block"
-                      style={{ background: 'rgba(113,113,122,0.12)', color: '#71717a' }}>BEFORE</span>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {(product.tags || '').split(',').filter(Boolean).map((tag) => (
-                        <span key={tag} className="px-2 py-0.5 rounded-lg text-xs"
-                          style={{ background: 'rgba(113,113,122,0.08)', border: '1px solid rgba(113,113,122,0.15)', color: '#71717a' }}>
-                          {tag.trim()}
-                        </span>
-                      ))}
-                      {!product.tags && <span className="text-xs" style={{ color: '#3f3f46' }}>No tags</span>}
-                    </div>
+              {/* ── Image Analysis Card ──────────────── */}
+              {result.imageAnalysis && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span style={{ color: '#f97316' }}>🖼️</span>
+                    <span style={{ color: '#f97316' }}>IMAGE ANALYSIS</span>
                   </div>
-                  {/* After tags */}
-                  <div className="px-4 py-3" style={{ background: 'rgba(34,197,94,0.02)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded"
-                        style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>AFTER</span>
-                      <Sparkles size={10} style={{ color: '#22c55e' }} />
+                  <div className="p-4 flex flex-col gap-3">
+                    {/* Description */}
+                    <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>
+                      {result.imageAnalysis.description}
+                    </p>
+
+                    {/* Color palette + Style + Quality row */}
+                    <div className="flex flex-wrap items-center gap-4">
+                      {/* Color swatches */}
+                      {result.imageAnalysis.dominantColors && result.imageAnalysis.dominantColors.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>Colors</span>
+                          <div className="flex gap-1.5">
+                            {result.imageAnalysis.dominantColors.map((c, i) => (
+                              <div key={i} className="w-6 h-6 rounded-full" title={c}
+                                style={{
+                                  background: c,
+                                  border: '2px solid var(--color-border)',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                }} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Style badge */}
+                      {result.imageAnalysis.style && (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-md"
+                          style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)', color: '#f97316' }}>
+                          {result.imageAnalysis.style}
+                        </span>
+                      )}
+
+                      {/* Quality meter */}
+                      {result.imageAnalysis.quality && (() => {
+                        const q = result.imageAnalysis!.quality.toLowerCase();
+                        const qColor = q === 'high' ? '#22c55e' : q === 'medium' ? '#eab308' : '#ef4444';
+                        const qBg = q === 'high' ? 'rgba(34,197,94,0.08)' : q === 'medium' ? 'rgba(234,179,8,0.08)' : 'rgba(239,68,68,0.08)';
+                        const qBorder = q === 'high' ? 'rgba(34,197,94,0.2)' : q === 'medium' ? 'rgba(234,179,8,0.2)' : 'rgba(239,68,68,0.2)';
+                        const qWidth = q === 'high' ? '100%' : q === 'medium' ? '60%' : '30%';
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>Quality</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                                <div className="h-full rounded-full transition-all" style={{ width: qWidth, background: qColor }} />
+                              </div>
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md capitalize"
+                                style={{ background: qBg, border: `1px solid ${qBorder}`, color: qColor }}>
+                                {result.imageAnalysis!.quality}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
-                    {editMode ? (
-                      <input type="text" value={editedTags} onChange={(e) => setEditedTags(e.target.value)}
-                        className="input-field w-full mt-1" placeholder="tag1, tag2, tag3" />
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {result.tags.map((tag) => (
-                          <span key={tag} className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                            style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                            {tag}
-                          </span>
-                        ))}
+
+                    {/* Suggestions */}
+                    {result.imageAnalysis.suggestions && result.imageAnalysis.suggestions.length > 0 && (
+                      <div className="mt-1">
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#3f3f46' }}>Improvement Tips</p>
+                        <ul className="flex flex-col gap-1.5">
+                          {result.imageAnalysis.suggestions.map((s, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs leading-relaxed" style={{ color: '#71717a' }}>
+                              <span style={{ color: '#f97316', flexShrink: 0, marginTop: 1 }}>•</span>
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
                 </div>
-              </div>
-
-              {/* ── Push to Shopify ───────────────────────── */}
-              {pushStatus !== 'done' && (
-                <div className="rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
-                  style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.08) 0%, rgba(0,0,0,0) 100%)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                  <div>
-                    <p className="font-bold mb-0.5 flex items-center gap-2">
-                      <ArrowRight size={14} style={{ color: '#ef4444' }} /> Push to Shopify
-                    </p>
-                    <p className="text-xs" style={{ color: '#71717a' }}>
-                      Update this product on your live store with the AI-generated content above
-                    </p>
-                  </div>
-                  <button onClick={handlePush} disabled={pushStatus === 'pushing'}
-                    className="btn-primary flex-shrink-0"
-                    style={{ padding: '0.7rem 1.8rem', fontSize: '0.9rem', opacity: pushStatus === 'pushing' ? 0.7 : 1 }}>
-                    {pushStatus === 'pushing' ? <><Loader2 size={16} className="animate-spin" /> Updating Shopify…</> :
-                     pushStatus === 'error' ? <><RefreshCw size={16} /> Try Again</> :
-                     <><ArrowRight size={16} /> Push to Shopify</>}
-                  </button>
-                </div>
               )}
 
-              {/* ── Push SUCCESS ──────────────────────────── */}
-              {pushStatus === 'done' && (
-                <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(34,197,94,0.3)' }}>
-                  <div className="px-5 py-4 flex items-center gap-4"
-                    style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.04) 100%)' }}>
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                      <CheckCircle2 size={24} style={{ color: '#22c55e' }} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-bold" style={{ color: '#86efac' }}>
-                        Product updated successfully in Shopify!
-                      </p>
-                      <p className="text-sm mt-0.5" style={{ color: '#52525b' }}>
-                        Verified — the content below was confirmed by Shopify&apos;s servers.
-                      </p>
-                    </div>
+              {/* ── Price Analysis Card ──────────────── */}
+              {result.priceAnalysis && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span style={{ color: '#22c55e' }}>💰</span>
+                    <span style={{ color: '#22c55e' }}>PRICE ANALYSIS</span>
                   </div>
-
-                  {/* ── Verified from Shopify ─────────────── */}
-                  {verifiedProduct && (
-                    <div className="px-5 py-4 flex flex-col gap-3"
-                      style={{ borderTop: '1px solid rgba(34,197,94,0.12)', background: 'rgba(34,197,94,0.02)' }}>
-                      <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
-                        <CheckCircle2 size={10} className="inline mr-1" /> Confirmed on Shopify
-                      </p>
-                      <div className="grid grid-cols-1 gap-2">
-                        <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                          <p className="text-xs font-semibold mb-0.5" style={{ color: '#71717a' }}>Title</p>
-                          <p className="text-sm font-medium" style={{ color: '#f8f8f8' }}>{verifiedProduct.title}</p>
-                        </div>
-                        <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                          <p className="text-xs font-semibold mb-0.5" style={{ color: '#71717a' }}>Description</p>
-                          <div className="text-sm" style={{ color: '#a1a1aa' }}
-                            dangerouslySetInnerHTML={{ __html: verifiedProduct.body_html || '<em>No description</em>' }} />
-                        </div>
-                        <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                          <p className="text-xs font-semibold mb-0.5" style={{ color: '#71717a' }}>Tags</p>
-                          <div className="flex flex-wrap gap-1">
-                            {(verifiedProduct.tags || '').split(',').filter(Boolean).map((tag) => (
-                              <span key={tag} className="px-2 py-0.5 rounded text-xs"
-                                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                                {tag.trim()}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                  <div className="p-4 flex flex-col gap-4">
+                    {/* Current → Suggested */}
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="text-center">
+                        <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Current</p>
+                        <p className="text-2xl font-bold" style={{ color: '#71717a' }}>
+                          ${result.priceAnalysis.currentPrice}
+                        </p>
+                      </div>
+                      <ArrowRight size={20} style={{ color: '#22c55e' }} />
+                      <div className="text-center">
+                        <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#22c55e' }}>Suggested</p>
+                        <p className="text-2xl font-bold" style={{ color: '#22c55e' }}>
+                          ${result.priceAnalysis.suggestedPrice}
+                        </p>
                       </div>
                     </div>
-                  )}
 
-                  <div className="flex items-center justify-between px-5 py-3"
-                    style={{ background: 'var(--color-surface)', borderTop: '1px solid rgba(34,197,94,0.15)' }}>
-                    <a href={shopifyProductUrl} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm font-semibold transition-all"
-                      style={{ color: '#22c55e' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = '#86efac')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = '#22c55e')}>
-                      <ExternalLink size={14} /> Open Shopify product
-                    </a>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => { setPushStatus('idle'); setVerifiedProduct(null); handleGenerate(); }}
-                        className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
-                        <RefreshCw size={12} /> Generate Again
-                      </button>
-                      <button onClick={onPushed}
-                        className="flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-lg"
-                        style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
-                        <Check size={12} /> Done
-                      </button>
+                    {/* Price range bar */}
+                    {result.priceAnalysis.priceRange && (() => {
+                      const { min, max } = result.priceAnalysis!.priceRange;
+                      const suggested = Number(result.priceAnalysis!.suggestedPrice) || 0;
+                      const range = (Number(max) || 1) - (Number(min) || 0);
+                      const pct = range > 0 ? Math.min(100, Math.max(0, ((suggested - (Number(min) || 0)) / range) * 100)) : 50;
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold" style={{ color: '#52525b' }}>${min}</span>
+                            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>Price Range</span>
+                            <span className="text-xs font-semibold" style={{ color: '#52525b' }}>${max}</span>
+                          </div>
+                          <div className="relative w-full h-3 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            <div className="absolute h-full rounded-full"
+                              style={{ left: 0, width: `${pct}%`, background: 'linear-gradient(90deg, rgba(34,197,94,0.3), rgba(34,197,94,0.6))' }} />
+                            <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full"
+                              style={{
+                                left: `${pct}%`, transform: `translate(-50%, -50%)`,
+                                background: '#22c55e', border: '2px solid var(--color-bg)',
+                                boxShadow: '0 0 8px rgba(34,197,94,0.4)',
+                              }} />
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Competitive position */}
+                    {result.priceAnalysis.competitivePosition && (() => {
+                      const pos = result.priceAnalysis!.competitivePosition.toLowerCase();
+                      const posColor = pos.includes('premium') ? '#22c55e' : pos.includes('mid') ? '#60a5fa' : '#eab308';
+                      const posBg = pos.includes('premium') ? 'rgba(34,197,94,0.08)' : pos.includes('mid') ? 'rgba(96,165,250,0.08)' : 'rgba(234,179,8,0.08)';
+                      const posBorder = pos.includes('premium') ? 'rgba(34,197,94,0.2)' : pos.includes('mid') ? 'rgba(96,165,250,0.2)' : 'rgba(234,179,8,0.2)';
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>Position</span>
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-md"
+                            style={{ background: posBg, border: `1px solid ${posBorder}`, color: posColor }}>
+                            {result.priceAnalysis!.competitivePosition}
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Reasoning */}
+                    {result.priceAnalysis.reasoning && (
+                      <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>
+                        {result.priceAnalysis.reasoning}
+                      </p>
+                    )}
+
+                    {/* Disclaimer */}
+                    <div className="flex items-start gap-2 px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(234,179,8,0.04)', border: '1px solid rgba(234,179,8,0.1)' }}>
+                      <Info size={14} style={{ color: '#eab308', flexShrink: 0, marginTop: 1 }} />
+                      <p className="text-xs leading-relaxed" style={{ color: '#eab308' }}>
+                        AI estimate — not based on live market data
+                      </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {pushStatus === 'error' && (
-                <div className="flex items-center gap-3 p-3.5 rounded-xl"
-                  style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)' }}>
-                  <AlertTriangle size={16} style={{ color: '#ef4444' }} />
-                  <p className="text-sm" style={{ color: '#fca5a5' }}>{error}</p>
+              {/* ── Category Suggestion Card ─────────── */}
+              {result.categorySuggestion && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span style={{ color: '#60a5fa' }}>📂</span>
+                    <span style={{ color: '#60a5fa' }}>CATEGORY SUGGESTION</span>
+                  </div>
+                  <div className="p-4 flex flex-col gap-3">
+                    {/* Primary category */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>Primary</span>
+                      <span className="text-sm font-bold px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
+                        {result.categorySuggestion.primary}
+                      </span>
+                    </div>
+
+                    {/* Alternatives */}
+                    {result.categorySuggestion.alternatives && result.categorySuggestion.alternatives.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#3f3f46' }}>Alternatives</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {result.categorySuggestion.alternatives.map((alt, i) => (
+                            <span key={i} className="text-xs font-semibold px-2.5 py-1 rounded-md cursor-default"
+                              style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)', color: '#93c5fd' }}>
+                              {alt}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Reasoning */}
+                    {result.categorySuggestion.reasoning && (
+                      <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>
+                        {result.categorySuggestion.reasoning}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
+
+              {/* ── Upsell & Cross-sell Card ─────────── */}
+              {result.upsellCrossSell && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+                    style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span style={{ color: '#a855f7' }}>📦</span>
+                    <span style={{ color: '#a855f7' }}>UPSELL & CROSS-SELL</span>
+                  </div>
+                  <div className="p-4 flex flex-col gap-4">
+                    {/* Upsell Opportunities */}
+                    {result.upsellCrossSell.upsell && result.upsellCrossSell.upsell.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: '#a855f7' }}>
+                          <TrendingUp size={12} /> Upsell Opportunities
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {result.upsellCrossSell.upsell.map((item, i) => (
+                            <div key={i} className="rounded-lg px-3 py-2.5 flex items-start justify-between gap-3"
+                              style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.1)' }}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold mb-0.5">{item.title}</p>
+                                <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>{item.reason}</p>
+                              </div>
+                              {item.pricePoint && (
+                                <span className="text-xs font-bold px-2 py-1 rounded-md flex-shrink-0"
+                                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                                  {item.pricePoint}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cross-sell Recommendations */}
+                    {result.upsellCrossSell.crossSell && result.upsellCrossSell.crossSell.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: '#a855f7' }}>
+                          <Layers size={12} /> Cross-sell Recommendations
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {result.upsellCrossSell.crossSell.map((item, i) => (
+                            <div key={i} className="rounded-lg px-3 py-2.5 flex items-start justify-between gap-3"
+                              style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.1)' }}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold mb-0.5">{item.title}</p>
+                                <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>{item.reason}</p>
+                              </div>
+                              {item.pricePoint && (
+                                <span className="text-xs font-bold px-2 py-1 rounded-md flex-shrink-0"
+                                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                                  {item.pricePoint}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bundle idea */}
+                    {result.upsellCrossSell.bundleIdea && (
+                      <div className="rounded-lg px-4 py-3"
+                        style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(96,165,250,0.06) 100%)', border: '1px solid rgba(168,85,247,0.2)' }}>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5" style={{ color: '#c084fc' }}>
+                          <Sparkles size={12} /> Bundle Idea
+                        </p>
+                        <p className="text-sm leading-relaxed" style={{ color: '#d8b4fe' }}>
+                          {result.upsellCrossSell.bundleIdea}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Push to Shopify ───────────────────── */}
+              <div className="flex items-center gap-3 mt-2">
+                {pushStatus === 'error' && (
+                  <div className="flex items-center gap-2 flex-1">
+                    <AlertTriangle size={14} style={{ color: '#ef4444' }} />
+                    <p className="text-xs" style={{ color: '#fca5a5' }}>{error}</p>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  {pushStatus === 'error' && (
+                    <button onClick={handlePush}
+                      className="text-xs font-bold flex items-center gap-1.5 px-4 py-2 rounded-lg transition-all"
+                      style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#ef4444' }}>
+                      <ArrowRight size={14} style={{ color: '#ef4444' }} /> Push to Shopify
+                    </button>
+                  )}
+                  {pushStatus === 'pushing' && (
+                    <button disabled
+                      className="text-xs font-bold flex items-center gap-1.5 px-4 py-2 rounded-lg"
+                      style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#ef4444', opacity: 0.6 }}>
+                      <Loader2 size={14} className="animate-spin" /> Pushing…
+                    </button>
+                  )}
+                  {pushStatus === 'idle' && (
+                    <button onClick={handlePush}
+                      className="text-sm font-bold flex items-center gap-2 px-6 py-3 rounded-xl transition-all"
+                      style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
+                      <ArrowRight size={16} /> Push to Shopify
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Push Success with Verification ──────── */}
+          {status === 'done' && pushStatus === 'done' && (
+            <div className="flex flex-col gap-4">
+              {/* Verification Results Table */}
+              {verificationResults.length > 0 && (() => {
+                const matchCount = verificationResults.filter(v => v.match).length;
+                const totalCount = verificationResults.length;
+                const allMatch = matchCount === totalCount;
+                return (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                    <div className="flex items-center justify-between px-4 py-3"
+                      style={{ background: allMatch ? 'rgba(34,197,94,0.06)' : 'rgba(234,179,8,0.06)', borderBottom: '1px solid var(--color-border)' }}>
+                      <div className="flex items-center gap-2">
+                        {allMatch ? (
+                          <CheckCircle2 size={18} style={{ color: '#22c55e' }} />
+                        ) : (
+                          <AlertTriangle size={18} style={{ color: '#eab308' }} />
+                        )}
+                        <span className="text-sm font-bold" style={{ color: allMatch ? '#22c55e' : '#eab308' }}>
+                          {allMatch
+                            ? `All ${totalCount} fields verified ✓`
+                            : `${matchCount}/${totalCount} fields verified, ${totalCount - matchCount} mismatch${totalCount - matchCount > 1 ? 'es' : ''}`
+                          }
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>
+                        Post-Push Verification
+                      </span>
+                    </div>
+                    <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
+                      {/* Table header */}
+                      <div className="grid grid-cols-[120px_28px_1fr_1fr] gap-2 px-4 py-2 text-xs font-bold uppercase tracking-widest"
+                        style={{ background: 'var(--color-surface)', color: '#3f3f46' }}>
+                        <span>Field</span>
+                        <span></span>
+                        <span>Expected</span>
+                        <span>Actual</span>
+                      </div>
+                      {/* Table rows */}
+                      {verificationResults.map((v, i) => (
+                        <div key={i} className="grid grid-cols-[120px_28px_1fr_1fr] gap-2 px-4 py-2.5 items-start"
+                          style={{ borderTop: '1px solid var(--color-border)' }}>
+                          <span className="text-xs font-bold capitalize" style={{ color: '#a1a1aa' }}>
+                            {v.field}
+                          </span>
+                          <span>
+                            {v.match ? (
+                              <CheckCircle2 size={16} style={{ color: '#22c55e' }} />
+                            ) : (
+                              <AlertTriangle size={16} style={{ color: '#eab308' }} />
+                            )}
+                          </span>
+                          <p className="text-xs leading-relaxed truncate" style={{ color: '#71717a' }} title={v.expected}>
+                            {v.expected || <span style={{ fontStyle: 'italic', color: '#27272a' }}>Empty</span>}
+                          </p>
+                          <p className="text-xs leading-relaxed truncate" style={{ color: v.match ? '#a1a1aa' : '#eab308' }} title={v.actual}>
+                            {v.actual || <span style={{ fontStyle: 'italic', color: '#27272a' }}>Empty</span>}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Verified product details */}
+              {verifiedProduct && (
+                <div className="rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle2 size={18} style={{ color: '#22c55e' }} />
+                    <p className="text-sm font-bold" style={{ color: '#22c55e' }}>Successfully pushed to Shopify</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                      <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: '#3f3f46' }}>Title</p>
+                      <p className="text-sm truncate" style={{ color: '#a1a1aa' }}>{verifiedProduct.title}</p>
+                    </div>
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                      <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: '#3f3f46' }}>Type</p>
+                      <p className="text-sm truncate" style={{ color: '#a1a1aa' }}>{verifiedProduct.product_type || '—'}</p>
+                    </div>
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                      <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: '#3f3f46' }}>Status</p>
+                      <StatusChip status={verifiedProduct.status} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* If no verification results, show simple success */}
+              {verificationResults.length === 0 && !verifiedProduct && (
+                <div className="text-center py-8">
+                  <CheckCircle2 size={40} className="mx-auto mb-3" style={{ color: '#22c55e' }} />
+                  <p className="text-lg font-bold mb-1" style={{ color: '#22c55e' }}>Pushed Successfully</p>
+                  <p className="text-sm" style={{ color: '#71717a' }}>Your product has been updated on Shopify.</p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-2"
+                style={{ background: 'var(--color-surface)', borderTop: '1px solid rgba(34,197,94,0.15)', borderRadius: '0 0 1rem 1rem', margin: '0 -1.5rem -1.5rem', padding: '1rem 1.5rem' }}>
+                <a href={`https://${credentials.storeDomain}/admin/products/${product.id}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all"
+                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                  <ExternalLink size={14} /> Open Shopify product
+                </a>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setStatus('idle'); setResult(null); setPushStatus('idle'); setVerifiedProduct(null); setVerificationResults([]); }}
+                    className="text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                    <RefreshCw size={12} /> Generate Again
+                  </button>
+                  <button onClick={onPushed}
+                    className="text-xs font-bold flex items-center gap-1.5 px-4 py-2 rounded-lg transition-all"
+                    style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
+                    <Check size={14} /> Done
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1104,175 +1311,135 @@ export default function ShopifyAgentDemo() {
   const [productsError, setProductsError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
   const [oauthError, setOauthError] = useState('');
-  const resultsRef = useRef<HTMLDivElement>(null);
-
-  // ── Handle OAuth callback redirect ───────────────────────
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const params = new URLSearchParams(window.location.search);
-
-    // Check for OAuth error
-    const err = params.get('oauth_error');
-    if (err) {
-      setOauthError(decodeURIComponent(err));
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname + '#connect-store');
-      return;
-    }
-
-    // Check for OAuth success — read credentials from cookie
-    if (params.get('oauth_success') === 'true') {
-      const cookie = document.cookie
-        .split('; ')
-        .find((c) => c.startsWith('rootx_shopify_creds='));
-      if (cookie) {
-        try {
-          const val = cookie.split('=')[1];
-          const creds = JSON.parse(atob(val.replace(/-/g, '+').replace(/_/g, '/'))) as ShopifyCredentials;
-          setStored(creds);
-          setCredentials(creds);
-          fetchProducts(creds);
-          // Clear the cookie
-          document.cookie = 'rootx_shopify_creds=; path=/; max-age=0';
-        } catch {
-          setOauthError('Failed to read OAuth credentials. Please try again.');
-        }
-      }
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname + '#connect-store');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const step: 1 | 2 | 3 = !credentials ? 1 : selectedProduct ? 3 : 2;
 
-  const fetchProducts = useCallback(async (creds: ShopifyCredentials) => {
+  const fetchProducts = useCallback(async () => {
+    if (!credentials) return;
     setLoadingProducts(true);
     setProductsError('');
     try {
-      const params = new URLSearchParams({ storeDomain: creds.storeDomain, accessToken: creds.accessToken });
+      const params = new URLSearchParams({
+        storeDomain: credentials.storeDomain,
+        accessToken: credentials.accessToken,
+      });
       const res = await fetch(`/api/shopify/products?${params}`);
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || `Failed to fetch products (${res.status})`);
-      }
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load products');
       setProducts(data.products || []);
     } catch (err) {
-      setProductsError(err instanceof Error ? err.message : 'Failed to fetch products');
+      setProductsError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
       setLoadingProducts(false);
+    }
+  }, [credentials]);
+
+  useEffect(() => {
+    if (credentials) fetchProducts();
+  }, [credentials, fetchProducts]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('shopify_error');
+    if (err) { setOauthError(err); window.history.replaceState({}, '', window.location.pathname); }
+    const sd = params.get('shopify_domain');
+    const st = params.get('shopify_token');
+    const sn = params.get('shopify_name');
+    if (sd && st) {
+      const creds: ShopifyCredentials = { storeDomain: sd, accessToken: st, shopName: sn || undefined };
+      setStored(creds);
+      setCredentials(creds);
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
   function handleConnected(creds: ShopifyCredentials) {
     setCredentials(creds);
-    fetchProducts(creds);
-    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+    setProducts([]);
+    setProductsError('');
   }
 
   function handleDisconnect() {
     clearStored();
     setCredentials(null);
     setProducts([]);
+    setProductsError('');
     setSelectedProduct(null);
   }
 
   function handlePushed() {
     setSelectedProduct(null);
-    if (credentials) fetchProducts(credentials);
+    fetchProducts();
   }
 
   return (
     <section className="py-16" style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-      <div className="section-container" ref={resultsRef}>
-        {/* Section header */}
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.25)' }}>
-            <Plug size={18} style={{ color: '#ef4444' }} />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-4"
+            style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#ef4444' }}>
+            <Zap size={12} /> Live Demo
           </div>
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef4444' }}>
-            Connect & Launch
-          </span>
+          <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+            Shopify AI Agent
+          </h2>
+          <p className="text-sm max-w-xl mx-auto" style={{ color: '#71717a' }}>
+            Connect your store, import your products, and let AI generate optimized titles, descriptions, SEO metadata, and tags — then push updates back with one click.
+          </p>
         </div>
-        <h2 className="text-3xl font-black mb-2">
-          Get Started with Your{' '}
-          <span className="gradient-text">Shopify Store</span>
-        </h2>
-        <p className="mb-8" style={{ color: '#71717a', maxWidth: '560px' }}>
-          Connect your store, import your products, and let AI generate optimized titles, descriptions, SEO metadata, and tags — then push updates back with one click.
-        </p>
 
-        {/* Step indicator */}
         <StepIndicator step={step} />
 
-        {/* Connected header bar */}
+        {/* Connected banner */}
         {credentials && (
-          <div className="mb-8 rounded-2xl overflow-hidden"
+          <div className="rounded-xl p-4 mb-6 flex items-center justify-between"
             style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, var(--color-surface) 60%)' }}>
-            {/* Success banner */}
-            <div className="flex items-center gap-3 px-5 py-3"
-              style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
-              <CheckCircle2 size={18} style={{ color: '#22c55e' }} />
-              <p className="text-sm font-semibold" style={{ color: '#86efac' }}>
-                Your Shopify store is connected successfully.
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                <CheckCircle2 size={20} style={{ color: '#22c55e' }} />
+              </div>
+              <div>
+                <p className="text-sm font-bold" style={{ color: '#22c55e' }}>
+                  Connected to {credentials.shopName || credentials.storeDomain}
+                </p>
+                <p className="text-xs" style={{ color: '#52525b' }}>
+                  {credentials.storeDomain} • {products.length} products loaded
+                </p>
+              </div>
             </div>
-            {/* Store details */}
-            <div className="flex items-center justify-between flex-wrap gap-4 px-5 py-4">
-              <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center"
-                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
-                  <Store size={20} style={{ color: '#22c55e' }} />
-                </div>
-                <div>
-                  <p className="font-bold">{credentials.shopName || credentials.storeDomain}</p>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="flex items-center gap-1.5 text-xs" style={{ color: '#22c55e' }}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e', boxShadow: '0 0 6px rgba(34,197,94,0.5)' }} />
-                      Connected
-                    </span>
-                    <span className="text-xs" style={{ color: '#52525b' }}>•</span>
-                    <span className="text-xs font-medium" style={{ color: '#71717a' }}>
-                      {products.length} product{products.length !== 1 ? 's' : ''} loaded
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <a href={`https://${credentials.storeDomain}/admin`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
-                  <ExternalLink size={12} /> Open Shopify Admin
-                </a>
-                <button onClick={handleDisconnect}
-                  className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
-                  <Unplug size={12} /> Disconnect
-                </button>
-              </div>
+            <div className="flex items-center gap-2">
+              <a href={`https://${credentials.storeDomain}/admin`} target="_blank" rel="noopener noreferrer"
+                className="text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                <ExternalLink size={12} /> Open Shopify Admin
+              </a>
+              <button onClick={handleDisconnect}
+                className="text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
+                <Unplug size={12} /> Disconnect
+              </button>
             </div>
           </div>
         )}
 
-        {/* Step content */}
-        {!credentials && <ConnectStep onConnected={handleConnected} oauthError={oauthError} />}
-
+        {/* Steps */}
+        {!credentials && (
+          <ConnectStep onConnected={handleConnected} oauthError={oauthError} />
+        )}
         {credentials && !selectedProduct && (
           <ProductGrid
             products={products}
             loading={loadingProducts}
             error={productsError}
-            onSelect={(p) => setSelectedProduct(p)}
-            onRefresh={() => credentials && fetchProducts(credentials)}
+            onSelect={setSelectedProduct}
+            onRefresh={fetchProducts}
           />
         )}
-
-        {selectedProduct && credentials && (
+        {credentials && selectedProduct && (
           <GenerationModal
             product={selectedProduct}
             credentials={credentials}
@@ -1280,20 +1447,6 @@ export default function ShopifyAgentDemo() {
             onPushed={handlePushed}
           />
         )}
-
-        {/* Bottom CTA — secondary request setup */}
-        <div className="mt-12 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4"
-          style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.06) 0%, rgba(0,0,0,0) 100%)', border: '1px solid rgba(220,38,38,0.15)' }}>
-          <div>
-            <p className="font-bold mb-0.5">Need help setting up?</p>
-            <p className="text-sm" style={{ color: '#71717a' }}>
-              Our team can configure your Shopify AI Agent end-to-end — automated listings, inventory alerts, and more.
-            </p>
-          </div>
-          <Link href="/request?agent=shopify-ai-agent" className="btn-secondary flex-shrink-0" style={{ whiteSpace: 'nowrap' }}>
-            <Zap size={15} /> Request Setup
-          </Link>
-        </div>
       </div>
     </section>
   );

@@ -5,6 +5,7 @@ import { agents, getAgentById } from '@/lib/agents';
 import type { Metadata } from 'next';
 import ContentCreatorDemo from '@/components/ContentCreatorDemo';
 import ShopifyAgentDemo from '@/components/ShopifyAgentDemo';
+import WebsiteBuilderDemo from '@/components/WebsiteBuilderDemo';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -34,7 +35,8 @@ export default async function AgentDetailPage({ params }: PageProps) {
 
   const isContentCreator = agent.id === 'content-creator-agent';
   const isShopify = agent.id === 'shopify-ai-agent';
-  const hasLiveDemo = isContentCreator || isShopify;
+  const isWebsiteBuilder = agent.id === 'website-builder-agent';
+  const hasLiveDemo = isContentCreator || isShopify || isWebsiteBuilder;
 
   return (
     <div style={{ paddingTop: '64px' }}>
@@ -202,6 +204,24 @@ export default async function AgentDetailPage({ params }: PageProps) {
                     Request Setup Instead
                   </Link>
                 </>
+              ) : isWebsiteBuilder ? (
+                <>
+                  <Link
+                    href="/website-builder"
+                    className="btn-primary w-full mb-3 animate-pulse-glow"
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <Zap size={16} />
+                    Open Website Builder
+                  </Link>
+                  <Link
+                    href={`/request?agent=${agent.id}`}
+                    className="btn-secondary w-full"
+                    style={{ justifyContent: 'center' }}
+                  >
+                    Request Setup Instead
+                  </Link>
+                </>
               ) : (
                 <>
                   <Link
@@ -243,6 +263,11 @@ export default async function AgentDetailPage({ params }: PageProps) {
       {isShopify && (
         <div id="connect-store">
           <ShopifyAgentDemo />
+        </div>
+      )}
+      {isWebsiteBuilder && (
+        <div id="website-builder-demo">
+          <WebsiteBuilderDemo />
         </div>
       )}
 
@@ -321,6 +346,17 @@ export default async function AgentDetailPage({ params }: PageProps) {
                       <Plug size={16} />
                       Connect Shopify Store
                     </a>
+                  </>
+                ) : isWebsiteBuilder ? (
+                  <>
+                    <p className="font-semibold text-lg mb-2">Ready to build your website?</p>
+                    <p className="text-sm mb-6" style={{ color: '#71717a' }}>
+                      Open the live AI Website Builder — enter your business details and generate a complete website in seconds.
+                    </p>
+                    <Link href="/website-builder" className="btn-primary">
+                      <Zap size={16} />
+                      Open Website Builder
+                    </Link>
                   </>
                 ) : (
                   <>

@@ -6,13 +6,14 @@ import {
   ShoppingCart, Loader2, AlertTriangle, CheckCircle2, Plug, Package,
   Sparkles, ArrowRight, ExternalLink, Search, RefreshCw, Copy, Check,
   Edit3, Eye, X, Lock, Zap, Tag, FileText, Store, Unplug, ChevronDown,
-  ChevronUp, ImageIcon,
+  ChevronUp, ImageIcon, DollarSign, FolderOpen, Layers, TrendingUp, Camera,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePlan } from '@/lib/use-plan';
 import { saveGeneration } from '@/lib/dashboard-storage';
 import type {
   ShopifyProduct, ShopifyCredentials, AIProductGeneration,
+  UpdateResponse, VerificationResult,
 } from '@/lib/shopify-types';
 
 // ════════════════════════════════════════════════════════════════
@@ -112,7 +113,7 @@ function PlanGate() {
         Upgrade to connect your store and start generating AI content.
       </p>
       <Link href="/pricing" className="btn-primary" style={{ padding: '0.75rem 2rem' }}>
-        <Zap size={16} /> View Plans & Upgrade
+        <Zap size={16} /> View Plans &amp; Upgrade
       </Link>
     </div>
   );
@@ -258,7 +259,7 @@ function ConnectionForm({ onConnected }: { onConnected: (creds: ShopifyCredentia
             {status === 'loading' ? (
               <><Loader2 size={18} className="animate-spin" /> Testing connection…</>
             ) : (
-              <><Plug size={18} /> Test & Connect Store</>
+              <><Plug size={18} /> Test &amp; Connect Store</>
             )}
           </button>
         </form>
@@ -401,6 +402,8 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
   const [editedBody, setEditedBody] = useState('');
   const [editedTags, setEditedTags] = useState('');
   const [showComparison, setShowComparison] = useState(true);
+  const [verifiedProduct, setVerifiedProduct] = useState<ShopifyProduct | null>(null);
+  const [verificationResults, setVerificationResults] = useState<VerificationResult[]>([]);
   const { copiedId, copy } = useCopy();
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -421,6 +424,8 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
     setStatus('generating');
     setError('');
     setPushStatus('idle');
+    setVerifiedProduct(null);
+    setVerificationResults([]);
 
     try {
       const headers = await getAuthHeaders();
@@ -434,6 +439,8 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
           productType: product.product_type,
           tags: product.tags,
           vendor: product.vendor,
+          imageUrl: product.images?.[0]?.src || '',
+          currentPrice: product.variants?.[0]?.price || '',
         }),
       });
 
@@ -475,6 +482,9 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
 
   async function handlePush() {
     setPushStatus('pushing');
+    setError('');
+    setVerifiedProduct(null);
+    setVerificationResults([]);
 
     try {
       const headers = await getAuthHeaders();
@@ -486,18 +496,21 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
           title: editMode ? editedTitle : result?.title,
           body_html: editMode ? editedBody : result?.bodyHtml,
           tags: editMode ? editedTags : result?.tags.join(', '),
+          product_type: result?.categorySuggestion?.primary || '',
           storeDomain: credentials.storeDomain,
           accessToken: credentials.accessToken,
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Push failed');
+      const data: UpdateResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response from server' }));
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Push failed (HTTP ${res.status})`);
       }
 
+      if (data.product) setVerifiedProduct(data.product);
+      if (data.verification) setVerificationResults(data.verification);
       setPushStatus('done');
-      setTimeout(() => onPushed(), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Push failed');
       setPushStatus('error');
@@ -505,11 +518,13 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
   }
 
   const mainImage = product.images?.[0];
+  const shopifyProductUrl = `https://${credentials.storeDomain}/admin/products/${product.id}`;
+  const matchCount = verificationResults.filter((v) => v.match).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full max-w-4xl my-8 mx-4 rounded-2xl overflow-hidden animate-fade-up"
+      <div className="w-full max-w-5xl my-8 mx-4 rounded-2xl overflow-hidden animate-fade-up"
         style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', boxShadow: '0 32px 64px rgba(0,0,0,0.5)' }}>
 
         {/* Header */}
@@ -521,7 +536,7 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
               <Sparkles size={16} style={{ color: '#ef4444' }} />
             </div>
             <div>
-              <p className="font-bold text-sm">AI Content Generator</p>
+              <p className="font-bold text-sm">AI Ecommerce Agent</p>
               <p className="text-xs" style={{ color: '#52525b' }}>{product.title}</p>
             </div>
           </div>
@@ -549,7 +564,7 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
             </div>
           </div>
 
-          {/* Action states */}
+          {/* Idle state */}
           {status === 'idle' && (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
@@ -557,8 +572,8 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
                 <Sparkles size={28} style={{ color: '#ef4444' }} />
               </div>
               <h3 className="text-xl font-black mb-2">Ready to Generate</h3>
-              <p className="text-sm mb-6" style={{ color: '#71717a', maxWidth: '400px', margin: '0 auto 1.5rem' }}>
-                AI will create an optimized title, rich description, SEO metadata, and tags for this product.
+              <p className="text-sm mb-6" style={{ color: '#71717a', maxWidth: '480px', margin: '0 auto 1.5rem' }}>
+                AI will analyze the product image, generate optimized copy, suggest pricing, recommend categories, and find upsell opportunities.
               </p>
               <button onClick={handleGenerate} className="btn-primary" style={{ padding: '0.75rem 2rem' }}>
                 <Sparkles size={16} /> Generate AI Content
@@ -566,17 +581,19 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
             </div>
           )}
 
+          {/* Generating state */}
           {status === 'generating' && (
             <div className="text-center py-16">
               <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
                 style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', animation: 'pulse-glow 2s ease-in-out infinite' }}>
                 <Sparkles size={24} className="animate-spin" style={{ color: '#ef4444' }} />
               </div>
-              <p className="font-semibold mb-1">Generating AI content…</p>
-              <p className="text-sm" style={{ color: '#52525b' }}>Analyzing product and creating optimized copy</p>
+              <p className="font-semibold mb-1">AI Agent is working…</p>
+              <p className="text-sm" style={{ color: '#52525b' }}>Analyzing product image, generating copy, calculating price, finding upsells…</p>
             </div>
           )}
 
+          {/* Error state */}
           {status === 'error' && (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
@@ -591,6 +608,7 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
             </div>
           )}
 
+          {/* ══════════════ AI Results Panel ══════════════ */}
           {status === 'done' && result && (
             <div className="flex flex-col gap-5">
               {/* Demo badge */}
@@ -628,7 +646,7 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
                 </button>
               </div>
 
-              {/* Title */}
+              {/* ── Title ─────────────────────────────────── */}
               <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef4444' }}>
@@ -649,7 +667,7 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
                 )}
               </div>
 
-              {/* Description */}
+              {/* ── Description ───────────────────────────── */}
               <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#f97316' }}>
@@ -666,31 +684,43 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
                 )}
               </div>
 
-              {/* SEO */}
+              {/* ── SEO ────────────────────────────────────── */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
-                      SEO Title
-                    </span>
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>SEO Title</span>
                     <CopyButton text={result.seoTitle} id="seo-title" copiedId={copiedId} onCopy={copy} size="xs" />
                   </div>
                   <p className="text-sm font-medium" style={{ color: '#f8f8f8' }}>{result.seoTitle}</p>
-                  <p className="text-xs mt-1" style={{ color: '#3f3f46' }}>{result.seoTitle.length}/60 chars</p>
+                  <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div className="h-full rounded-full transition-all" style={{
+                      width: `${Math.min((result.seoTitle.length / 60) * 100, 100)}%`,
+                      background: result.seoTitle.length <= 60 ? '#22c55e' : '#ef4444',
+                    }} />
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: result.seoTitle.length <= 60 ? '#22c55e' : '#ef4444' }}>
+                    {result.seoTitle.length}/60 chars {result.seoTitle.length <= 60 ? '✓' : '— too long'}
+                  </p>
                 </div>
                 <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>
-                      SEO Description
-                    </span>
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>Meta Description</span>
                     <CopyButton text={result.seoDescription} id="seo-desc" copiedId={copiedId} onCopy={copy} size="xs" />
                   </div>
                   <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.seoDescription}</p>
-                  <p className="text-xs mt-1" style={{ color: '#3f3f46' }}>{result.seoDescription.length}/160 chars</p>
+                  <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div className="h-full rounded-full transition-all" style={{
+                      width: `${Math.min((result.seoDescription.length / 160) * 100, 100)}%`,
+                      background: result.seoDescription.length <= 160 ? '#22c55e' : '#ef4444',
+                    }} />
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: result.seoDescription.length <= 160 ? '#22c55e' : '#ef4444' }}>
+                    {result.seoDescription.length}/160 chars {result.seoDescription.length <= 160 ? '✓' : '— too long'}
+                  </p>
                 </div>
               </div>
 
-              {/* Tags */}
+              {/* ── Tags ───────────────────────────────────── */}
               <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
@@ -713,36 +743,336 @@ function GenerationPanel({ product, credentials, onClose, onPushed }: {
                 )}
               </div>
 
-              {/* Push to Shopify */}
-              <div className="rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
-                style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.08) 0%, rgba(0,0,0,0) 100%)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                <div>
-                  <p className="font-bold mb-0.5">Push to Shopify</p>
-                  <p className="text-xs" style={{ color: '#71717a' }}>
-                    Update this product on your Shopify store with the AI-generated content
-                  </p>
-                </div>
-                <button onClick={handlePush}
-                  disabled={pushStatus === 'pushing' || pushStatus === 'done'}
-                  className="btn-primary flex-shrink-0"
-                  style={{ padding: '0.6rem 1.5rem', opacity: pushStatus === 'pushing' || pushStatus === 'done' ? 0.6 : 1 }}>
-                  {pushStatus === 'pushing' ? (
-                    <><Loader2 size={15} className="animate-spin" /> Pushing…</>
-                  ) : pushStatus === 'done' ? (
-                    <><CheckCircle2 size={15} /> Updated!</>
-                  ) : (
-                    <><ArrowRight size={15} /> Push to Shopify</>
-                  )}
-                </button>
-              </div>
+              {/* ═══════════════ NEW AI AGENT SECTIONS ═══════════════ */}
 
+              {/* ── Image Analysis ─────────────────────────── */}
+              {result.imageAnalysis && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="px-4 py-2.5" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#f97316' }}>
+                      <Camera size={11} /> Image Analysis
+                    </span>
+                  </div>
+                  <div className="p-4 flex flex-col gap-4">
+                    {/* Description */}
+                    <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>
+                      {result.imageAnalysis.description}
+                    </p>
+                    {/* Color palette + Style + Quality */}
+                    <div className="flex items-center gap-6 flex-wrap">
+                      {/* Colors */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold" style={{ color: '#71717a' }}>Colors:</span>
+                        <div className="flex gap-1.5">
+                          {result.imageAnalysis.dominantColors.map((color, i) => (
+                            <div key={i} className="w-6 h-6 rounded-full border"
+                              style={{ background: color, borderColor: 'rgba(255,255,255,0.1)' }}
+                              title={color} />
+                          ))}
+                        </div>
+                      </div>
+                      {/* Style */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold" style={{ color: '#71717a' }}>Style:</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                          style={{ background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)', color: '#f97316' }}>
+                          {result.imageAnalysis.style}
+                        </span>
+                      </div>
+                      {/* Quality */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold" style={{ color: '#71717a' }}>Quality:</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+                          style={{
+                            background: result.imageAnalysis.quality === 'high' ? 'rgba(34,197,94,0.1)' :
+                              result.imageAnalysis.quality === 'medium' ? 'rgba(234,179,8,0.1)' : 'rgba(220,38,38,0.1)',
+                            border: `1px solid ${result.imageAnalysis.quality === 'high' ? 'rgba(34,197,94,0.25)' :
+                              result.imageAnalysis.quality === 'medium' ? 'rgba(234,179,8,0.25)' : 'rgba(220,38,38,0.25)'}`,
+                            color: result.imageAnalysis.quality === 'high' ? '#22c55e' :
+                              result.imageAnalysis.quality === 'medium' ? '#eab308' : '#ef4444',
+                          }}>
+                          {result.imageAnalysis.quality}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Suggestions */}
+                    {result.imageAnalysis.suggestions.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold mb-2" style={{ color: '#71717a' }}>Photo Improvement Tips:</p>
+                        <ul className="flex flex-col gap-1.5">
+                          {result.imageAnalysis.suggestions.map((tip, i) => (
+                            <li key={i} className="text-xs flex items-start gap-2" style={{ color: '#a1a1aa' }}>
+                              <span style={{ color: '#f97316' }}>•</span> {tip}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Price Analysis ─────────────────────────── */}
+              {result.priceAnalysis && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="px-4 py-2.5" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
+                      <DollarSign size={11} /> Price Analysis
+                    </span>
+                  </div>
+                  <div className="p-4 flex flex-col gap-4">
+                    {/* Current vs Suggested */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="text-center">
+                        <p className="text-xs font-semibold mb-1" style={{ color: '#71717a' }}>Current</p>
+                        <p className="text-2xl font-black" style={{ color: '#71717a' }}>${result.priceAnalysis.currentPrice}</p>
+                      </div>
+                      <ArrowRight size={20} style={{ color: '#22c55e' }} />
+                      <div className="text-center">
+                        <p className="text-xs font-semibold mb-1" style={{ color: '#22c55e' }}>Suggested</p>
+                        <p className="text-2xl font-black" style={{ color: '#22c55e' }}>${result.priceAnalysis.suggestedPrice}</p>
+                      </div>
+                      {/* Position badge */}
+                      <span className="text-xs px-3 py-1 rounded-full font-bold ml-auto"
+                        style={{
+                          background: result.priceAnalysis.competitivePosition === 'premium' ? 'rgba(34,197,94,0.1)' :
+                            result.priceAnalysis.competitivePosition === 'mid-range' ? 'rgba(96,165,250,0.1)' : 'rgba(234,179,8,0.1)',
+                          border: `1px solid ${result.priceAnalysis.competitivePosition === 'premium' ? 'rgba(34,197,94,0.25)' :
+                            result.priceAnalysis.competitivePosition === 'mid-range' ? 'rgba(96,165,250,0.25)' : 'rgba(234,179,8,0.25)'}`,
+                          color: result.priceAnalysis.competitivePosition === 'premium' ? '#22c55e' :
+                            result.priceAnalysis.competitivePosition === 'mid-range' ? '#60a5fa' : '#eab308',
+                        }}>
+                        {result.priceAnalysis.competitivePosition === 'mid-range' ? 'Mid-Range' :
+                          result.priceAnalysis.competitivePosition.charAt(0).toUpperCase() + result.priceAnalysis.competitivePosition.slice(1)}
+                      </span>
+                    </div>
+                    {/* Price range bar */}
+                    <div>
+                      <div className="flex justify-between text-xs mb-1" style={{ color: '#52525b' }}>
+                        <span>${result.priceAnalysis.priceRange.min}</span>
+                        <span>${result.priceAnalysis.priceRange.max}</span>
+                      </div>
+                      <div className="relative h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                        <div className="absolute h-full rounded-full" style={{
+                          background: 'linear-gradient(90deg, #22c55e, #60a5fa)',
+                          left: '0', right: '0',
+                        }} />
+                        {(() => {
+                          const min = parseFloat(result.priceAnalysis!.priceRange.min) || 0;
+                          const max = parseFloat(result.priceAnalysis!.priceRange.max) || 100;
+                          const suggested = parseFloat(result.priceAnalysis!.suggestedPrice) || 0;
+                          const pct = max > min ? Math.min(Math.max(((suggested - min) / (max - min)) * 100, 0), 100) : 50;
+                          return (
+                            <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2"
+                              style={{ left: `${pct}%`, transform: `translate(-50%, -50%)`, background: '#f8f8f8', borderColor: '#22c55e' }} />
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    {/* Reasoning */}
+                    <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.priceAnalysis.reasoning}</p>
+                    {/* Disclaimer */}
+                    <p className="text-xs italic" style={{ color: '#3f3f46' }}>
+                      AI estimate — not based on live market data
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Category Suggestion ────────────────────── */}
+              {result.categorySuggestion && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="px-4 py-2.5" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
+                      <FolderOpen size={11} /> Category Suggestion
+                    </span>
+                  </div>
+                  <div className="p-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-sm font-bold px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
+                        {result.categorySuggestion.primary}
+                      </span>
+                      {result.categorySuggestion.alternatives.map((alt, i) => (
+                        <span key={i} className="text-xs px-2.5 py-1 rounded-lg"
+                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                          {alt}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.categorySuggestion.reasoning}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Upsell & Cross-sell ────────────────────── */}
+              {result.upsellCrossSell && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  <div className="px-4 py-2.5" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>
+                      <Layers size={11} /> Upsell &amp; Cross-sell
+                    </span>
+                  </div>
+                  <div className="p-4 flex flex-col gap-4">
+                    {/* Upsell */}
+                    {result.upsellCrossSell.upsell.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#a855f7' }}>
+                          <TrendingUp size={10} className="inline mr-1" /> Upsell Opportunities
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {result.upsellCrossSell.upsell.map((item, i) => (
+                            <div key={i} className="flex items-start justify-between gap-3 p-3 rounded-lg"
+                              style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.1)' }}>
+                              <div className="flex-1">
+                                <p className="text-sm font-bold" style={{ color: '#e4e4e7' }}>{item.title}</p>
+                                <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>{item.reason}</p>
+                              </div>
+                              <span className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
+                                style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
+                                {item.pricePoint}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Cross-sell */}
+                    {result.upsellCrossSell.crossSell.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#60a5fa' }}>
+                          <Package size={10} className="inline mr-1" /> Cross-sell Recommendations
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {result.upsellCrossSell.crossSell.map((item, i) => (
+                            <div key={i} className="flex items-start justify-between gap-3 p-3 rounded-lg"
+                              style={{ background: 'rgba(96,165,250,0.04)', border: '1px solid rgba(96,165,250,0.1)' }}>
+                              <div className="flex-1">
+                                <p className="text-sm font-bold" style={{ color: '#e4e4e7' }}>{item.title}</p>
+                                <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>{item.reason}</p>
+                              </div>
+                              <span className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
+                                style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa' }}>
+                                {item.pricePoint}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Bundle idea */}
+                    {result.upsellCrossSell.bundleIdea && (
+                      <div className="p-3 rounded-lg"
+                        style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.06) 0%, rgba(96,165,250,0.06) 100%)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                        <p className="text-xs font-bold mb-1" style={{ color: '#c084fc' }}>💡 Bundle Idea</p>
+                        <p className="text-sm" style={{ color: '#a1a1aa' }}>{result.upsellCrossSell.bundleIdea}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══════════ Push to Shopify ═══════════ */}
+              {pushStatus !== 'done' && (
+                <div className="rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
+                  style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.08) 0%, rgba(0,0,0,0) 100%)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  <div>
+                    <p className="font-bold mb-0.5 flex items-center gap-2">
+                      <ArrowRight size={14} style={{ color: '#ef4444' }} /> Push to Shopify
+                    </p>
+                    <p className="text-xs" style={{ color: '#71717a' }}>
+                      Update this product with AI-generated title, description, tags, and category
+                    </p>
+                  </div>
+                  <button onClick={handlePush}
+                    disabled={pushStatus === 'pushing'}
+                    className="btn-primary flex-shrink-0"
+                    style={{ padding: '0.7rem 1.8rem', fontSize: '0.9rem', opacity: pushStatus === 'pushing' ? 0.7 : 1 }}>
+                    {pushStatus === 'pushing' ? <><Loader2 size={16} className="animate-spin" /> Updating Shopify…</> :
+                     pushStatus === 'error' ? <><RefreshCw size={16} /> Try Again</> :
+                     <><ArrowRight size={16} /> Push to Shopify</>}
+                  </button>
+                </div>
+              )}
+
+              {/* ═══════════ Push SUCCESS + Verification ═══════════ */}
               {pushStatus === 'done' && (
-                <div className="flex items-center gap-3 p-3.5 rounded-xl"
-                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                  <CheckCircle2 size={16} style={{ color: '#22c55e' }} />
-                  <p className="text-sm font-medium" style={{ color: '#86efac' }}>
-                    Product updated successfully on Shopify!
-                  </p>
+                <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(34,197,94,0.3)' }}>
+                  {/* Success header */}
+                  <div className="px-5 py-4 flex items-center gap-4"
+                    style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.04) 100%)' }}>
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                      <CheckCircle2 size={24} style={{ color: '#22c55e' }} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold" style={{ color: '#86efac' }}>
+                        Product updated successfully in Shopify!
+                      </p>
+                      <p className="text-sm mt-0.5" style={{ color: '#52525b' }}>
+                        {verificationResults.length > 0
+                          ? `${matchCount}/${verificationResults.length} fields verified successfully`
+                          : 'Verified — content confirmed by Shopify\'s servers'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Field-by-field verification */}
+                  {verificationResults.length > 0 && (
+                    <div className="px-5 py-4 flex flex-col gap-2"
+                      style={{ borderTop: '1px solid rgba(34,197,94,0.12)', background: 'rgba(34,197,94,0.02)' }}>
+                      <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#22c55e' }}>
+                        Field-by-Field Verification
+                      </p>
+                      {verificationResults.map((v, i) => (
+                        <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg"
+                          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                          {/* Status icon */}
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{
+                              background: v.match ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)',
+                              border: `1px solid ${v.match ? 'rgba(34,197,94,0.3)' : 'rgba(234,179,8,0.3)'}`,
+                            }}>
+                            {v.match
+                              ? <Check size={12} style={{ color: '#22c55e' }} />
+                              : <AlertTriangle size={12} style={{ color: '#eab308' }} />}
+                          </div>
+                          {/* Field name */}
+                          <span className="text-sm font-semibold min-w-[100px]" style={{ color: '#e4e4e7' }}>
+                            {v.field}
+                          </span>
+                          {/* Status text */}
+                          <span className="text-xs flex-1" style={{ color: v.match ? '#22c55e' : '#eab308' }}>
+                            {v.match ? '✓ Matches' : '⚠ Slight difference (Shopify may normalize content)'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between px-5 py-3"
+                    style={{ background: 'var(--color-surface)', borderTop: '1px solid rgba(34,197,94,0.15)' }}>
+                    <a href={shopifyProductUrl} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm font-semibold transition-all"
+                      style={{ color: '#22c55e' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = '#86efac')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = '#22c55e')}>
+                      <ExternalLink size={14} /> Open Shopify product
+                    </a>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { setPushStatus('idle'); setVerifiedProduct(null); setVerificationResults([]); handleGenerate(); }}
+                        className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                        <RefreshCw size={12} /> Generate Again
+                      </button>
+                      <button onClick={onPushed}
+                        className="flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
+                        <Check size={12} /> Done
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

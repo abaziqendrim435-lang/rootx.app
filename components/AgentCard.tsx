@@ -168,7 +168,7 @@ export default function AgentCard({ agent, variant = 'default', onRequestSetup }
           {/* CTA Buttons */}
           <div className="grid grid-cols-2 gap-2">
             <Link
-              href={`/agents/${agent.id}`}
+              href={agent.id === 'website-builder-agent' ? '/website-builder' : `/agents/${agent.id}`}
               className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200"
               style={{
                 background: 'var(--color-surface-2)',
@@ -190,12 +190,12 @@ export default function AgentCard({ agent, variant = 'default', onRequestSetup }
               }}
             >
               <ArrowRight size={13} />
-              Learn More
+              {agent.id === 'website-builder-agent' ? 'Open Builder' : 'Learn More'}
             </Link>
 
             <Link
-              href={`/request?agent=${agent.id}`}
-              onClick={onRequestSetup ? (e) => { e.preventDefault(); onRequestSetup(agent.id); } : undefined}
+              href={agent.id === 'website-builder-agent' ? '/website-builder' : `/request?agent=${agent.id}`}
+              onClick={onRequestSetup && agent.id !== 'website-builder-agent' ? (e) => { e.preventDefault(); onRequestSetup(agent.id); } : undefined}
               className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200"
               style={{
                 background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
@@ -216,7 +216,7 @@ export default function AgentCard({ agent, variant = 'default', onRequestSetup }
               }}
             >
               <Zap size={13} />
-              Request Setup
+              {agent.id === 'website-builder-agent' ? 'Try Now' : 'Request Setup'}
             </Link>
           </div>
         </div>

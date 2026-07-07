@@ -4,16 +4,19 @@ import {
   getCredentials,
   shopifyFetch,
 } from '@/lib/shopify-api';
-import type { ShopifyProduct } from '@/lib/shopify-types';
+import type { ShopifyProduct, VerificationResult } from '@/lib/shopify-types';
 
 // ============================================================
 // POST /api/shopify/update
 //
-// Pushes updated product fields (title, description, tags) back
-// to the Shopify Admin API via PUT /products/{id}.json.
+// Pushes updated product fields (title, description, tags,
+// product_type) back to the Shopify Admin API via PUT
+// /products/{id}.json.
 //
 // After a successful update, reads the product back from Shopify
-// to verify the change and returns the confirmed product data.
+// to verify every field was updated successfully. Returns a
+// structured VerificationResult[] array for the UI to display
+// field-by-field confirmation.
 //
 // NEVER simulates success — the response only succeeds when
 // Shopify has confirmed the write.
@@ -26,6 +29,7 @@ interface UpdateRequest {
   title?: string;
   body_html?: string;
   tags?: string;
+  product_type?: string;
   storeDomain?: string;
   accessToken?: string;
 }
@@ -36,6 +40,8 @@ interface UpdateSuccessResponse {
   success: true;
   /** The product as confirmed by Shopify after the update */
   product: ShopifyProduct;
+  /** Field-by-field verification results */
+  verification: VerificationResult[];
 }
 
 interface UpdateErrorResponse {
@@ -44,6 +50,24 @@ interface UpdateErrorResponse {
 }
 
 type UpdateResponse = UpdateSuccessResponse | UpdateErrorResponse;
+
+// ── Helpers ───────────────────────────────────────────────────
+
+/** Normalize tag strings for comparison (Shopify trims, lowercases, sorts) */
+function normalizeTags(s: string): string {
+  return s
+    .split(',')
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join(',');
+}
+
+/** Truncate a string for display in verification results */
+function truncate(s: string, maxLen: number = 120): string {
+  if (s.length <= maxLen) return s;
+  return s.slice(0, maxLen) + '…';
+}
 
 // ── Route handler ─────────────────────────────────────────────
 
@@ -62,13 +86,14 @@ export async function POST(req: NextRequest) {
     const hasUpdates =
       body.title !== undefined ||
       body.body_html !== undefined ||
-      body.tags !== undefined;
+      body.tags !== undefined ||
+      body.product_type !== undefined;
 
     if (!hasUpdates) {
       return NextResponse.json<UpdateErrorResponse>(
         {
           success: false,
-          error: 'At least one of title, body_html, or tags must be provided.',
+          error: 'At least one of title, body_html, tags, or product_type must be provided.',
         },
         { status: 400 }
       );
@@ -85,7 +110,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Resolve credentials ─────────────────────────────────
-    // POST body credentials take priority over DB/query-string
     const bodyDomain = body.storeDomain;
     const bodyToken = body.accessToken;
 
@@ -112,6 +136,7 @@ export async function POST(req: NextRequest) {
     if (body.title !== undefined) productPayload.title = body.title;
     if (body.body_html !== undefined) productPayload.body_html = body.body_html;
     if (body.tags !== undefined) productPayload.tags = body.tags;
+    if (body.product_type !== undefined) productPayload.product_type = body.product_type;
 
     // ── Push to Shopify ─────────────────────────────────────
     console.log(
@@ -156,51 +181,65 @@ export async function POST(req: NextRequest) {
       verifiedProduct = putResponse.product;
     }
 
-    // ── Verify the fields actually changed ──────────────────
-    const mismatches: string[] = [];
-    if (body.title !== undefined && verifiedProduct.title !== body.title) {
-      mismatches.push(
-        `title: expected "${body.title}", got "${verifiedProduct.title}"`
-      );
-    }
-    if (
-      body.body_html !== undefined &&
-      verifiedProduct.body_html !== body.body_html
-    ) {
-      mismatches.push('body_html: content did not match after update');
-    }
-    if (body.tags !== undefined && verifiedProduct.tags !== body.tags) {
-      // Shopify normalizes tags (trims whitespace, lowercases), so do a soft check
-      const normalize = (s: string) =>
-        s
-          .split(',')
-          .map((t) => t.trim().toLowerCase())
-          .filter(Boolean)
-          .sort()
-          .join(',');
-      if (normalize(verifiedProduct.tags) !== normalize(body.tags)) {
-        mismatches.push(
-          `tags: expected "${body.tags}", got "${verifiedProduct.tags}"`
-        );
-      }
+    // ── Build structured verification results ───────────────
+    const verification: VerificationResult[] = [];
+
+    if (body.title !== undefined) {
+      verification.push({
+        field: 'Title',
+        expected: body.title,
+        actual: verifiedProduct.title,
+        match: verifiedProduct.title === body.title,
+      });
     }
 
-    if (mismatches.length > 0) {
+    if (body.body_html !== undefined) {
+      // HTML comparison: Shopify may normalize HTML slightly
+      const expectedClean = body.body_html.replace(/\s+/g, ' ').trim();
+      const actualClean = (verifiedProduct.body_html || '').replace(/\s+/g, ' ').trim();
+      verification.push({
+        field: 'Description',
+        expected: truncate(body.body_html),
+        actual: truncate(verifiedProduct.body_html || ''),
+        match: expectedClean === actualClean,
+      });
+    }
+
+    if (body.tags !== undefined) {
+      const tagsMatch = normalizeTags(verifiedProduct.tags) === normalizeTags(body.tags);
+      verification.push({
+        field: 'Tags',
+        expected: body.tags,
+        actual: verifiedProduct.tags,
+        match: tagsMatch,
+      });
+    }
+
+    if (body.product_type !== undefined) {
+      verification.push({
+        field: 'Product Type',
+        expected: body.product_type,
+        actual: verifiedProduct.product_type,
+        match: verifiedProduct.product_type === body.product_type,
+      });
+    }
+
+    const allMatch = verification.every((v) => v.match);
+    if (!allMatch) {
       console.warn(
         '[/api/shopify/update] Verification mismatches:',
-        mismatches
+        verification.filter((v) => !v.match).map((v) => `${v.field}: expected "${v.expected}", got "${v.actual}"`)
       );
-      // Still return success since the PUT didn't error — Shopify may have
-      // normalized the content slightly
     }
 
     console.log(
-      `[/api/shopify/update] ✓ Product ${body.productId} updated and verified on ${storeDomain}`
+      `[/api/shopify/update] ✓ Product ${body.productId} updated and verified on ${storeDomain} (${verification.filter((v) => v.match).length}/${verification.length} fields match)`
     );
 
     return NextResponse.json<UpdateSuccessResponse>({
       success: true,
       product: verifiedProduct,
+      verification,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

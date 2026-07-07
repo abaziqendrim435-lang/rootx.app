@@ -4,12 +4,11 @@ import type { AIProductGeneration } from '@/lib/shopify-types';
 // ============================================================
 // POST /api/shopify/generate
 //
-// Professional e-commerce copywriting engine powered by OpenAI.
+// Full AI e-commerce agent powered by OpenAI (gpt-4o-mini).
 //
-// Uses AIDA (Attention-Interest-Desire-Action) and PAS
-// (Problem-Agitation-Solution) frameworks to produce
-// high-converting product copy that is COMPLETELY ORIGINAL —
-// never a paraphrase of the existing product text.
+// Analyzes the product image (vision), generates completely
+// original copy using AIDA + PAS frameworks, suggests pricing,
+// recommends categories, and produces upsell/cross-sell ideas.
 //
 // Falls back to high-quality mock content when OPENAI_API_KEY
 // is not configured.
@@ -24,6 +23,10 @@ interface GenerateRequest {
   productType: string;
   tags: string;
   vendor: string;
+  /** Shopify CDN image URL for vision analysis */
+  imageUrl?: string;
+  /** Current price from the first variant */
+  currentPrice?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -51,7 +54,6 @@ function friendlyOpenAIError(status: number, body: string): string {
 
 /** Extract core product noun for creative use */
 function extractCoreNoun(title: string): string {
-  // Remove brand prefixes, sizes, colors to get the product noun
   const words = title
     .replace(/[-—|]/g, ' ')
     .split(/\s+/)
@@ -60,15 +62,42 @@ function extractCoreNoun(title: string): string {
         w.length > 2 &&
         !/^(the|and|for|with|in|by|a|an|or|of|to|is)$/i.test(w)
     );
-  // Return the last 1-2 meaningful words (usually the product noun)
   return words.slice(-2).join(' ');
+}
+
+/** Fetch a product image and convert to base64 data URI for vision API */
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'Accept': 'image/*' },
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+
+    const buffer = await res.arrayBuffer();
+    // Skip images larger than 4MB to stay within API limits
+    if (buffer.byteLength > 4 * 1024 * 1024) return null;
+
+    const base64 = Buffer.from(buffer).toString('base64');
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    return `data:${contentType};base64,${base64}`;
+  } catch {
+    console.warn('[/api/shopify/generate] Failed to fetch product image');
+    return null;
+  }
 }
 
 // ── Mock generator (high-quality, NOT a paraphrase) ───────────
 
 function getMockGeneration(
   title: string,
-  productType: string
+  productType: string,
+  currentPrice: string
 ): AIProductGeneration {
   const noun = extractCoreNoun(title);
   const year = new Date().getFullYear();
@@ -76,7 +105,19 @@ function getMockGeneration(
     Math.floor(new Date().getMonth() / 3)
   ];
 
-  // Randomized vocabulary pools for variety on each call
+  const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+  const titleFormulas = [
+    `The Ultimate ${noun} — ${season} ${year} Must-Have`,
+    `Meet the ${noun} That Changes Everything`,
+    `Why Thousands Are Obsessed With This ${noun}`,
+    `The ${noun} You Didn't Know You Needed`,
+    `${season}'s #1 ${noun} — Rated 5 Stars by Real Customers`,
+    `Reimagined: The ${noun} Built for Perfectionists`,
+    `Stop Searching — This Is THE ${noun}`,
+    `The Last ${noun} You'll Ever Buy`,
+  ];
+
   const hooks = [
     'Stop settling for less.',
     'Your search ends here.',
@@ -100,18 +141,6 @@ function getMockGeneration(
     'Grab yours now — risk-free with our guarantee.',
   ];
 
-  const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-
-  const titleFormulas = [
-    `The Ultimate ${noun} — ${season} ${year} Must-Have`,
-    `Meet the ${noun} That Changes Everything`,
-    `Why Thousands Are Obsessed With This ${noun}`,
-    `The ${noun} You Didn't Know You Needed`,
-    `${season}'s #1 ${noun} — Rated 5 Stars by Real Customers`,
-    `Reimagined: The ${noun} Built for Perfectionists`,
-    `Stop Searching — This Is THE ${noun}`,
-    `The Last ${noun} You'll Ever Buy`,
-  ];
   const seoTitles = [
     `Best ${noun} ${year} — Top Rated ${productType}`,
     `#1 ${noun} of ${year} — Premium ${productType}`,
@@ -123,6 +152,12 @@ function getMockGeneration(
     `Meet the ${noun.toLowerCase()} that 12,000+ customers swear by. Handcrafted quality, risk-free guarantee, free shipping. Don't miss out — order today.`,
     `The ${noun.toLowerCase()} everyone's talking about. Top-rated ${productType.toLowerCase()}, 30-day returns, and express delivery. Grab yours while supplies last.`,
   ];
+
+  // Price analysis mock
+  const price = parseFloat(currentPrice) || 29.99;
+  const suggestedPrice = (price * (1 + (Math.random() * 0.3 - 0.1))).toFixed(2);
+  const minPrice = (price * 0.7).toFixed(2);
+  const maxPrice = (price * 1.5).toFixed(2);
 
   return {
     title: pick(titleFormulas),
@@ -147,30 +182,75 @@ function getMockGeneration(
       'customer favorite',
     ],
     isDemo: true,
+
+    // ── New AI agent fields (mock data) ──────────────────────
+    imageAnalysis: {
+      description: `Professional product photo of a ${noun.toLowerCase()}. The item is centered on a clean background with balanced lighting highlighting key details and textures.`,
+      dominantColors: ['#2D2D2D', '#F5F5F5', '#8B4513', '#C4A882'],
+      style: 'studio',
+      quality: 'high',
+      suggestions: [
+        'Consider adding a lifestyle shot showing the product in use',
+        'A close-up detail shot would highlight material quality',
+        'Adding a scale reference would help customers judge size',
+      ],
+    },
+    priceAnalysis: {
+      suggestedPrice,
+      currentPrice: currentPrice || '29.99',
+      reasoning: `Based on the ${productType.toLowerCase()} market, the current price positions this as a ${price < 25 ? 'budget' : price < 75 ? 'mid-range' : 'premium'} option. A slight price adjustment to $${suggestedPrice} could optimize perceived value while maintaining competitiveness.`,
+      priceRange: { min: minPrice, max: maxPrice },
+      competitivePosition: price < 25 ? 'budget' : price < 75 ? 'mid-range' : 'premium',
+    },
+    categorySuggestion: {
+      primary: productType || 'General',
+      alternatives: [
+        `${season} ${productType || 'Accessories'}`,
+        `Premium ${productType || 'Goods'}`,
+        'Gifts & Specials',
+      ],
+      reasoning: `This ${noun.toLowerCase()} fits best in the "${productType || 'General'}" category based on its features and target market. Alternative categories could increase discoverability.`,
+    },
+    upsellCrossSell: {
+      upsell: [
+        { title: `Premium ${noun} — Deluxe Edition`, reason: 'Higher-end version with upgraded materials for customers willing to spend more', pricePoint: `$${(price * 1.6).toFixed(2)}` },
+        { title: `${noun} Pro Bundle`, reason: 'Complete set that includes accessories for a premium all-in-one solution', pricePoint: `$${(price * 2.2).toFixed(2)}` },
+      ],
+      crossSell: [
+        { title: `${noun} Care Kit`, reason: 'Essential maintenance set to extend product lifespan', pricePoint: `$${(price * 0.3).toFixed(2)}` },
+        { title: `Matching ${productType || 'Accessory'}`, reason: 'Complementary item that pairs naturally with this purchase', pricePoint: `$${(price * 0.5).toFixed(2)}` },
+        { title: `Gift Wrapping & Card`, reason: 'Popular add-on for customers buying as a gift', pricePoint: '$9.99' },
+      ],
+      bundleIdea: `Create a "${noun} Essentials Kit" combining the main product with the care kit and a matching accessory at a 15% bundle discount. This increases average order value while providing genuine added value.`,
+    },
   };
 }
 
 // ── OpenAI call ───────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are an elite direct-response copywriter who has generated over $500M in e-commerce revenue. You write like Gary Halbert meets David Ogilvy — punchy, emotional, impossible to ignore.
+const SYSTEM_PROMPT = `You are an elite AI e-commerce agent — a fusion of a $500M direct-response copywriter, a Shopify product strategist, a visual merchandiser, and a pricing analyst. You analyze products holistically and produce actionable, revenue-driving outputs.
 
 YOUR RULES:
 1. NEVER paraphrase, rephrase, or reword the original product text. Treat it as raw intel only — extract the product category and features, then THROW AWAY the original wording.
 2. Every output must be 100% original copy written from scratch using proven frameworks.
-3. Use the AIDA framework (Attention → Interest → Desire → Action) for the product description.
-4. Weave in PAS (Problem → Agitation → Solution) to create emotional urgency.
+3. Use the AIDA framework (Attention → Interest → Desire → Action) for the first half of the product description.
+4. Use the PAS framework (Problem → Agitation → Solution) for the second half of the product description.
 5. Write in second person ("you/your") with short, punchy sentences. Mix in power words: "transform", "effortless", "revolutionary", "obsessed", "guarantee".
 6. The title must be a COMPLETELY NEW creative title — not the original title with adjectives bolted on.
 7. Include a specific, urgent CTA with a reason to act NOW.
 8. Every generation must feel fresh and unique — vary your sentence structures, hooks, and emotional angles.
 9. Use HTML formatting: <strong>, <em>, and <p> tags. No markdown.
-10. Think like a conversion optimizer: every word must earn its place.`;
+10. Think like a conversion optimizer: every word must earn its place.
+11. If a product image is provided, analyze it visually — describe what you see, identify colors, style, and quality. Give actionable photo improvement tips.
+12. When suggesting a price, consider the product category, brand positioning, perceived quality from the image, and market dynamics. Always provide reasoning.
+13. Category suggestions should be specific and actionable Shopify product types.
+14. Upsell items should be higher-value alternatives. Cross-sell items should be complementary products.`;
 
 async function generateWithOpenAI(
   reqBody: GenerateRequest,
   apiKey: string
 ): Promise<AIProductGeneration> {
-  const { title, bodyHtml, productType, tags, vendor } = reqBody;
+  const { title, bodyHtml, productType, tags, vendor, currentPrice } = reqBody;
 
   // Strip HTML tags from description for cleaner context
   const plainDesc = (bodyHtml ?? '')
@@ -178,31 +258,86 @@ async function generateWithOpenAI(
     .replace(/\s+/g, ' ')
     .trim();
 
+  // Try to fetch and encode the product image for vision analysis
+  let imageBase64: string | null = null;
+  if (reqBody.imageUrl) {
+    imageBase64 = await fetchImageAsBase64(reqBody.imageUrl);
+  }
+
   const userPrompt = `PRODUCT INTEL (use as raw data only — DO NOT copy or paraphrase any of this text):
 - Category: ${productType || 'General'}
 - Current name: "${title}"
 - Current description: "${plainDesc || 'None provided'}"
 - Current tags: ${tags || 'None'}
 - Brand: ${vendor || 'Unknown'}
+- Current price: ${currentPrice ? '$' + currentPrice : 'Not specified'}
+${imageBase64 ? '- Product image: [attached below for visual analysis]' : '- Product image: Not available'}
 
-YOUR TASK: Write completely original, high-converting product copy from scratch.
+YOUR TASK: Perform a complete AI e-commerce analysis and generate all outputs below.
 
-Respond with a JSON object containing exactly these 5 fields:
+Respond with a JSON object containing exactly these fields:
 
 {
-  "title": "A completely NEW product title (55-75 chars). Do NOT reuse the original title. Create something fresh that makes people stop scrolling. Use power words, a key benefit, and the product category. Examples of great title formulas: 'The [Adjective] [Product] That [Bold Claim]' or '[Bold Claim] — [Product] Reimagined' or 'Meet Your New Favorite [Product]'.",
-  
-  "bodyHtml": "3-4 paragraphs of HTML (<p> tags). MUST follow AIDA+PAS framework: Para 1 = Hook + Problem (grab attention, agitate a pain point). Para 2 = Solution + Features (introduce product as the answer, weave in 3-4 features naturally). Para 3 = Social proof + Desire (customer results, lifestyle painting, emotional triggers). Para 4 = Urgent CTA + Risk reversal (limited stock/time, money-back guarantee, free shipping). Total: 200-350 words. Use <strong> and <em> for emphasis. Include 1-2 emoji for visual breaks.",
-  
+  "title": "A completely NEW product title (55-75 chars). Do NOT reuse the original title. Create something fresh that makes people stop scrolling. Use power words, a key benefit, and the product category. Examples: 'The [Adjective] [Product] That [Bold Claim]' or '[Bold Claim] — [Product] Reimagined'.",
+
+  "bodyHtml": "4-5 paragraphs of HTML (<p> tags). FIRST HALF = AIDA framework: Para 1 = Attention (bold hook that stops the scroll). Para 2 = Interest (introduce unique features, weave in 3-4 benefits naturally). SECOND HALF = PAS framework: Para 3 = Problem (identify the pain point your customer faces). Para 4 = Agitation + Solution (amplify the pain, then present this product as THE answer with social proof). Para 5 = Action (urgent CTA + risk reversal: limited stock, money-back guarantee, free shipping). Total: 250-400 words. Use <strong> and <em> for emphasis. Include 1-2 emoji for visual breaks.",
+
   "seoTitle": "SEO meta title under 60 characters. Include primary keyword + year + compelling modifier (e.g., 'Best', '#1 Rated', 'Top'). Do NOT copy the product title.",
-  
+
   "seoDescription": "SEO meta description under 155 characters. Must include: primary keyword, unique value proposition, and urgency-driven CTA. Write like a Google ad that demands clicks.",
-  
-  "tags": ["10-14 lowercase tags. Mix of: primary keyword, long-tail search terms, audience segments (e.g., 'gifts for him'), seasonal terms, trending modifiers, benefit-driven phrases. NO generic tags like 'product' or 'item'."]
+
+  "tags": ["10-14 lowercase tags. Mix of: primary keyword, long-tail search terms, audience segments (e.g., 'gifts for him'), seasonal terms, trending modifiers, benefit-driven phrases. NO generic tags like 'product' or 'item'."],
+
+  "imageAnalysis": ${imageBase64 ? `{
+    "description": "Describe what you see in the product image in 2-3 sentences. Be specific about the product appearance, materials, composition, and setting.",
+    "dominantColors": ["4-6 hex color codes of the dominant colors in the image"],
+    "style": "One of: 'studio', 'lifestyle', 'flat-lay', 'on-model', 'outdoor', 'macro', 'user-generated', 'minimal'",
+    "quality": "One of: 'high', 'medium', 'low' — based on lighting, resolution, composition, and professionalism",
+    "suggestions": ["3-4 specific, actionable tips to improve the product photography or listing images"]
+  }` : 'null'},
+
+  "priceAnalysis": {
+    "suggestedPrice": "Your recommended optimal price as a string (e.g., '34.99'). Consider the product category, brand positioning, perceived quality${imageBase64 ? ' from the image' : ''}, and typical market ranges.",
+    "currentPrice": "${currentPrice || '0.00'}",
+    "reasoning": "2-3 sentences explaining WHY you suggest this price. Reference category benchmarks, perceived value, and positioning strategy.",
+    "priceRange": { "min": "low end of reasonable range", "max": "high end of reasonable range" },
+    "competitivePosition": "One of: 'premium', 'mid-range', 'budget'"
+  },
+
+  "categorySuggestion": {
+    "primary": "The single best Shopify product_type for this product (e.g., 'Leather Goods', 'Sleep Accessories', 'Running Shoes'). Be specific, not generic.",
+    "alternatives": ["2-3 other valid product categories this could fit in"],
+    "reasoning": "1-2 sentences on why this category fits best"
+  },
+
+  "upsellCrossSell": {
+    "upsell": [
+      { "title": "Higher-value product name", "reason": "Why this is a good upsell", "pricePoint": "$XX.XX" },
+      { "title": "Another upsell option", "reason": "Why this is a good upsell", "pricePoint": "$XX.XX" }
+    ],
+    "crossSell": [
+      { "title": "Complementary product 1", "reason": "Why it pairs well", "pricePoint": "$XX.XX" },
+      { "title": "Complementary product 2", "reason": "Why it pairs well", "pricePoint": "$XX.XX" },
+      { "title": "Complementary product 3", "reason": "Why it pairs well", "pricePoint": "$XX.XX" }
+    ],
+    "bundleIdea": "A specific bundle concept combining the main product with 1-2 cross-sells, including a suggested discount percentage and the value proposition."
+  }
 }
 
 CRITICAL: Output ONLY valid JSON. No markdown fences, no commentary, no extra text.
-CRITICAL: Generate FRESH copy — if this prompt is repeated, produce a DIFFERENT result each time.`;
+CRITICAL: Generate FRESH copy — if this prompt is repeated, produce a DIFFERENT result each time.
+CRITICAL: All prices should be realistic numbers as strings (e.g., "29.99"), not placeholder text.`;
+
+  // Build the message content — text + optional image
+  const userContent: Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }> = [
+    { type: 'text', text: userPrompt },
+  ];
+  if (imageBase64) {
+    userContent.push({
+      type: 'image_url',
+      image_url: { url: imageBase64, detail: 'low' }, // 'low' detail to save tokens
+    });
+  }
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -214,13 +349,13 @@ CRITICAL: Generate FRESH copy — if this prompt is repeated, produce a DIFFEREN
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: userContent },
       ],
-      temperature: 1.0, // High temperature for maximum creativity & variety
-      max_tokens: 2000,
+      temperature: 1.0,
+      max_tokens: 3500,
       top_p: 0.95,
-      frequency_penalty: 0.4, // Penalize repeated phrases
-      presence_penalty: 0.5, // Encourage novel vocabulary
+      frequency_penalty: 0.4,
+      presence_penalty: 0.5,
     }),
   });
 
@@ -235,13 +370,78 @@ CRITICAL: Generate FRESH copy — if this prompt is repeated, produce a DIFFEREN
   try {
     const parsed = parseJsonSafe(raw);
 
-    // Validate required fields exist and are non-empty
-    const fields = ['title', 'bodyHtml', 'seoTitle', 'seoDescription', 'tags'];
-    for (const field of fields) {
+    // Validate core required fields
+    const coreFields = ['title', 'bodyHtml', 'seoTitle', 'seoDescription', 'tags'];
+    for (const field of coreFields) {
       if (!parsed[field]) {
         throw new Error(`Missing field: ${field}`);
       }
     }
+
+    // Parse image analysis (may be null)
+    let imageAnalysis = null;
+    if (parsed.imageAnalysis && typeof parsed.imageAnalysis === 'object') {
+      const ia = parsed.imageAnalysis as Record<string, unknown>;
+      imageAnalysis = {
+        description: String(ia.description || ''),
+        dominantColors: Array.isArray(ia.dominantColors)
+          ? (ia.dominantColors as string[]).map(String)
+          : [],
+        style: String(ia.style || 'studio'),
+        quality: (['high', 'medium', 'low'].includes(String(ia.quality))
+          ? String(ia.quality)
+          : 'medium') as 'high' | 'medium' | 'low',
+        suggestions: Array.isArray(ia.suggestions)
+          ? (ia.suggestions as string[]).map(String)
+          : [],
+      };
+    }
+
+    // Parse price analysis
+    let priceAnalysis = null;
+    if (parsed.priceAnalysis && typeof parsed.priceAnalysis === 'object') {
+      const pa = parsed.priceAnalysis as Record<string, unknown>;
+      const priceRange = (pa.priceRange || {}) as Record<string, unknown>;
+      priceAnalysis = {
+        suggestedPrice: String(pa.suggestedPrice || '0.00'),
+        currentPrice: String(pa.currentPrice || currentPrice || '0.00'),
+        reasoning: String(pa.reasoning || ''),
+        priceRange: {
+          min: String(priceRange.min || '0.00'),
+          max: String(priceRange.max || '0.00'),
+        },
+        competitivePosition: (['premium', 'mid-range', 'budget'].includes(String(pa.competitivePosition))
+          ? String(pa.competitivePosition)
+          : 'mid-range') as 'premium' | 'mid-range' | 'budget',
+      };
+    }
+
+    // Parse category suggestion
+    const cs = (parsed.categorySuggestion || {}) as Record<string, unknown>;
+    const categorySuggestion = {
+      primary: String(cs.primary || productType || 'General'),
+      alternatives: Array.isArray(cs.alternatives)
+        ? (cs.alternatives as string[]).map(String)
+        : [],
+      reasoning: String(cs.reasoning || ''),
+    };
+
+    // Parse upsell/cross-sell
+    const ucs = (parsed.upsellCrossSell || {}) as Record<string, unknown>;
+    const parseSuggestions = (arr: unknown) =>
+      Array.isArray(arr)
+        ? arr.map((item: Record<string, unknown>) => ({
+            title: String(item?.title || ''),
+            reason: String(item?.reason || ''),
+            pricePoint: String(item?.pricePoint || ''),
+          }))
+        : [];
+
+    const upsellCrossSell = {
+      upsell: parseSuggestions(ucs.upsell),
+      crossSell: parseSuggestions(ucs.crossSell),
+      bundleIdea: String(ucs.bundleIdea || ''),
+    };
 
     return {
       title: String(parsed.title),
@@ -254,6 +454,10 @@ CRITICAL: Generate FRESH copy — if this prompt is repeated, produce a DIFFEREN
             .split(',')
             .map((t) => t.trim()),
       isDemo: false,
+      imageAnalysis,
+      priceAnalysis,
+      categorySuggestion,
+      upsellCrossSell,
     };
   } catch (parseErr) {
     console.error(
@@ -271,22 +475,9 @@ CRITICAL: Generate FRESH copy — if this prompt is repeated, produce a DIFFEREN
 // ── Route handler ─────────────────────────────────────────────
 
 /**
- * @description Generate professional, high-converting product copy
- * using proven copywriting frameworks (AIDA + PAS).
- *
- * **Request body**
- * ```json
- * {
- *   "productId": 123,
- *   "title": "Leather Wallet",
- *   "bodyHtml": "<p>...</p>",
- *   "productType": "Accessories",
- *   "tags": "wallet, leather",
- *   "vendor": "Acme"
- * }
- * ```
- *
- * **Response** — `AIProductGeneration`
+ * @description Full AI e-commerce agent: generates product copy,
+ * analyzes images, suggests pricing, recommends categories,
+ * and produces upsell/cross-sell ideas.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -305,7 +496,11 @@ export async function POST(req: NextRequest) {
     if (!apiKey || apiKey.startsWith('sk-your') || apiKey === 'YOUR_KEY_HERE') {
       await new Promise((r) => setTimeout(r, 1200));
       return NextResponse.json<AIProductGeneration>(
-        getMockGeneration(body.title, body.productType || 'Product')
+        getMockGeneration(
+          body.title,
+          body.productType || 'Product',
+          body.currentPrice || '29.99'
+        )
       );
     }
 

@@ -149,7 +149,7 @@ export default function MyAgentsPage() {
                 </div>
                 {accessible ? (
                   <Link
-                    href={`/agents/${agent.id}`}
+                    href={agent.id === 'website-builder-agent' ? '/website-builder' : `/agents/${agent.id}`}
                     className="flex items-center gap-1 text-xs font-semibold transition-colors"
                     style={{ color: '#ef4444', textDecoration: 'none' }}
                   >
