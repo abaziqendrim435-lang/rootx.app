@@ -1303,7 +1303,7 @@ export default function WebsiteBuilderDemo() {
   const [errorMsg, setErrorMsg] = useState('');
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'pages' | 'branding' | 'seo' | 'marketing' | 'preview' | 'export' | 'settings'>('pages');
+  const [activeTab, setActiveTab] = useState<'pages' | 'branding' | 'seo' | 'marketing' | 'preview' | 'export' | 'shopify' | 'settings'>('pages');
   const [provider, setProvider] = useState<AIProvider>('openai');
   const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [editMode, setEditMode] = useState(false);
@@ -1311,6 +1311,33 @@ export default function WebsiteBuilderDemo() {
   const { copiedId, copy } = useCopy();
   const resultsRef = useRef<HTMLDivElement>(null);
   const [showShopifyDeploy, setShowShopifyDeploy] = useState(false);
+
+  // Shopify deploy state
+  const [shopifyDomain, setShopifyDomain] = useState('');
+  const [shopifyToken, setShopifyToken] = useState('');
+  const [shopifyShopName, setShopifyShopName] = useState('');
+  const [deployStatus, setDeployStatus] = useState<ThemeDeployStatus>('idle');
+  const [deployThemeId, setDeployThemeId] = useState<number | null>(null);
+  const [deployThemeName, setDeployThemeName] = useState('');
+  const [deployPreviewUrl, setDeployPreviewUrl] = useState('');
+  const [deployProgress, setDeployProgress] = useState({ uploaded: 0, total: 0 });
+  const [deployError, setDeployError] = useState('');
+  const [deployFileErrors, setDeployFileErrors] = useState<string[]>([]);
+
+  // Load Shopify creds from localStorage on mount
+  const shopifyCredsLoaded = useRef(false);
+  if (!shopifyCredsLoaded.current) {
+    shopifyCredsLoaded.current = true;
+    try {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(SHOPIFY_CREDS_KEY) : null;
+      if (stored) {
+        const c = JSON.parse(stored);
+        if (c.storeDomain) setShopifyDomain(c.storeDomain);
+        if (c.accessToken) setShopifyToken(c.accessToken);
+        if (c.shopName) setShopifyShopName(c.shopName);
+      }
+    } catch { /* ignore */ }
+  }
 
   // ── API call ──────────────────────────────────────────────────
   async function handleGenerate(e: React.FormEvent) {
@@ -1365,6 +1392,156 @@ export default function WebsiteBuilderDemo() {
     setErrorMsg('');
   }
 
+  // ── Shopify deploy handlers ──────────────────────────────────
+
+  function saveShopifyCreds(domain: string, token: string, name: string) {
+    try {
+      localStorage.setItem(SHOPIFY_CREDS_KEY, JSON.stringify({
+        storeDomain: domain, accessToken: token, shopName: name,
+      }));
+    } catch { /* ignore */ }
+  }
+
+  async function handleShopifyConnect() {
+    if (!shopifyDomain.trim() || !shopifyToken.trim()) return;
+    setDeployStatus('connecting');
+    setDeployError('');
+    try {
+      const res = await fetch('/api/shopify/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeDomain: shopifyDomain.trim(), accessToken: shopifyToken.trim() }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Connection failed');
+      setShopifyShopName(data.shopName || shopifyDomain);
+      saveShopifyCreds(shopifyDomain.trim(), shopifyToken.trim(), data.shopName || '');
+      setDeployStatus('idle');
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Connection failed');
+      setDeployStatus('error');
+    }
+  }
+
+  function handleShopifyDisconnect() {
+    setShopifyDomain('');
+    setShopifyToken('');
+    setShopifyShopName('');
+    setDeployStatus('idle');
+    setDeployError('');
+    try { localStorage.removeItem(SHOPIFY_CREDS_KEY); } catch { /* ignore */ }
+  }
+
+  async function handleShopifyDeploy() {
+    if (!result || !shopifyDomain.trim() || !shopifyToken.trim()) return;
+
+    setDeployError('');
+    setDeployFileErrors([]);
+    setDeployThemeId(null);
+    setDeployPreviewUrl('');
+
+    // Generate theme files
+    setDeployStatus('generating-files');
+    let files: ShopifyThemeFile[];
+    try {
+      files = generateShopifyTheme(result, input);
+      setDeployProgress({ uploaded: 0, total: files.length });
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Theme generation failed');
+      setDeployStatus('error');
+      return;
+    }
+
+    // Create + upload theme
+    setDeployStatus('creating');
+    const name = `${input.businessName || 'RootX'} Theme — ${new Date().toLocaleDateString()}`;
+    setDeployThemeName(name);
+
+    try {
+      const res = await fetch('/api/shopify/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          storeDomain: shopifyDomain.trim(),
+          accessToken: shopifyToken.trim(),
+          themeName: name,
+          files,
+        }),
+      });
+      const data: ThemeCreateResponse = await res.json();
+      if (!data.success) throw new Error(data.error || 'Theme upload failed');
+
+      setDeployThemeId(data.themeId ?? null);
+      setDeployPreviewUrl(data.previewUrl ?? '');
+      setDeployThemeName(data.themeName ?? name);
+      setDeployProgress({ uploaded: data.uploadedCount ?? 0, total: data.totalCount ?? files.length });
+      if (data.errors && data.errors.length > 0) setDeployFileErrors(data.errors);
+      setDeployStatus('done');
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Theme upload failed');
+      setDeployStatus('error');
+    }
+  }
+
+  async function handleShopifyPublish() {
+    if (!deployThemeId) return;
+    setDeployStatus('publishing');
+    setDeployError('');
+    try {
+      const res = await fetch('/api/shopify/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'publish',
+          storeDomain: shopifyDomain.trim(),
+          accessToken: shopifyToken.trim(),
+          themeId: deployThemeId,
+        }),
+      });
+      const data: ThemePublishResponse = await res.json();
+      if (!data.success) throw new Error(data.error || 'Publish failed');
+      setDeployStatus('published');
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Publish failed');
+      setDeployStatus('error');
+    }
+  }
+
+  function handleExportThemeZip() {
+    if (!result) return;
+    const files = generateShopifyTheme(result, input);
+    // Build a simple concatenated text file with all theme files
+    let content = '';
+    for (const f of files) {
+      content += `\n${'='.repeat(60)}\n`;
+      content += `FILE: ${f.key}\n`;
+      content += `${'='.repeat(60)}\n\n`;
+      content += f.value;
+      content += '\n';
+    }
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(input.businessName || 'shopify-theme').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-theme.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDeployReset() {
+    setDeployStatus('idle');
+    setDeployThemeId(null);
+    setDeployPreviewUrl('');
+    setDeployThemeName('');
+    setDeployError('');
+    setDeployFileErrors([]);
+    setDeployProgress({ uploaded: 0, total: 0 });
+  }
+
+  const isShopifyConnected = !!shopifyShopName && !!shopifyDomain && !!shopifyToken;
+  const isDeploying = ['connecting', 'generating-files', 'creating', 'uploading', 'publishing'].includes(deployStatus);
+
   // ── Tab config ────────────────────────────────────────────────
   const tabs: { key: typeof activeTab; label: string; icon: React.ReactNode }[] = [
     { key: 'pages', label: 'Pages', icon: <Layout size={14} /> },
@@ -1373,6 +1550,7 @@ export default function WebsiteBuilderDemo() {
     { key: 'marketing', label: 'Marketing', icon: <Megaphone size={14} /> },
     { key: 'preview', label: 'Preview', icon: <Eye size={14} /> },
     { key: 'export', label: 'Export', icon: <Download size={14} /> },
+    { key: 'shopify', label: 'Shopify', icon: <ShoppingBag size={14} /> },
     { key: 'settings', label: 'Settings', icon: <Settings size={14} /> },
   ];
 
@@ -2272,6 +2450,345 @@ export default function WebsiteBuilderDemo() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ═══════ SHOPIFY TAB ═══════ */}
+            {activeTab === 'shopify' && (
+              <div className="flex flex-col gap-6">
+
+                {/* ── Section 1: Export Theme ── */}
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+                >
+                  <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)' }}>
+                      <Download size={16} style={{ color: '#eab308' }} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold">Export Theme Files</h4>
+                      <p className="text-xs" style={{ color: '#71717a' }}>Download all Shopify Liquid theme files</p>
+                    </div>
+                    <button
+                      onClick={handleExportThemeZip}
+                      className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                      style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)', color: '#eab308' }}
+                    >
+                      <Download size={14} /> Download Theme
+                    </button>
+                  </div>
+                  <div className="px-5 py-3">
+                    <p className="text-xs" style={{ color: '#52525b' }}>
+                      Exports all 26+ Shopify OS 2.0 theme files — layout, templates, sections, snippets, assets, config, and locales.
+                    </p>
+                  </div>
+                </div>
+
+                {/* ── Section 2: Connect Shopify Store ── */}
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{ background: 'var(--color-surface)', border: `1px solid ${isShopifyConnected ? 'rgba(34,197,94,0.25)' : 'var(--color-border)'}` }}
+                >
+                  <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center"
+                      style={{
+                        background: isShopifyConnected ? 'rgba(34,197,94,0.1)' : 'rgba(150,191,71,0.1)',
+                        border: `1px solid ${isShopifyConnected ? 'rgba(34,197,94,0.25)' : 'rgba(150,191,71,0.25)'}`,
+                      }}
+                    >
+                      {isShopifyConnected
+                        ? <CheckCircle2 size={16} style={{ color: '#22c55e' }} />
+                        : <Plug size={16} style={{ color: '#96bf47' }} />
+                      }
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-bold">
+                        {isShopifyConnected ? 'Store Connected' : 'Connect Shopify Store'}
+                      </h4>
+                      <p className="text-xs" style={{ color: isShopifyConnected ? '#22c55e' : '#71717a' }}>
+                        {isShopifyConnected ? shopifyShopName : 'Enter your Shopify Admin API credentials'}
+                      </p>
+                    </div>
+                    {isShopifyConnected && (
+                      <button
+                        onClick={handleShopifyDisconnect}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#ef4444' }}
+                      >
+                        <X size={12} /> Disconnect
+                      </button>
+                    )}
+                  </div>
+
+                  {!isShopifyConnected && (
+                    <div className="px-5 py-4 flex flex-col gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Store Domain *</label>
+                          <input
+                            type="text"
+                            placeholder="my-store.myshopify.com"
+                            value={shopifyDomain}
+                            onChange={(e) => setShopifyDomain(e.target.value)}
+                            className="input-field w-full"
+                            disabled={deployStatus === 'connecting'}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Admin API Access Token *</label>
+                          <input
+                            type="password"
+                            placeholder="shpat_xxxxxxxxxxxxx"
+                            value={shopifyToken}
+                            onChange={(e) => setShopifyToken(e.target.value)}
+                            className="input-field w-full"
+                            disabled={deployStatus === 'connecting'}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={handleShopifyConnect}
+                          disabled={!shopifyDomain.trim() || !shopifyToken.trim() || deployStatus === 'connecting'}
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all"
+                          style={{
+                            background: (!shopifyDomain.trim() || !shopifyToken.trim()) ? 'rgba(150,191,71,0.06)' : 'rgba(150,191,71,0.15)',
+                            border: '1px solid rgba(150,191,71,0.25)',
+                            color: '#96bf47',
+                            opacity: (!shopifyDomain.trim() || !shopifyToken.trim()) ? 0.5 : 1,
+                          }}
+                        >
+                          {deployStatus === 'connecting'
+                            ? <><Loader2 size={14} className="animate-spin" /> Connecting...</>
+                            : <><Plug size={14} /> Connect Store</>
+                          }
+                        </button>
+                        <p className="text-xs" style={{ color: '#52525b' }}>
+                          Requires <strong>write_themes</strong> scope
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Section 3: Deploy to Shopify (one-click if connected) ── */}
+                {deployStatus === 'idle' && (
+                  <div
+                    className="rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-5"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(150,191,71,0.08) 0%, rgba(92,138,31,0.04) 100%)',
+                      border: '1px solid rgba(150,191,71,0.2)',
+                    }}
+                  >
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(150,191,71,0.12)', border: '1px solid rgba(150,191,71,0.25)' }}>
+                      <Upload size={24} style={{ color: '#96bf47' }} />
+                    </div>
+                    <div className="flex-1 text-center sm:text-left">
+                      <h4 className="font-bold mb-1">Upload Theme to Shopify</h4>
+                      <p className="text-xs" style={{ color: '#71717a' }}>
+                        {isShopifyConnected
+                          ? `Deploy to ${shopifyShopName} — creates a new OS 2.0 theme with all pages, sections, and assets.`
+                          : 'Connect your store first, then deploy your AI-generated theme with one click.'
+                        }
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleShopifyDeploy}
+                      disabled={!isShopifyConnected}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all flex-shrink-0"
+                      style={{
+                        background: isShopifyConnected ? 'linear-gradient(135deg, #96bf47, #5c8a1f)' : 'rgba(150,191,71,0.06)',
+                        color: isShopifyConnected ? '#fff' : '#52525b',
+                        border: 'none',
+                        boxShadow: isShopifyConnected ? '0 4px 16px rgba(150,191,71,0.3)' : 'none',
+                        opacity: isShopifyConnected ? 1 : 0.5,
+                        cursor: isShopifyConnected ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <Upload size={16} /> Deploy to Shopify
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Section 4: Upload Progress ── */}
+                {isDeploying && (
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{ background: 'var(--color-surface)', border: '1px solid rgba(150,191,71,0.2)' }}
+                  >
+                    <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <Loader2 size={18} className="animate-spin" style={{ color: '#96bf47' }} />
+                      <div>
+                        <h4 className="text-sm font-bold">
+                          {deployStatus === 'connecting' && 'Connecting to Shopify...'}
+                          {deployStatus === 'generating-files' && 'Generating Liquid templates...'}
+                          {deployStatus === 'creating' && 'Creating theme & uploading files...'}
+                          {deployStatus === 'uploading' && `Uploading files (${deployProgress.uploaded}/${deployProgress.total})...`}
+                          {deployStatus === 'publishing' && 'Publishing theme...'}
+                        </h4>
+                        <p className="text-xs" style={{ color: '#71717a' }}>
+                          {deployStatus === 'creating' && 'Uploading ~26 files. This takes 30-60 seconds due to Shopify API rate limits.'}
+                          {deployStatus === 'generating-files' && 'Converting your AI website into Shopify OS 2.0 format.'}
+                          {deployStatus === 'publishing' && 'Setting your theme as the live store theme.'}
+                        </p>
+                      </div>
+                    </div>
+                    {deployProgress.total > 0 && (
+                      <div className="px-5 py-4">
+                        <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${deployProgress.total > 0 ? Math.round((deployProgress.uploaded / deployProgress.total) * 100) : 0}%`,
+                              background: 'linear-gradient(90deg, #96bf47, #5c8a1f)',
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-center mt-2" style={{ color: '#52525b' }}>
+                          {deployProgress.uploaded} / {deployProgress.total} files uploaded
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Section 5: Success + Publish ── */}
+                {(deployStatus === 'done' || deployStatus === 'published') && (
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{ background: 'var(--color-surface)', border: '1px solid rgba(34,197,94,0.25)' }}
+                  >
+                    <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <CheckCircle2 size={20} style={{ color: '#22c55e' }} />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold" style={{ color: '#22c55e' }}>
+                          {deployStatus === 'published' ? 'Theme Published! 🎉' : 'Theme Uploaded Successfully!'}
+                        </h4>
+                        <p className="text-xs" style={{ color: '#71717a' }}>
+                          {deployStatus === 'published' ? 'Your theme is now live on your Shopify store.' : 'Your theme is ready to preview and publish.'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleDeployReset}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}
+                      >
+                        <RefreshCw size={12} /> Deploy Again
+                      </button>
+                    </div>
+
+                    <div className="px-5 py-4 flex flex-col gap-4">
+                      {/* Theme details grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: 'Theme Name', value: deployThemeName, icon: <ShoppingBag size={14} /> },
+                          { label: 'Theme ID', value: String(deployThemeId), icon: <Hash size={14} /> },
+                          { label: 'Store', value: shopifyShopName, icon: <Globe size={14} /> },
+                          { label: 'Files', value: `${deployProgress.uploaded}/${deployProgress.total}`, icon: <Layers size={14} /> },
+                        ].map((item) => (
+                          <div key={item.label} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}>
+                            <div className="flex items-center gap-1.5 mb-1" style={{ color: '#52525b' }}>
+                              {item.icon}
+                              <span className="text-xs">{item.label}</span>
+                            </div>
+                            <p className="text-xs font-bold font-mono truncate">{item.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* File errors */}
+                      {deployFileErrors.length > 0 && (
+                        <div className="rounded-xl p-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                          <p className="text-xs font-bold mb-1" style={{ color: '#f59e0b' }}>⚠ {deployFileErrors.length} file(s) had upload issues:</p>
+                          {deployFileErrors.slice(0, 5).map((e, i) => (
+                            <p key={i} className="text-xs" style={{ color: '#a16207' }}>{e}</p>
+                          ))}
+                          {deployFileErrors.length > 5 && <p className="text-xs" style={{ color: '#a16207' }}>...and {deployFileErrors.length - 5} more</p>}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        {deployPreviewUrl && (
+                          <a
+                            href={deployPreviewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all"
+                            style={{
+                              background: 'rgba(150,191,71,0.08)',
+                              border: '1px solid rgba(150,191,71,0.25)',
+                              color: '#96bf47',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            <ExternalLink size={16} /> Preview Theme
+                          </a>
+                        )}
+                        {deployStatus === 'done' && (
+                          <button
+                            onClick={handleShopifyPublish}
+                            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all"
+                            style={{
+                              background: 'linear-gradient(135deg, #96bf47, #5c8a1f)',
+                              color: '#fff',
+                              border: 'none',
+                              boxShadow: '0 4px 16px rgba(150,191,71,0.3)',
+                            }}
+                          >
+                            <Globe size={16} /> Publish Theme (Make Live)
+                          </button>
+                        )}
+                      </div>
+
+                      {deployStatus === 'published' && (
+                        <div className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                          <CheckCircle2 size={16} /> Your theme is now live!
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Error state ── */}
+                {deployStatus === 'error' && (
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{ background: 'var(--color-surface)', border: '1px solid rgba(239,68,68,0.25)' }}
+                  >
+                    <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <AlertTriangle size={18} style={{ color: '#ef4444' }} />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold" style={{ color: '#ef4444' }}>Deployment Failed</h4>
+                      </div>
+                    </div>
+                    <div className="px-5 py-4 flex flex-col gap-3">
+                      <div className="rounded-xl p-3" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.12)' }}>
+                        <p className="text-xs font-mono" style={{ color: '#fca5a5' }}>{deployError}</p>
+                      </div>
+                      <button
+                        onClick={handleDeployReset}
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all"
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
+                      >
+                        <RefreshCw size={14} /> Try Again
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info note */}
+                <div
+                  className="flex items-start gap-2 px-4 py-3 rounded-xl"
+                  style={{ background: 'rgba(150,191,71,0.04)', border: '1px solid rgba(150,191,71,0.1)' }}
+                >
+                  <ShoppingBag size={16} style={{ color: '#96bf47', flexShrink: 0, marginTop: 1 }} />
+                  <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>
+                    Generates a full Shopify Online Store 2.0 theme: layout, 12 page templates, 17 sections (hero, header, footer, product, collection, FAQ, testimonials, pricing, blog, contact), CSS design system with style presets, and JavaScript for interactivity. Your access token requires the <strong>write_themes</strong> scope.
+                  </p>
                 </div>
               </div>
             )}
