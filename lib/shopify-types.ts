@@ -171,3 +171,47 @@ export interface UpdateResponse {
   verification?: VerificationResult[];
   error?: string;
 }
+
+// ── Shopify Theme Deployment types ──────────────────────────
+
+/** A single file in a Shopify theme (key = path, value = content) */
+export interface ShopifyThemeFile {
+  /** Theme asset key, e.g. "layout/theme.liquid" */
+  key: string;
+  /** File content (Liquid, JSON, CSS, JS) */
+  value: string;
+}
+
+/** Response from POST /api/shopify/theme (action: create) */
+export interface ThemeCreateResponse {
+  success: boolean;
+  themeId?: number;
+  themeName?: string;
+  previewUrl?: string;
+  /** Number of files successfully uploaded */
+  uploadedCount?: number;
+  /** Total number of files to upload */
+  totalCount?: number;
+  /** Individual file upload errors (non-fatal) */
+  errors?: string[];
+  /** Fatal error message */
+  error?: string;
+}
+
+/** Response from POST /api/shopify/theme (action: publish) */
+export interface ThemePublishResponse {
+  success: boolean;
+  error?: string;
+}
+
+/** UI state machine for the deploy modal */
+export type ThemeDeployStatus =
+  | 'idle'
+  | 'connecting'
+  | 'generating-files'
+  | 'creating'
+  | 'uploading'
+  | 'done'
+  | 'publishing'
+  | 'published'
+  | 'error';

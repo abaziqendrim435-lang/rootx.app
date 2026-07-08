@@ -7,6 +7,7 @@ import {
   Globe, ChevronDown, ChevronRight, Edit3, X, Monitor, Tablet, Smartphone,
   ExternalLink, Mail, Phone, MapPin, Star, Quote, ArrowRight, Hash,
   Type, Image as ImageIcon, Layers, Target, PenTool, Briefcase,
+  ShoppingBag, Upload, CheckCircle2, Plug,
 } from 'lucide-react';
 import type {
   WebsiteBuilderInput, WebsiteGeneration, PreferredStyle, AIProvider, ExportFormat,
@@ -14,6 +15,10 @@ import type {
   TestimonialsSection, ContactSection, FooterSection, SEOData, BrandingData, MarketingData,
 } from '@/lib/website-builder-types';
 import { saveGeneration } from '@/lib/dashboard-storage';
+import { generateShopifyTheme } from '@/lib/shopify-theme-generator';
+import type {
+  ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
+} from '@/lib/shopify-types';
 
 // ════════════════════════════════════════════════════════════════
 // Helpers
@@ -905,6 +910,382 @@ function generateTailwindExport(result: WebsiteGeneration, input: WebsiteBuilder
 }
 
 // ════════════════════════════════════════════════════════════════
+// Shopify Deploy Modal
+// ════════════════════════════════════════════════════════════════
+
+const SHOPIFY_CREDS_KEY = 'rootx_shopify_creds_demo';
+
+function ShopifyDeployModal({
+  isOpen,
+  onClose,
+  generation,
+  input,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  generation: WebsiteGeneration;
+  input: WebsiteBuilderInput;
+}) {
+  // Connection
+  const [storeDomain, setStoreDomain] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [shopName, setShopName] = useState('');
+
+  // Deploy state
+  const [deployStatus, setDeployStatus] = useState<ThemeDeployStatus>('idle');
+  const [themeId, setThemeId] = useState<number | null>(null);
+  const [themeName, setThemeName] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [uploadProgress, setUploadProgress] = useState({ uploaded: 0, total: 0 });
+  const [deployError, setDeployError] = useState('');
+  const [fileErrors, setFileErrors] = useState<string[]>([]);
+
+  // Load saved credentials
+  useState(() => {
+    try {
+      const stored = localStorage.getItem(SHOPIFY_CREDS_KEY);
+      if (stored) {
+        const creds = JSON.parse(stored);
+        if (creds.storeDomain) setStoreDomain(creds.storeDomain);
+        if (creds.accessToken) setAccessToken(creds.accessToken);
+        if (creds.shopName) setShopName(creds.shopName);
+      }
+    } catch { /* ignore */ }
+  });
+
+  async function handleDeploy() {
+    if (!storeDomain.trim() || !accessToken.trim()) return;
+
+    setDeployError('');
+    setFileErrors([]);
+
+    // Step 1: Test connection
+    setDeployStatus('connecting');
+    try {
+      const connectRes = await fetch('/api/shopify/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeDomain: storeDomain.trim(), accessToken: accessToken.trim() }),
+      });
+      const connectData = await connectRes.json();
+      if (!connectData.success) throw new Error(connectData.error || 'Connection failed');
+      setShopName(connectData.shopName || storeDomain);
+      // Save credentials
+      try {
+        localStorage.setItem(SHOPIFY_CREDS_KEY, JSON.stringify({
+          storeDomain: storeDomain.trim(),
+          accessToken: accessToken.trim(),
+          shopName: connectData.shopName,
+        }));
+      } catch { /* ignore */ }
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Connection failed');
+      setDeployStatus('error');
+      return;
+    }
+
+    // Step 2: Generate theme files
+    setDeployStatus('generating-files');
+    let files: ShopifyThemeFile[];
+    try {
+      files = generateShopifyTheme(generation, input);
+      setUploadProgress({ uploaded: 0, total: files.length });
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Theme generation failed');
+      setDeployStatus('error');
+      return;
+    }
+
+    // Step 3: Create theme + upload to Shopify
+    setDeployStatus('creating');
+    const name = `${input.businessName || 'RootX'} Theme — ${new Date().toLocaleDateString()}`;
+    setThemeName(name);
+
+    try {
+      const res = await fetch('/api/shopify/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          storeDomain: storeDomain.trim(),
+          accessToken: accessToken.trim(),
+          themeName: name,
+          files,
+        }),
+      });
+      const data: ThemeCreateResponse = await res.json();
+      if (!data.success) throw new Error(data.error || 'Theme upload failed');
+
+      setThemeId(data.themeId ?? null);
+      setPreviewUrl(data.previewUrl ?? '');
+      setThemeName(data.themeName ?? name);
+      setUploadProgress({ uploaded: data.uploadedCount ?? 0, total: data.totalCount ?? files.length });
+      if (data.errors && data.errors.length > 0) setFileErrors(data.errors);
+      setDeployStatus('done');
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Theme upload failed');
+      setDeployStatus('error');
+      return;
+    }
+  }
+
+  async function handlePublish() {
+    if (!themeId) return;
+    setDeployStatus('publishing');
+    try {
+      const res = await fetch('/api/shopify/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'publish',
+          storeDomain: storeDomain.trim(),
+          accessToken: accessToken.trim(),
+          themeId,
+        }),
+      });
+      const data: ThemePublishResponse = await res.json();
+      if (!data.success) throw new Error(data.error || 'Publish failed');
+      setDeployStatus('published');
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Publish failed');
+      setDeployStatus('error');
+    }
+  }
+
+  function handleReset() {
+    setDeployStatus('idle');
+    setThemeId(null);
+    setPreviewUrl('');
+    setDeployError('');
+    setFileErrors([]);
+    setUploadProgress({ uploaded: 0, total: 0 });
+  }
+
+  if (!isOpen) return null;
+
+  const isWorking = ['connecting', 'generating-files', 'creating', 'uploading', 'publishing'].includes(deployStatus);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isWorking) onClose(); }}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl overflow-hidden"
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          boxShadow: '0 32px 64px rgba(0,0,0,0.5)',
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(150,191,71,0.12)', border: '1px solid rgba(150,191,71,0.25)' }}>
+              <ShoppingBag size={20} style={{ color: '#96bf47' }} />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm">Deploy to Shopify</h3>
+              <p className="text-xs" style={{ color: '#71717a' }}>Upload as Shopify Online Store 2.0 theme</p>
+            </div>
+          </div>
+          {!isWorking && (
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', color: '#71717a' }}>
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 flex flex-col gap-4">
+          {/* ── IDLE: Connection form ── */}
+          {deployStatus === 'idle' && (
+            <>
+              {shopName && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                  <CheckCircle2 size={14} style={{ color: '#22c55e' }} />
+                  <span className="text-xs" style={{ color: '#22c55e' }}>Connected to <strong>{shopName}</strong></span>
+                  <button onClick={() => { setShopName(''); setStoreDomain(''); setAccessToken(''); }} className="ml-auto text-xs" style={{ color: '#52525b' }}>Change</button>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Store Domain *</label>
+                <input
+                  type="text"
+                  placeholder="my-store.myshopify.com"
+                  value={storeDomain}
+                  onChange={(e) => setStoreDomain(e.target.value)}
+                  className="input-field w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Admin API Access Token *</label>
+                <input
+                  type="password"
+                  placeholder="shpat_xxxxxxxxxxxxx"
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                  className="input-field w-full"
+                />
+              </div>
+              <p className="text-xs" style={{ color: '#52525b' }}>
+                Requires <strong>write_themes</strong> scope. Your token is stored locally and never shared.
+              </p>
+              <button
+                onClick={handleDeploy}
+                disabled={!storeDomain.trim() || !accessToken.trim()}
+                className="btn-primary w-full"
+                style={{ justifyContent: 'center', opacity: (!storeDomain.trim() || !accessToken.trim()) ? 0.5 : 1 }}
+              >
+                <Upload size={16} /> Deploy Theme to Shopify
+              </button>
+            </>
+          )}
+
+          {/* ── WORKING: Progress ── */}
+          {isWorking && (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(150,191,71,0.1)', border: '1px solid rgba(150,191,71,0.2)' }}>
+                <Loader2 size={28} className="animate-spin" style={{ color: '#96bf47' }} />
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-sm mb-1">
+                  {deployStatus === 'connecting' && 'Connecting to Shopify...'}
+                  {deployStatus === 'generating-files' && 'Generating theme files...'}
+                  {deployStatus === 'creating' && 'Creating theme & uploading files...'}
+                  {deployStatus === 'uploading' && `Uploading files (${uploadProgress.uploaded}/${uploadProgress.total})...`}
+                  {deployStatus === 'publishing' && 'Publishing theme...'}
+                </p>
+                <p className="text-xs" style={{ color: '#71717a' }}>
+                  {deployStatus === 'creating' && 'This may take 30-60 seconds due to Shopify API rate limits.'}
+                  {deployStatus === 'publishing' && 'Making your theme the live store theme.'}
+                  {deployStatus === 'connecting' && 'Verifying your store credentials.'}
+                  {deployStatus === 'generating-files' && 'Converting your website into Shopify Liquid templates.'}
+                </p>
+              </div>
+              {uploadProgress.total > 0 && (
+                <div className="w-full">
+                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.round((uploadProgress.uploaded / uploadProgress.total) * 100)}%`,
+                        background: 'linear-gradient(90deg, #96bf47, #5c8a1f)',
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-center mt-1.5" style={{ color: '#52525b' }}>
+                    {uploadProgress.uploaded} / {uploadProgress.total} files
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── DONE: Success ── */}
+          {(deployStatus === 'done' || deployStatus === 'published') && (
+            <div className="flex flex-col gap-4 py-2">
+              <div className="flex flex-col items-center gap-2 mb-2">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                  <CheckCircle2 size={32} style={{ color: '#22c55e' }} />
+                </div>
+                <p className="font-bold text-lg">
+                  {deployStatus === 'published' ? 'Theme Published! 🎉' : 'Theme Uploaded!'}
+                </p>
+              </div>
+
+              {/* Theme details */}
+              <div className="rounded-xl p-4 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}>
+                {[
+                  { label: 'Theme Name', value: themeName },
+                  { label: 'Theme ID', value: String(themeId) },
+                  { label: 'Store', value: shopName || storeDomain },
+                  { label: 'Files Uploaded', value: `${uploadProgress.uploaded}/${uploadProgress.total}` },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center justify-between text-xs">
+                    <span style={{ color: '#71717a' }}>{row.label}</span>
+                    <span className="font-mono font-bold">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* File errors (non-fatal) */}
+              {fileErrors.length > 0 && (
+                <div className="rounded-xl p-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: '#f59e0b' }}>⚠ {fileErrors.length} file(s) had upload issues:</p>
+                  {fileErrors.slice(0, 5).map((e, i) => (
+                    <p key={i} className="text-xs" style={{ color: '#92400e' }}>{e}</p>
+                  ))}
+                  {fileErrors.length > 5 && <p className="text-xs" style={{ color: '#92400e' }}>...and {fileErrors.length - 5} more</p>}
+                </div>
+              )}
+
+              {/* Preview URL */}
+              {previewUrl && (
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all"
+                  style={{
+                    background: 'rgba(150,191,71,0.1)',
+                    border: '1px solid rgba(150,191,71,0.25)',
+                    color: '#96bf47',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <ExternalLink size={16} /> Preview Theme in Browser
+                </a>
+              )}
+
+              {/* Publish button */}
+              {deployStatus === 'done' && (
+                <button
+                  onClick={handlePublish}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all"
+                  style={{
+                    background: 'linear-gradient(135deg, #96bf47, #5c8a1f)',
+                    color: '#fff',
+                    border: 'none',
+                  }}
+                >
+                  <Globe size={16} /> Publish Theme (Make Live)
+                </button>
+              )}
+
+              {deployStatus === 'published' && (
+                <div className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                  <CheckCircle2 size={16} /> Theme is now your live store theme!
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── ERROR ── */}
+          {deployStatus === 'error' && (
+            <div className="flex flex-col gap-4 py-2">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.25)' }}>
+                  <AlertTriangle size={28} style={{ color: '#ef4444' }} />
+                </div>
+                <p className="font-bold">Deployment Failed</p>
+              </div>
+              <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+                <p className="text-xs" style={{ color: '#fca5a5' }}>{deployError}</p>
+              </div>
+              <button onClick={handleReset} className="btn-primary w-full" style={{ justifyContent: 'center' }}>
+                <RefreshCw size={16} /> Try Again
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
 // Main Component
 // ════════════════════════════════════════════════════════════════
 
@@ -929,6 +1310,7 @@ export default function WebsiteBuilderDemo() {
   const [openFaqs, setOpenFaqs] = useState<Set<number>>(new Set());
   const { copiedId, copy } = useCopy();
   const resultsRef = useRef<HTMLDivElement>(null);
+  const [showShopifyDeploy, setShowShopifyDeploy] = useState(false);
 
   // ── API call ──────────────────────────────────────────────────
   async function handleGenerate(e: React.FormEvent) {
@@ -1806,54 +2188,91 @@ export default function WebsiteBuilderDemo() {
               </div>
             )}
 
-            {/* ═══════ EXPORT TAB ═══════ */}
             {activeTab === 'export' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {([
-                  { format: 'html' as ExportFormat, icon: <Code size={24} style={{ color: '#ef4444' }} />, name: 'HTML', desc: 'Complete standalone HTML page with inline CSS and responsive layout', size: '~25 KB', color: '#ef4444' },
-                  { format: 'react' as ExportFormat, icon: <Layers size={24} style={{ color: '#60a5fa' }} />, name: 'React', desc: 'Functional React component with JSX and inline styles', size: '~18 KB', color: '#60a5fa' },
-                  { format: 'nextjs' as ExportFormat, icon: <Globe size={24} style={{ color: '#f8f8f8' }} />, name: 'Next.js', desc: 'Next.js App Router page with metadata export and SEO', size: '~20 KB', color: '#f8f8f8' },
-                  { format: 'tailwind' as ExportFormat, icon: <Palette size={24} style={{ color: '#06b6d4' }} />, name: 'Tailwind', desc: 'HTML with Tailwind CSS CDN utility classes', size: '~15 KB', color: '#06b6d4' },
-                  { format: 'json' as ExportFormat, icon: <FileJson size={24} style={{ color: '#eab308' }} />, name: 'JSON', desc: 'Raw generation data for custom integrations', size: '~12 KB', color: '#eab308' },
-                ]).map((exp) => (
-                  <div
-                    key={exp.format}
-                    className="rounded-2xl p-5 flex flex-col"
-                    style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', transition: 'border-color 0.25s' }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = `${exp.color}44`)}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)')}
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${exp.color}12`, border: `1px solid ${exp.color}25` }}>
-                        {exp.icon}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold">{exp.name}</h4>
-                        <p className="text-xs" style={{ color: '#52525b' }}>{exp.size}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: '#71717a' }}>{exp.desc}</p>
-                    <button
-                      onClick={() => handleExport(exp.format)}
-                      className="w-full flex items-center justify-center gap-2 text-xs font-bold py-2.5 rounded-lg transition-all"
-                      style={{
-                        background: `${exp.color}12`,
-                        border: `1px solid ${exp.color}25`,
-                        color: exp.color,
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = `${exp.color}20`;
-                        (e.currentTarget as HTMLElement).style.borderColor = `${exp.color}40`;
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = `${exp.color}12`;
-                        (e.currentTarget as HTMLElement).style.borderColor = `${exp.color}25`;
-                      }}
-                    >
-                      <Download size={14} /> Download {exp.name}
-                    </button>
+              <div className="flex flex-col gap-6">
+                {/* Deploy to Shopify — featured card */}
+                <div
+                  className="rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-5"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(150,191,71,0.08) 0%, rgba(92,138,31,0.04) 100%)',
+                    border: '1px solid rgba(150,191,71,0.2)',
+                  }}
+                >
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(150,191,71,0.12)', border: '1px solid rgba(150,191,71,0.25)' }}>
+                    <ShoppingBag size={28} style={{ color: '#96bf47' }} />
                   </div>
-                ))}
+                  <div className="flex-1 text-center sm:text-left">
+                    <h4 className="font-bold text-lg mb-1">Deploy to Shopify</h4>
+                    <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>
+                      Automatically convert your AI-generated website into a full Shopify Online Store 2.0 theme with
+                      homepage, product pages, collections, blog, and more. One-click upload and publish.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowShopifyDeploy(true)}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all flex-shrink-0"
+                    style={{
+                      background: 'linear-gradient(135deg, #96bf47, #5c8a1f)',
+                      color: '#fff',
+                      border: 'none',
+                      boxShadow: '0 4px 16px rgba(150,191,71,0.3)',
+                    }}
+                  >
+                    <Upload size={16} /> Deploy to Shopify
+                  </button>
+                </div>
+
+                {/* Export format cards */}
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#52525b' }}>Download Formats</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {([
+                      { format: 'html' as ExportFormat, icon: <Code size={24} style={{ color: '#ef4444' }} />, name: 'HTML', desc: 'Complete standalone HTML page with inline CSS and responsive layout', size: '~25 KB', color: '#ef4444' },
+                      { format: 'react' as ExportFormat, icon: <Layers size={24} style={{ color: '#60a5fa' }} />, name: 'React', desc: 'Functional React component with JSX and inline styles', size: '~18 KB', color: '#60a5fa' },
+                      { format: 'nextjs' as ExportFormat, icon: <Globe size={24} style={{ color: '#f8f8f8' }} />, name: 'Next.js', desc: 'Next.js App Router page with metadata export and SEO', size: '~20 KB', color: '#f8f8f8' },
+                      { format: 'tailwind' as ExportFormat, icon: <Palette size={24} style={{ color: '#06b6d4' }} />, name: 'Tailwind', desc: 'HTML with Tailwind CSS CDN utility classes', size: '~15 KB', color: '#06b6d4' },
+                      { format: 'json' as ExportFormat, icon: <FileJson size={24} style={{ color: '#eab308' }} />, name: 'JSON', desc: 'Raw generation data for custom integrations', size: '~12 KB', color: '#eab308' },
+                    ]).map((exp) => (
+                      <div
+                        key={exp.format}
+                        className="rounded-2xl p-5 flex flex-col"
+                        style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', transition: 'border-color 0.25s' }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = `${exp.color}44`)}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)')}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${exp.color}12`, border: `1px solid ${exp.color}25` }}>
+                            {exp.icon}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold">{exp.name}</h4>
+                            <p className="text-xs" style={{ color: '#52525b' }}>{exp.size}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: '#71717a' }}>{exp.desc}</p>
+                        <button
+                          onClick={() => handleExport(exp.format)}
+                          className="w-full flex items-center justify-center gap-2 text-xs font-bold py-2.5 rounded-lg transition-all"
+                          style={{
+                            background: `${exp.color}12`,
+                            border: `1px solid ${exp.color}25`,
+                            color: exp.color,
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLElement).style.background = `${exp.color}20`;
+                            (e.currentTarget as HTMLElement).style.borderColor = `${exp.color}40`;
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLElement).style.background = `${exp.color}12`;
+                            (e.currentTarget as HTMLElement).style.borderColor = `${exp.color}25`;
+                          }}
+                        >
+                          <Download size={14} /> Download {exp.name}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1951,6 +2370,16 @@ export default function WebsiteBuilderDemo() {
           40% { transform: scale(1); opacity: 1; }
         }
       `}</style>
+
+      {/* Shopify Deploy Modal */}
+      {result && (
+        <ShopifyDeployModal
+          isOpen={showShopifyDeploy}
+          onClose={() => setShowShopifyDeploy(false)}
+          generation={result}
+          input={input}
+        />
+      )}
     </section>
   );
 }

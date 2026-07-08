@@ -13,7 +13,7 @@ import crypto from 'crypto';
 // then Shopify redirects to /api/shopify/oauth/callback.
 // ============================================================
 
-const SCOPES = 'read_products,write_products';
+const SCOPES = 'read_products,write_products,read_themes,write_themes';
 const COOKIE_NAME = 'rootx_shopify_oauth';
 const COOKIE_MAX_AGE = 600; // 10 minutes — more than enough for the redirect
 
