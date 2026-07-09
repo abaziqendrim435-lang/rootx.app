@@ -203,3 +203,35 @@ export interface WebsiteGeneration {
 // ── Export ──────────────────────────────────────────────────────
 
 export type ExportFormat = 'html' | 'react' | 'nextjs' | 'tailwind' | 'json';
+
+// ── Builder Mode ────────────────────────────────────────────────
+
+export type BuilderMode = 'business' | 'dropshipping';
+
+// ── Product Analysis (Dropshipping) ─────────────────────────────
+
+export interface ProductAnalysis {
+  productTitle: string;
+  productDescription: string;
+  features: string[];
+  sellingPoints: string[];
+  targetAudience: string;
+  category: string;
+  priceRange: string;
+  sourceUrl: string;
+  images: string[];
+  shippingInfo: string;
+  specifications: { label: string; value: string }[];
+  warnings: string[];
+  isPlaceholder: boolean;
+}
+
+export interface DropshippingInput {
+  productUrl: string;
+  storeName: string;
+  preferredStyle: PreferredStyle;
+  primaryColor: string;
+  secondaryColor: string;
+  language: string;
+  country: string;
+}

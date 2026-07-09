@@ -8,11 +8,13 @@ import {
   ExternalLink, Mail, Phone, MapPin, Star, Quote, ArrowRight, Hash,
   Type, Image as ImageIcon, Layers, Target, PenTool, Briefcase,
   ShoppingBag, Upload, CheckCircle2, Plug,
+  Package, Link2, BarChart3, Store, Truck,
 } from 'lucide-react';
 import type {
   WebsiteBuilderInput, WebsiteGeneration, PreferredStyle, AIProvider, ExportFormat,
   HomepageSection, AboutSection, ServicesSection, PricingSection, FAQSection,
   TestimonialsSection, ContactSection, FooterSection, SEOData, BrandingData, MarketingData,
+  BuilderMode, ProductAnalysis, DropshippingInput,
 } from '@/lib/website-builder-types';
 import { saveGeneration } from '@/lib/dashboard-storage';
 import { generateShopifyTheme } from '@/lib/shopify-theme-generator';
@@ -1290,12 +1292,25 @@ function ShopifyDeployModal({
 // ════════════════════════════════════════════════════════════════
 
 export default function WebsiteBuilderDemo() {
-  // Form state
+  // Builder mode
+  const [builderMode, setBuilderMode] = useState<BuilderMode>('business');
+
+  // Form state (business mode)
   const [input, setInput] = useState<WebsiteBuilderInput>({
     businessName: '', businessType: '', targetAudience: '', brandDescription: '',
     preferredStyle: 'modern', primaryColor: '#dc2626', secondaryColor: '#1e40af',
     language: 'English', country: 'United States',
   });
+
+  // Dropshipping state
+  const [productUrl, setProductUrl] = useState('');
+  const [productAnalysis, setProductAnalysis] = useState<ProductAnalysis | null>(null);
+  const [dropInput, setDropInput] = useState<DropshippingInput>({
+    productUrl: '', storeName: '', preferredStyle: 'modern',
+    primaryColor: '#6366f1', secondaryColor: '#06b6d4',
+    language: 'English', country: 'United States',
+  });
+  const [dropStatus, setDropStatus] = useState<'idle' | 'analyzing' | 'analyzed' | 'generating' | 'done' | 'error'>('idle');
 
   // Generation state
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -1389,6 +1404,101 @@ export default function WebsiteBuilderDemo() {
   function handleReset() {
     setStatus('idle');
     setResult(null);
+    setErrorMsg('');
+  }
+
+  // ── Dropshipping handlers ────────────────────────────────────
+
+  async function handleAnalyzeProduct() {
+    if (!productUrl.trim()) return;
+    setDropStatus('analyzing');
+    setErrorMsg('');
+    setProductAnalysis(null);
+    try {
+      const res = await fetch('/api/agents/analyze-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: productUrl.trim(), provider }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Analysis failed');
+      setProductAnalysis(data.analysis);
+      setDropInput((prev) => ({
+        ...prev,
+        productUrl: productUrl.trim(),
+        storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
+      }));
+      setDropStatus('analyzed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Product analysis failed');
+      setDropStatus('error');
+    }
+  }
+
+  async function handleGenerateStore() {
+    if (!productAnalysis || !dropInput.storeName.trim()) return;
+    setDropStatus('generating');
+    setResult(null);
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/agents/dropshipping-store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis: productAnalysis, input: dropInput, provider }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+      const data: WebsiteGeneration = await res.json();
+      setResult(data);
+      setDropStatus('done');
+      setStatus('done');
+      setActiveTab('pages');
+      // Also set input for export compatibility
+      setInput((prev) => ({
+        ...prev,
+        businessName: dropInput.storeName,
+        businessType: productAnalysis.category || 'E-commerce',
+        targetAudience: productAnalysis.targetAudience || 'online shoppers',
+        preferredStyle: dropInput.preferredStyle,
+        primaryColor: dropInput.primaryColor,
+        secondaryColor: dropInput.secondaryColor,
+        language: dropInput.language,
+        country: dropInput.country,
+      }));
+      await saveGeneration({
+        agentType: 'dropshipping-store',
+        agentName: 'Dropshipping Store Builder',
+        agentIcon: '🛍️',
+        inputs: {
+          productUrl: dropInput.productUrl,
+          storeName: dropInput.storeName,
+          product: productAnalysis.productTitle,
+          style: dropInput.preferredStyle,
+        },
+        outputs: {
+          seoTitle: data.seo.title,
+          heroHeadline: data.homepage.hero.headline,
+          provider: data.provider,
+        },
+        isSaved: false,
+      });
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Store generation failed');
+      setDropStatus('error');
+    }
+  }
+
+  function handleDropReset() {
+    setDropStatus('idle');
+    setProductAnalysis(null);
+    setProductUrl('');
+    setResult(null);
+    setStatus('idle');
     setErrorMsg('');
   }
 
@@ -1587,40 +1697,322 @@ export default function WebsiteBuilderDemo() {
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.25)' }}
+            style={{ background: builderMode === 'dropshipping' ? 'rgba(99,102,241,0.15)' : 'rgba(220,38,38,0.15)', border: `1px solid ${builderMode === 'dropshipping' ? 'rgba(99,102,241,0.25)' : 'rgba(220,38,38,0.25)'}` }}
           >
-            <Globe size={18} style={{ color: '#ef4444' }} />
+            {builderMode === 'dropshipping' ? <Package size={18} style={{ color: '#818cf8' }} /> : <Globe size={18} style={{ color: '#ef4444' }} />}
           </div>
           <div>
-            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef4444' }}>
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: builderMode === 'dropshipping' ? '#818cf8' : '#ef4444' }}>
               Live Demo
             </span>
           </div>
         </div>
         <h2 className="text-3xl font-black mb-2">
-          Build Your Website <span className="gradient-text">With AI</span>
+          {builderMode === 'dropshipping'
+            ? <>Build Your Store <span className="gradient-text">From Any Product</span></>
+            : <>Build Your Website <span className="gradient-text">With AI</span></>
+          }
         </h2>
-        <p className="mb-10" style={{ color: '#71717a', maxWidth: '560px' }}>
-          Enter your business details and let AI generate a complete website — pages, branding, SEO, and marketing content — in seconds.
+        <p className="mb-8" style={{ color: '#71717a', maxWidth: '560px' }}>
+          {builderMode === 'dropshipping'
+            ? 'Paste a product URL and let AI generate a complete, high-converting e-commerce storefront — ready to deploy on Shopify.'
+            : 'Enter your business details and let AI generate a complete website — pages, branding, SEO, and marketing content — in seconds.'
+          }
         </p>
 
-        {/* Input Form */}
-        <InputForm input={input} setInput={setInput} status={status} onSubmit={handleGenerate} onReset={handleReset} />
+        {/* ── Mode Switcher ── */}
+        <div className="grid grid-cols-2 gap-4 mb-8 max-w-xl">
+          {([
+            { mode: 'business' as BuilderMode, icon: <Globe size={20} />, title: 'Business Website', desc: 'Full website from business details', color: '#ef4444' },
+            { mode: 'dropshipping' as BuilderMode, icon: <Package size={20} />, title: 'Dropshipping Store', desc: 'E-commerce store from product URL', color: '#818cf8' },
+          ]).map((m) => (
+            <button
+              key={m.mode}
+              type="button"
+              onClick={() => { setBuilderMode(m.mode); handleReset(); handleDropReset(); }}
+              className="flex items-center gap-3 p-4 rounded-2xl text-left transition-all"
+              style={{
+                background: builderMode === m.mode ? `${m.color}12` : 'var(--color-surface)',
+                border: `2px solid ${builderMode === m.mode ? m.color : 'var(--color-border)'}`,
+                cursor: 'pointer',
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: builderMode === m.mode ? `${m.color}20` : 'rgba(255,255,255,0.03)',
+                  color: builderMode === m.mode ? m.color : '#71717a',
+                }}
+              >
+                {m.icon}
+              </div>
+              <div>
+                <p className="text-sm font-bold" style={{ color: builderMode === m.mode ? m.color : '#f8f8f8' }}>{m.title}</p>
+                <p className="text-xs" style={{ color: '#52525b' }}>{m.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
 
-        {/* Loading */}
-        {status === 'loading' && <LoadingSkeleton />}
+        {/* ── Business Mode Form ── */}
+        {builderMode === 'business' && (
+          <>
+            <InputForm input={input} setInput={setInput} status={status} onSubmit={handleGenerate} onReset={handleReset} />
+            {status === 'loading' && <LoadingSkeleton />}
+          </>
+        )}
 
-        {/* Error */}
-        {status === 'error' && (
+        {/* ── Dropshipping Mode Form ── */}
+        {builderMode === 'dropshipping' && (
+          <div className="rounded-2xl p-6 md:p-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+
+            {/* Step 1: Product URL */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                <Link2 size={14} className="inline mr-1.5" style={{ verticalAlign: '-2px' }} />
+                Paste your product or supplier URL <span style={{ color: '#818cf8' }}>*</span>
+              </label>
+              <div className="flex gap-3">
+                <input
+                  type="url"
+                  placeholder="https://www.aliexpress.com/item/... or any product page URL"
+                  value={productUrl}
+                  onChange={(e) => setProductUrl(e.target.value)}
+                  className="input-field flex-1"
+                  disabled={dropStatus === 'analyzing' || dropStatus === 'generating'}
+                />
+                <button
+                  type="button"
+                  onClick={handleAnalyzeProduct}
+                  disabled={!productUrl.trim() || dropStatus === 'analyzing'}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex-shrink-0"
+                  style={{
+                    background: productUrl.trim() ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'rgba(99,102,241,0.06)',
+                    color: productUrl.trim() ? '#fff' : '#52525b',
+                    border: 'none',
+                    boxShadow: productUrl.trim() ? '0 4px 16px rgba(99,102,241,0.3)' : 'none',
+                    opacity: !productUrl.trim() || dropStatus === 'analyzing' ? 0.5 : 1,
+                    cursor: !productUrl.trim() ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {dropStatus === 'analyzing'
+                    ? <><Loader2 size={16} className="animate-spin" /> Analyzing...</>
+                    : <><BarChart3 size={16} /> Analyze Product</>
+                  }
+                </button>
+              </div>
+              <p className="text-xs mt-2" style={{ color: '#52525b' }}>
+                Supports AliExpress, Amazon, Shopify stores, Alibaba, Temu, and any public product page.
+              </p>
+            </div>
+
+            {/* Analyzing skeleton */}
+            {dropStatus === 'analyzing' && (
+              <div className="flex flex-col items-center justify-center py-12 gap-4">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ color: '#818cf8' }} />
+                </div>
+                <div className="text-center">
+                  <p className="font-bold mb-1">Analyzing Product Page...</p>
+                  <p className="text-xs" style={{ color: '#71717a' }}>Extracting product details, features, pricing, and specifications</p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Product Analysis Results */}
+            {productAnalysis && (dropStatus === 'analyzed' || dropStatus === 'generating' || dropStatus === 'done') && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} style={{ color: '#22c55e' }} />
+                    <span className="text-sm font-bold" style={{ color: '#22c55e' }}>Product Analyzed</span>
+                  </div>
+                  <button type="button" onClick={handleDropReset} className="text-xs font-medium px-3 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#71717a' }}>
+                    <RefreshCw size={12} className="inline mr-1" /> Reset
+                  </button>
+                </div>
+
+                {/* Product card */}
+                <div className="rounded-xl p-4 mb-5" style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)' }}>
+                  <h4 className="font-bold mb-2">{productAnalysis.productTitle}</h4>
+                  <p className="text-xs mb-3 leading-relaxed" style={{ color: '#a1a1aa' }}>{productAnalysis.productDescription}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    {[
+                      { label: 'Category', value: productAnalysis.category, icon: <Store size={12} /> },
+                      { label: 'Price', value: productAnalysis.priceRange, icon: <Hash size={12} /> },
+                      { label: 'Audience', value: productAnalysis.targetAudience.slice(0, 30), icon: <Target size={12} /> },
+                      { label: 'Shipping', value: productAnalysis.shippingInfo.slice(0, 30), icon: <Truck size={12} /> },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-lg p-2.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}>
+                        <div className="flex items-center gap-1 mb-1" style={{ color: '#52525b' }}>
+                          {item.icon}
+                          <span className="text-xs">{item.label}</span>
+                        </div>
+                        <p className="text-xs font-bold truncate">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Features & Selling Points */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs font-bold mb-1.5" style={{ color: '#52525b' }}>Features</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {productAnalysis.features.slice(0, 6).map((f, i) => (
+                          <span key={i} className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', color: '#a5b4fc' }}>{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold mb-1.5" style={{ color: '#52525b' }}>Selling Points</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {productAnalysis.sellingPoints.slice(0, 4).map((s, i) => (
+                          <span key={i} className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)', color: '#86efac' }}>{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Warnings */}
+                  {productAnalysis.warnings.length > 0 && (
+                    <div className="mt-3 flex items-start gap-1.5 text-xs" style={{ color: '#eab308' }}>
+                      <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                      <span>{productAnalysis.warnings.join(' · ')}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 3: Store Config */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                      Store Name <span style={{ color: '#818cf8' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="My Awesome Store"
+                      value={dropInput.storeName}
+                      onChange={(e) => setDropInput({ ...dropInput, storeName: e.target.value })}
+                      className="input-field w-full"
+                      disabled={dropStatus === 'generating'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>Style</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(['minimal', 'luxury', 'startup', 'dark', 'modern', 'corporate'] as const).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setDropInput({ ...dropInput, preferredStyle: s })}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all capitalize"
+                          style={{
+                            background: dropInput.preferredStyle === s ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${dropInput.preferredStyle === s ? '#6366f1' : 'var(--color-border)'}`,
+                            color: dropInput.preferredStyle === s ? '#818cf8' : '#71717a',
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: '#52525b' }}>Primary Color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={dropInput.primaryColor} onChange={(e) => setDropInput({ ...dropInput, primaryColor: e.target.value })} className="w-8 h-8 rounded-lg cursor-pointer" style={{ background: 'transparent', border: 'none' }} />
+                      <span className="text-xs font-mono" style={{ color: '#71717a' }}>{dropInput.primaryColor}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: '#52525b' }}>Secondary Color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={dropInput.secondaryColor} onChange={(e) => setDropInput({ ...dropInput, secondaryColor: e.target.value })} className="w-8 h-8 rounded-lg cursor-pointer" style={{ background: 'transparent', border: 'none' }} />
+                      <span className="text-xs font-mono" style={{ color: '#71717a' }}>{dropInput.secondaryColor}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: '#52525b' }}>Language</label>
+                    <select value={dropInput.language} onChange={(e) => setDropInput({ ...dropInput, language: e.target.value })} className="input-field w-full text-xs" style={{ padding: '0.5rem' }}>
+                      {['English', 'Spanish', 'French', 'German', 'Arabic', 'Chinese', 'Japanese'].map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: '#52525b' }}>Country</label>
+                    <input type="text" value={dropInput.country} onChange={(e) => setDropInput({ ...dropInput, country: e.target.value })} className="input-field w-full text-xs" style={{ padding: '0.5rem' }} placeholder="United States" />
+                  </div>
+                </div>
+
+                {/* Generate Store button */}
+                <button
+                  type="button"
+                  onClick={handleGenerateStore}
+                  disabled={!dropInput.storeName.trim() || dropStatus === 'generating'}
+                  className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl text-base font-bold transition-all"
+                  style={{
+                    background: dropInput.storeName.trim() ? 'linear-gradient(135deg, #6366f1, #4f46e5, #7c3aed)' : 'rgba(99,102,241,0.06)',
+                    color: dropInput.storeName.trim() ? '#fff' : '#52525b',
+                    border: 'none',
+                    boxShadow: dropInput.storeName.trim() ? '0 4px 24px rgba(99,102,241,0.3)' : 'none',
+                    opacity: !dropInput.storeName.trim() || dropStatus === 'generating' ? 0.6 : 1,
+                    cursor: !dropInput.storeName.trim() ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {dropStatus === 'generating'
+                    ? <><Loader2 size={20} className="animate-spin" /> Generating Your Store...</>
+                    : <><Store size={20} /> Generate Store</>
+                  }
+                </button>
+              </div>
+            )}
+
+            {/* Generating skeleton */}
+            {dropStatus === 'generating' && (
+              <div className="flex flex-col items-center justify-center py-12 gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                  <Loader2 size={28} className="animate-spin" style={{ color: '#818cf8' }} />
+                </div>
+                <div className="text-center">
+                  <p className="font-bold mb-1">Generating Your E-Commerce Store...</p>
+                  <p className="text-xs" style={{ color: '#71717a' }}>Creating homepage, product page, FAQ, SEO, branding, and marketing content</p>
+                </div>
+              </div>
+            )}
+
+            {/* Idle state — quick start hint */}
+            {dropStatus === 'idle' && (
+              <div className="flex flex-col items-center justify-center py-10 gap-4" style={{ opacity: 0.6 }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.12)' }}>
+                  <Package size={28} style={{ color: '#6366f1' }} />
+                </div>
+                <div className="text-center">
+                  <p className="font-semibold mb-1">Paste a product URL to get started</p>
+                  <p className="text-xs" style={{ color: '#52525b' }}>AliExpress · Amazon · Shopify · Alibaba · Temu · Any public product page</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Error (shared) */}
+        {(status === 'error' || dropStatus === 'error') && (
           <div
             className="mt-8 rounded-2xl p-5 flex items-start gap-4"
             style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)' }}
           >
             <AlertTriangle size={20} style={{ color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
             <div>
-              <p className="font-semibold mb-1" style={{ color: '#ef4444' }}>Generation failed</p>
+              <p className="font-semibold mb-1" style={{ color: '#ef4444' }}>
+                {builderMode === 'dropshipping' ? 'Operation failed' : 'Generation failed'}
+              </p>
               <p className="text-sm" style={{ color: '#a1a1aa' }}>{errorMsg}</p>
-              <button onClick={handleReset} className="btn-secondary mt-3" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
+              <button onClick={builderMode === 'dropshipping' ? handleDropReset : handleReset} className="btn-secondary mt-3" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
                 Try again
               </button>
             </div>
@@ -1634,10 +2026,13 @@ export default function WebsiteBuilderDemo() {
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div>
                 <h3 className="text-xl font-black mb-1">
-                  Website Generated <span style={{ color: '#22c55e' }}>✓</span>
+                  {builderMode === 'dropshipping' ? 'Store Generated' : 'Website Generated'} <span style={{ color: '#22c55e' }}>✓</span>
                 </h3>
                 <p className="text-sm" style={{ color: '#52525b' }}>
-                  Complete website for <strong style={{ color: '#f8f8f8' }}>{input.businessName}</strong> ({input.businessType})
+                  {builderMode === 'dropshipping'
+                    ? <>E-commerce store for <strong style={{ color: '#f8f8f8' }}>{dropInput.storeName || input.businessName}</strong></>
+                    : <>Complete website for <strong style={{ color: '#f8f8f8' }}>{input.businessName}</strong> ({input.businessType})</>
+                  }
                 </p>
               </div>
               <div className="flex items-center gap-2">
