@@ -4,71 +4,28 @@ import type {
   DropshippingInput,
   WebsiteGeneration,
   AIProvider,
-  PreferredStyle,
 } from '@/lib/website-builder-types';
+import {
+  callWithRetryAndFallback,
+  getAvailableProviders,
+} from '@/lib/ai-providers';
 
 // ============================================================
 // POST /api/agents/dropshipping-store
-// Generates: Complete e-commerce storefront from product analysis
+// Generates a complete e-commerce storefront from product analysis.
 //
-// SETUP: Add one of these keys to .env.local:
-//   OPENAI_API_KEY=sk-...
-//   ANTHROPIC_API_KEY=sk-ant-...
-//   GEMINI_API_KEY=AI...
-//
-// Without a key, this route returns a rich mock response so
-// the UI is fully functional for demos.
+// Robust implementation:
+// - Uses response_format: json_object for OpenAI
+// - 8000 max_tokens (large JSON output)
+// - Retry once on parse failure
+// - Automatic fallback to Claude / Gemini if primary fails
+// - Logs raw AI responses for debugging
 // ============================================================
 
 export interface DropshippingStoreRequest {
   analysis: ProductAnalysis;
   input: DropshippingInput;
   provider?: AIProvider;
-}
-
-// ── Helpers ──────────────────────────────────────────────────
-
-/**
- * Strip markdown code fences (```json ... ```) that AI models sometimes
- * wrap around their JSON output, then parse into an object.
- */
-function parseJsonSafe(raw: string): Record<string, unknown> {
-  const cleaned = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
-  return JSON.parse(cleaned);
-}
-
-/**
- * Translate an OpenAI HTTP error status code into a human-readable message.
- */
-function friendlyOpenAIError(status: number, body: string): string {
-  if (status === 401) return 'OpenAI API key is invalid or missing. Check your OPENAI_API_KEY in .env.local.';
-  if (status === 429) return 'OpenAI rate limit or quota exceeded. Check your usage at platform.openai.com.';
-  if (status === 500 || status === 503) return 'OpenAI service is temporarily unavailable. Please try again shortly.';
-  return `OpenAI error ${status}: ${body}`;
-}
-
-/**
- * Translate a Claude HTTP error status code into a human-readable message.
- */
-function friendlyClaudeError(status: number, body: string): string {
-  if (status === 401) return 'Anthropic API key is invalid or missing. Check your ANTHROPIC_API_KEY in .env.local.';
-  if (status === 429) return 'Anthropic rate limit or quota exceeded. Check your usage at console.anthropic.com.';
-  if (status === 500 || status === 503) return 'Anthropic service is temporarily unavailable. Please try again shortly.';
-  return `Anthropic error ${status}: ${body}`;
-}
-
-/**
- * Translate a Gemini HTTP error status code into a human-readable message.
- */
-function friendlyGeminiError(status: number, body: string): string {
-  if (status === 401 || status === 403) return 'Gemini API key is invalid or missing. Check your GEMINI_API_KEY in .env.local.';
-  if (status === 429) return 'Gemini rate limit or quota exceeded. Check your usage at aistudio.google.com.';
-  if (status === 500 || status === 503) return 'Gemini service is temporarily unavailable. Please try again shortly.';
-  return `Gemini error ${status}: ${body}`;
 }
 
 // ── Shared prompt ───────────────────────────────────────────
@@ -91,7 +48,7 @@ Secondary Color: ${input.secondaryColor}
 Language: ${input.language || 'English'}
 Country: ${input.country || 'US'}
 
-Generate a JSON response with exactly this structure:
+You MUST respond with a JSON object using exactly this structure:
 {
   "homepage": {
     "hero": {
@@ -146,14 +103,14 @@ Generate a JSON response with exactly this structure:
     "title": "FAQ section title",
     "subtitle": "FAQ section subtitle",
     "items": [
-      { "question": "Product-specific question (shipping times, returns, sizing, materials, warranty)?", "answer": "Detailed, helpful answer (2-3 sentences)" }
+      { "question": "Product-specific question?", "answer": "Detailed, helpful answer (2-3 sentences)" }
     ]
   },
   "testimonials": {
     "title": "Testimonials section title",
     "subtitle": "Testimonials section subtitle",
     "testimonials": [
-      { "name": "Full Name", "role": "Customer type", "company": "Location or context", "quote": "Detailed testimonial quote (2-3 sentences). MUST end with: (Example — replace with verified review)", "rating": 5 }
+      { "name": "Full Name", "role": "Customer type", "company": "Location or context", "quote": "Detailed testimonial quote. MUST end with: (Example — replace with verified review)", "rating": 5 }
     ]
   },
   "contact": {
@@ -163,7 +120,7 @@ Generate a JSON response with exactly this structure:
     "phone": "+1 (555) 000-0000",
     "address": "Full business address",
     "formFields": [
-      { "label": "Field label", "type": "text|email|textarea|tel", "placeholder": "Placeholder text", "required": true }
+      { "label": "Field label", "type": "text", "placeholder": "Placeholder text", "required": true }
     ]
   },
   "footer": {
@@ -177,9 +134,9 @@ Generate a JSON response with exactly this structure:
     "tagline": "A memorable store tagline"
   },
   "seo": {
-    "title": "SEO-optimized page title with product long-tail keywords (50-60 chars)",
+    "title": "SEO-optimized page title (50-60 chars)",
     "metaDescription": "Compelling product meta description (150-160 chars)",
-    "keywords": ["long-tail keyword 1", "long-tail keyword 2", "..."],
+    "keywords": ["keyword 1", "keyword 2"],
     "ogTitle": "Open Graph title",
     "ogDescription": "Open Graph description",
     "ogImagePrompt": "AI image generation prompt for the product OG image",
@@ -202,159 +159,41 @@ Generate a JSON response with exactly this structure:
     "logoDescription": "Detailed description of the ideal store logo design"
   },
   "marketing": {
-    "googleAdsHeadlines": ["Product-specific headline 1 (30 chars max)", "Headline 2", "Headline 3", "Headline 4", "Headline 5"],
-    "googleAdsDescriptions": ["Product ad description 1 (90 chars max)", "Description 2", "Description 3"],
-    "facebookAdCopy": "Full Facebook ad copy with product hook, benefits, and CTA",
-    "instagramCaption": "Engaging Instagram caption with product emojis and hashtags",
-    "linkedInPost": "Professional LinkedIn post about the product",
-    "twitterPost": "Concise Twitter/X post about the product (280 chars max)",
+    "googleAdsHeadlines": ["Headline 1", "Headline 2", "Headline 3", "Headline 4", "Headline 5"],
+    "googleAdsDescriptions": ["Description 1", "Description 2", "Description 3"],
+    "facebookAdCopy": "Full Facebook ad copy",
+    "instagramCaption": "Engaging Instagram caption",
+    "linkedInPost": "Professional LinkedIn post",
+    "twitterPost": "Concise Twitter/X post (280 chars max)",
     "emailCampaign": {
-      "subject": "Product email subject line",
-      "preheader": "Product email preheader text",
-      "body": "Full product launch email body content",
+      "subject": "Email subject line",
+      "preheader": "Email preheader text",
+      "body": "Full email body content",
       "cta": "Email CTA button text"
     }
   }
 }
 
 Requirements:
-- Generate 6 product benefit features for the homepage using the provided features and selling points
-- Generate 4 "Why Choose Us" items with 4 features each (Quality Guarantee, Fast Shipping, Easy Returns, Customer Support)
-- Generate 3 pricing tiers (Single, Bundle, Value Pack) using the analysis price range ${analysis.priceRange}
-- Generate 8 product-specific FAQ items covering shipping times, returns, sizing, materials, warranty
-- Generate 4 placeholder testimonials — each testimonial quote MUST end with " (Example — replace with verified review)"
+- Generate 6 product benefit features for the homepage
+- Generate 4 "Why Choose Us" items with 4 features each
+- Generate 3 pricing tiers (Single, Bundle, Value Pack) using price range ${analysis.priceRange}
+- Generate 8 product-specific FAQ items
+- Generate 4 placeholder testimonials — each quote MUST end with " (Example — replace with verified review)"
 - Generate 4 contact form fields
 - Generate 4 footer columns (Shop, Support, Policies, About)
-- Generate 8 product-specific SEO keywords (long-tail)
-- Generate 6 color palette entries using the provided primary (${input.primaryColor}) and secondary (${input.secondaryColor}) colors
-- Generate 6 icon suggestions relevant to the product
-- Generate 5 Google Ads headlines and 3 descriptions for the product
-- All content must be tailored to the ${analysis.category} category and ${analysis.targetAudience} audience
-- Use the ${input.preferredStyle} style tone throughout
-- Content should be in ${input.language || 'English'}
+- Generate 8 product-specific SEO keywords
+- Generate 6 color palette entries using primary (${input.primaryColor}) and secondary (${input.secondaryColor})
+- Generate 6 icon suggestions
+- Generate 5 Google Ads headlines and 3 descriptions
+- All content tailored to ${analysis.category} category and ${analysis.targetAudience} audience
+- Use ${input.preferredStyle} style tone throughout
+- Content in ${input.language || 'English'}
 - Do NOT fabricate sales numbers, ratings, or unverified claims
-- Respond ONLY with valid JSON. No markdown, no backticks.`;
+- Respond ONLY with the JSON object. No markdown, no code fences, no explanatory text.`;
 }
 
-// ── OpenAI call ─────────────────────────────────────────────
-
-async function generateWithOpenAI(
-  analysis: ProductAnalysis,
-  input: DropshippingInput,
-  apiKey: string
-): Promise<WebsiteGeneration> {
-  const prompt = buildDropshippingPrompt(analysis, input);
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.8,
-      max_tokens: 4000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(friendlyOpenAIError(response.status, errBody));
-  }
-
-  const data = await response.json();
-  const raw = data.choices?.[0]?.message?.content ?? '{}';
-
-  try {
-    const parsed = parseJsonSafe(raw);
-    return { ...parsed, isDemo: false, provider: 'openai' } as WebsiteGeneration;
-  } catch {
-    throw new Error('OpenAI returned an unexpected response format. Please try again.');
-  }
-}
-
-// ── Claude call ─────────────────────────────────────────────
-
-async function generateWithClaude(
-  analysis: ProductAnalysis,
-  input: DropshippingInput,
-  apiKey: string
-): Promise<WebsiteGeneration> {
-  const prompt = buildDropshippingPrompt(analysis, input);
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'x-api-key': apiKey,
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 4000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(friendlyClaudeError(response.status, errBody));
-  }
-
-  const data = await response.json();
-  const raw = data.content?.[0]?.text ?? '{}';
-
-  try {
-    const parsed = parseJsonSafe(raw);
-    return { ...parsed, isDemo: false, provider: 'claude' } as WebsiteGeneration;
-  } catch {
-    throw new Error('Claude returned an unexpected response format. Please try again.');
-  }
-}
-
-// ── Gemini call ─────────────────────────────────────────────
-
-async function generateWithGemini(
-  analysis: ProductAnalysis,
-  input: DropshippingInput,
-  apiKey: string
-): Promise<WebsiteGeneration> {
-  const prompt = buildDropshippingPrompt(analysis, input);
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 4000,
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(friendlyGeminiError(response.status, errBody));
-  }
-
-  const data = await response.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-
-  try {
-    const parsed = parseJsonSafe(raw);
-    return { ...parsed, isDemo: false, provider: 'gemini' } as WebsiteGeneration;
-  } catch {
-    throw new Error('Gemini returned an unexpected response format. Please try again.');
-  }
-}
-
-// ── Mock response (no API key needed) ──────────────────────
+// ── Mock response ──────────────────────────────────────────
 
 function getMockDropshippingResponse(analysis: ProductAnalysis, input: DropshippingInput): WebsiteGeneration {
   const store = input.storeName || 'Premium Store';
@@ -369,7 +208,6 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
   const primary = input.primaryColor || '#dc2626';
   const secondary = input.secondaryColor || '#1e40af';
   const style = input.preferredStyle || 'modern';
-  const lang = input.language || 'English';
   const country = input.country || 'US';
   const slug = store.toLowerCase().replace(/\s+/g, '-');
 
@@ -690,6 +528,8 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
 
 // ── Route handler ────────────────────────────────────────────
 
+const LOG = '[/api/agents/dropshipping-store]';
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as DropshippingStoreRequest;
@@ -702,7 +542,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build the full input with defaults
+    // Sanitize inputs
     const sanitizedInput: DropshippingInput = {
       productUrl: input.productUrl || '',
       storeName: input.storeName.trim(),
@@ -729,65 +569,45 @@ export async function POST(req: NextRequest) {
       isPlaceholder: analysis.isPlaceholder ?? false,
     };
 
-    // Determine which API key to check based on provider
+    // Check if any provider is available
     const selectedProvider = provider || 'openai';
-    const keyMap: Record<AIProvider, string | undefined> = {
-      openai: process.env.OPENAI_API_KEY,
-      claude: process.env.ANTHROPIC_API_KEY,
-      gemini: process.env.GEMINI_API_KEY,
-    };
+    const available = getAvailableProviders(selectedProvider);
 
-    const apiKey = keyMap[selectedProvider];
-    const isPlaceholder =
-      !apiKey ||
-      apiKey.startsWith('sk-your') ||
-      apiKey.startsWith('sk-ant-your') ||
-      apiKey === 'YOUR_KEY_HERE';
-
-    // No key → return rich mock
-    if (isPlaceholder) {
-      console.log('[/api/agents/dropshipping-store] No valid API key found, returning demo response');
+    if (available.length === 0) {
+      console.log(`${LOG} No valid API key found, returning demo response`);
       await new Promise((r) => setTimeout(r, 1500));
       return NextResponse.json(getMockDropshippingResponse(sanitizedAnalysis, sanitizedInput));
     }
 
-    // Real AI call
-    console.log(`[/api/agents/dropshipping-store] Generating with ${selectedProvider}`);
+    // Build prompt and call AI with retry + fallback
+    const prompt = buildDropshippingPrompt(sanitizedAnalysis, sanitizedInput);
+    console.log(`${LOG} Generating with preferred: ${selectedProvider}, available: ${available.map(p => p.provider).join(', ')}`);
 
-    let result: WebsiteGeneration;
+    const { parsed, provider: usedProvider } = await callWithRetryAndFallback(
+      prompt,
+      selectedProvider,
+      8000,
+      LOG,
+      0.8,
+    );
 
-    switch (selectedProvider) {
-      case 'claude':
-        result = await generateWithClaude(sanitizedAnalysis, sanitizedInput, apiKey);
-        break;
-      case 'gemini':
-        result = await generateWithGemini(sanitizedAnalysis, sanitizedInput, apiKey);
-        break;
-      case 'openai':
-      default:
-        result = await generateWithOpenAI(sanitizedAnalysis, sanitizedInput, apiKey);
-        break;
-    }
+    console.log(`${LOG} Generation complete via ${usedProvider}`);
 
-    console.log(`[/api/agents/dropshipping-store] Generation complete via ${selectedProvider}`);
+    // Merge AI output with metadata
+    const result: WebsiteGeneration = {
+      ...(parsed as unknown as WebsiteGeneration),
+      isDemo: false,
+      provider: usedProvider,
+    };
+
     return NextResponse.json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error occurred';
-    console.error('[/api/agents/dropshipping-store]', message);
-
-    // Distinguish between provider-specific errors (502) and internal errors (500)
-    const isProviderError =
-      message.includes('OpenAI') ||
-      message.includes('Anthropic') ||
-      message.includes('Gemini') ||
-      message.includes('rate limit') ||
-      message.includes('API key') ||
-      message.includes('unexpected response') ||
-      message.includes('temporarily unavailable');
+    console.error(`${LOG} FATAL:`, message);
 
     return NextResponse.json(
       { error: message },
-      { status: isProviderError ? 502 : 500 }
+      { status: 502 }
     );
   }
 }

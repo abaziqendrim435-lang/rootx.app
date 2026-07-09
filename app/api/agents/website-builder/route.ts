@@ -1,66 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { WebsiteBuilderInput, WebsiteGeneration, AIProvider } from '@/lib/website-builder-types';
+import {
+  callWithRetryAndFallback,
+  getAvailableProviders,
+} from '@/lib/ai-providers';
 
 // ============================================================
 // POST /api/agents/website-builder
 // Generates: Full website content, SEO, branding, marketing
 //
-// SETUP: Add one of these keys to .env.local:
-//   OPENAI_API_KEY=sk-...
-//   ANTHROPIC_API_KEY=sk-ant-...
-//   GEMINI_API_KEY=AI...
-//
-// Without a key, this route returns a rich mock response so
-// the UI is fully functional for demos.
+// Robust implementation:
+// - Uses response_format: json_object for OpenAI
+// - 8000 max_tokens
+// - Retry once on parse failure
+// - Automatic fallback to alternative providers
 // ============================================================
 
 export interface WebsiteBuilderRequest extends WebsiteBuilderInput {
   provider?: AIProvider;
-}
-
-// ── Helpers ──────────────────────────────────────────────────
-
-/**
- * Strip markdown code fences (```json ... ```) that AI models sometimes
- * wrap around their JSON output, then parse into an object.
- */
-function parseJsonSafe(raw: string): Record<string, unknown> {
-  const cleaned = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
-  return JSON.parse(cleaned);
-}
-
-/**
- * Translate an OpenAI HTTP error status code into a human-readable message.
- */
-function friendlyOpenAIError(status: number, body: string): string {
-  if (status === 401) return 'OpenAI API key is invalid or missing. Check your OPENAI_API_KEY in .env.local.';
-  if (status === 429) return 'OpenAI rate limit or quota exceeded. Check your usage at platform.openai.com.';
-  if (status === 500 || status === 503) return 'OpenAI service is temporarily unavailable. Please try again shortly.';
-  return `OpenAI error ${status}: ${body}`;
-}
-
-/**
- * Translate a Claude HTTP error status code into a human-readable message.
- */
-function friendlyClaudeError(status: number, body: string): string {
-  if (status === 401) return 'Anthropic API key is invalid or missing. Check your ANTHROPIC_API_KEY in .env.local.';
-  if (status === 429) return 'Anthropic rate limit or quota exceeded. Check your usage at console.anthropic.com.';
-  if (status === 500 || status === 503) return 'Anthropic service is temporarily unavailable. Please try again shortly.';
-  return `Anthropic error ${status}: ${body}`;
-}
-
-/**
- * Translate a Gemini HTTP error status code into a human-readable message.
- */
-function friendlyGeminiError(status: number, body: string): string {
-  if (status === 401 || status === 403) return 'Gemini API key is invalid or missing. Check your GEMINI_API_KEY in .env.local.';
-  if (status === 429) return 'Gemini rate limit or quota exceeded. Check your usage at aistudio.google.com.';
-  if (status === 500 || status === 503) return 'Gemini service is temporarily unavailable. Please try again shortly.';
-  return `Gemini error ${status}: ${body}`;
 }
 
 // ── Shared prompt ───────────────────────────────────────────
@@ -223,120 +180,7 @@ Requirements:
 - Respond ONLY with valid JSON. No markdown, no backticks.`;
 }
 
-// ── OpenAI call ─────────────────────────────────────────────
 
-async function generateWithOpenAI(
-  input: WebsiteBuilderInput,
-  apiKey: string
-): Promise<WebsiteGeneration> {
-  const prompt = buildPrompt(input);
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.8,
-      max_tokens: 4000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(friendlyOpenAIError(response.status, errBody));
-  }
-
-  const data = await response.json();
-  const raw = data.choices?.[0]?.message?.content ?? '{}';
-
-  try {
-    const parsed = parseJsonSafe(raw);
-    return { ...parsed, isDemo: false, provider: 'openai' } as WebsiteGeneration;
-  } catch {
-    throw new Error('OpenAI returned an unexpected response format. Please try again.');
-  }
-}
-
-// ── Claude call ─────────────────────────────────────────────
-
-async function generateWithClaude(
-  input: WebsiteBuilderInput,
-  apiKey: string
-): Promise<WebsiteGeneration> {
-  const prompt = buildPrompt(input);
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'x-api-key': apiKey,
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 4000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(friendlyClaudeError(response.status, errBody));
-  }
-
-  const data = await response.json();
-  const raw = data.content?.[0]?.text ?? '{}';
-
-  try {
-    const parsed = parseJsonSafe(raw);
-    return { ...parsed, isDemo: false, provider: 'claude' } as WebsiteGeneration;
-  } catch {
-    throw new Error('Claude returned an unexpected response format. Please try again.');
-  }
-}
-
-// ── Gemini call ─────────────────────────────────────────────
-
-async function generateWithGemini(
-  input: WebsiteBuilderInput,
-  apiKey: string
-): Promise<WebsiteGeneration> {
-  const prompt = buildPrompt(input);
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 4000,
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(friendlyGeminiError(response.status, errBody));
-  }
-
-  const data = await response.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-
-  try {
-    const parsed = parseJsonSafe(raw);
-    return { ...parsed, isDemo: false, provider: 'gemini' } as WebsiteGeneration;
-  } catch {
-    throw new Error('Gemini returned an unexpected response format. Please try again.');
-  }
-}
 
 // ── Mock response (no API key needed) ──────────────────────
 
@@ -661,7 +505,7 @@ function getMockResponse(input: WebsiteBuilderInput): WebsiteGeneration {
   };
 }
 
-// ── Route handler ────────────────────────────────────────────
+const LOG = '[/api/agents/website-builder]';
 
 export async function POST(req: NextRequest) {
   try {
@@ -688,65 +532,44 @@ export async function POST(req: NextRequest) {
       country: body.country?.trim() || 'US',
     };
 
-    // Determine which API key to check based on provider
+    // Check if any provider is available
     const selectedProvider = provider || 'openai';
-    const keyMap: Record<AIProvider, string | undefined> = {
-      openai: process.env.OPENAI_API_KEY,
-      claude: process.env.ANTHROPIC_API_KEY,
-      gemini: process.env.GEMINI_API_KEY,
-    };
+    const available = getAvailableProviders(selectedProvider);
 
-    const apiKey = keyMap[selectedProvider];
-    const isPlaceholder =
-      !apiKey ||
-      apiKey.startsWith('sk-your') ||
-      apiKey.startsWith('sk-ant-your') ||
-      apiKey === 'YOUR_KEY_HERE';
-
-    // No key → return rich mock
-    if (isPlaceholder) {
-      console.log('[/api/agents/website-builder] No valid API key found, returning demo response');
+    if (available.length === 0) {
+      console.log(`${LOG} No valid API key found, returning demo response`);
       await new Promise((r) => setTimeout(r, 1500));
       return NextResponse.json(getMockResponse(input));
     }
 
-    // Real AI call
-    console.log(`[/api/agents/website-builder] Generating with ${selectedProvider}`);
+    // Build prompt and call AI with retry + fallback
+    const prompt = buildPrompt(input);
+    console.log(`${LOG} Generating with preferred: ${selectedProvider}, available: ${available.map(p => p.provider).join(', ')}`);
 
-    let result: WebsiteGeneration;
+    const { parsed, provider: usedProvider } = await callWithRetryAndFallback(
+      prompt,
+      selectedProvider,
+      8000,
+      LOG,
+      0.8,
+    );
 
-    switch (selectedProvider) {
-      case 'claude':
-        result = await generateWithClaude(input, apiKey);
-        break;
-      case 'gemini':
-        result = await generateWithGemini(input, apiKey);
-        break;
-      case 'openai':
-      default:
-        result = await generateWithOpenAI(input, apiKey);
-        break;
-    }
+    console.log(`${LOG} Generation complete via ${usedProvider}`);
 
-    console.log(`[/api/agents/website-builder] Generation complete via ${selectedProvider}`);
+    const result: WebsiteGeneration = {
+      ...(parsed as unknown as WebsiteGeneration),
+      isDemo: false,
+      provider: usedProvider,
+    };
+
     return NextResponse.json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error occurred';
-    console.error('[/api/agents/website-builder]', message);
-
-    // Distinguish between provider-specific errors (502) and internal errors (500)
-    const isProviderError =
-      message.includes('OpenAI') ||
-      message.includes('Anthropic') ||
-      message.includes('Gemini') ||
-      message.includes('rate limit') ||
-      message.includes('API key') ||
-      message.includes('unexpected response') ||
-      message.includes('temporarily unavailable');
+    console.error(`${LOG} FATAL:`, message);
 
     return NextResponse.json(
       { error: message },
-      { status: isProviderError ? 502 : 500 }
+      { status: 502 }
     );
   }
 }
