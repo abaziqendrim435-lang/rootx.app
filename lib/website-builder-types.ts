@@ -12,7 +12,7 @@ export type PreferredStyle =
   | 'modern'
   | 'corporate';
 
-export type AIProvider = 'openai' | 'claude' | 'gemini';
+export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'auto';
 
 export interface WebsiteBuilderInput {
   businessName: string;
@@ -224,6 +224,8 @@ export interface ProductAnalysis {
   specifications: { label: string; value: string }[];
   warnings: string[];
   isPlaceholder: boolean;
+  ratings?: number;
+  reviewCount?: number;
 }
 
 export interface DropshippingInput {

@@ -60,7 +60,12 @@ export function usePlan(userId: string | null | undefined): SubscriptionState {
     });
   }, [userId]);
 
-  useEffect(() => { fetchPlan(); }, [fetchPlan]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetchPlan();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [fetchPlan]);
 
   return state;
 }

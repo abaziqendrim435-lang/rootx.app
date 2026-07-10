@@ -95,7 +95,10 @@ export default function AdminDashboard({ requests: supabaseRequests, isDemo }: A
 
   // Load localStorage on mount
   useEffect(() => {
-    setLocalRequests(loadLocalRequests());
+    const t = setTimeout(() => {
+      setLocalRequests(loadLocalRequests());
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   function refresh() {
@@ -235,7 +238,7 @@ export default function AdminDashboard({ requests: supabaseRequests, isDemo }: A
           >
             <HardDrive size={16} className="flex-shrink-0 mt-0.5" />
             <span>
-              Showing requests submitted via the marketplace and request form. These are stored in your browser's localStorage.
+              Showing requests submitted via the marketplace and request form. These are stored in your browser&apos;s localStorage.
               {localRequests.length === 0 && ' Go to the Agents page and submit a request to see it here.'}
             </span>
           </div>

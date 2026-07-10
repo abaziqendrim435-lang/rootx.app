@@ -537,6 +537,62 @@ function ProductGrid({ products, loading, error, onSelect, onRefresh }: {
   );
 }
 
+interface ComparisonFieldProps {
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+  before: string;
+  after: string;
+  fieldId: string;
+  editValue?: string;
+  onEditChange?: (v: string) => void;
+  multiline?: boolean;
+  editMode: boolean;
+  copiedId: string | null;
+  copy: (t: string, k: string) => void;
+}
+
+function ComparisonField({
+  label, icon, color, before, after, fieldId, editValue, onEditChange, multiline,
+  editMode, copiedId, copy
+}: ComparisonFieldProps) {
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+      <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
+        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+        <span style={{ color }}>{icon}</span>
+        <span style={{ color }}>{label}</span>
+        <CopyBtn text={after} id={fieldId} copiedId={copiedId} onCopy={copy} size="xs" />
+      </div>
+      <div className="grid grid-cols-2">
+        <div className="px-4 py-3" style={{ background: 'rgba(255,255,255,0.01)', borderRight: '1px solid var(--color-border)' }}>
+          <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: '#3f3f46' }}>Before</p>
+          <p className="text-sm leading-relaxed" style={{ color: '#71717a' }}>
+            {before || <span style={{ color: '#27272a', fontStyle: 'italic' }}>Empty</span>}
+          </p>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: '#22c55e' }}>After (AI)</p>
+          {editMode && onEditChange ? (
+            multiline ? (
+              <textarea value={editValue ?? after} onChange={(e) => onEditChange(e.target.value)}
+                className="w-full text-sm bg-transparent outline-none resize-none leading-relaxed"
+                style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem', minHeight: '80px' }}
+                rows={4} />
+            ) : (
+              <input type="text" value={editValue ?? after} onChange={(e) => onEditChange(e.target.value)}
+                className="w-full text-sm bg-transparent outline-none leading-relaxed"
+                style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem' }} />
+            )
+          ) : (
+            <p className="text-sm leading-relaxed">{after}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
 // GenerationModal (UPDATED with AI agent features)
 // ════════════════════════════════════════════════════════════════
@@ -647,47 +703,6 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
     }
   }
 
-  function ComparisonField({ label, icon, color, before, after, fieldId, editValue, onEditChange, multiline }: {
-    label: string; icon: React.ReactNode; color: string; before: string; after: string;
-    fieldId: string; editValue?: string; onEditChange?: (v: string) => void; multiline?: boolean;
-  }) {
-    return (
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-        <div className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-widest"
-          style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-          <span style={{ color }}>{icon}</span>
-          <span style={{ color }}>{label}</span>
-          <CopyBtn text={after} id={fieldId} copiedId={copiedId} onCopy={copy} size="xs" />
-        </div>
-        <div className="grid grid-cols-2">
-          <div className="px-4 py-3" style={{ background: 'rgba(255,255,255,0.01)', borderRight: '1px solid var(--color-border)' }}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: '#3f3f46' }}>Before</p>
-            <p className="text-sm leading-relaxed" style={{ color: '#71717a' }}>
-              {before || <span style={{ color: '#27272a', fontStyle: 'italic' }}>Empty</span>}
-            </p>
-          </div>
-          <div className="px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: '#22c55e' }}>After (AI)</p>
-            {editMode && onEditChange ? (
-              multiline ? (
-                <textarea value={editValue ?? after} onChange={(e) => onEditChange(e.target.value)}
-                  className="w-full text-sm bg-transparent outline-none resize-none leading-relaxed"
-                  style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem', minHeight: '80px' }}
-                  rows={4} />
-              ) : (
-                <input type="text" value={editValue ?? after} onChange={(e) => onEditChange(e.target.value)}
-                  className="w-full text-sm bg-transparent outline-none leading-relaxed"
-                  style={{ border: '1px solid rgba(220,38,38,0.2)', borderRadius: '0.5rem', padding: '0.5rem' }} />
-              )
-            ) : (
-              <p className="text-sm leading-relaxed">{after}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const img = product.images?.[0]?.src;
 
   return (
@@ -792,6 +807,7 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
                 label="TITLE" icon={<FileText size={14} />} color="#ef4444"
                 before={product.title} after={result.title}
                 fieldId="gen-title" editValue={editedTitle} onEditChange={setEditedTitle}
+                editMode={editMode} copiedId={copiedId} copy={copy}
               />
 
               {/* ── Description comparison ───────────── */}
@@ -799,6 +815,7 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
                 label="DESCRIPTION" icon={<FileText size={14} />} color="#60a5fa"
                 before={product.body_html || ''} after={result.bodyHtml}
                 fieldId="gen-body" editValue={editedBody} onEditChange={setEditedBody} multiline
+                editMode={editMode} copiedId={copiedId} copy={copy}
               />
 
               {/* ── Tags ──────────────────────────────── */}
@@ -1335,22 +1352,34 @@ export default function ShopifyAgentDemo() {
   }, [credentials]);
 
   useEffect(() => {
-    if (credentials) fetchProducts();
+    if (credentials) {
+      const t = setTimeout(() => {
+        fetchProducts();
+      }, 0);
+      return () => clearTimeout(t);
+    }
   }, [credentials, fetchProducts]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('shopify_error');
-    if (err) { setOauthError(err); window.history.replaceState({}, '', window.location.pathname); }
     const sd = params.get('shopify_domain');
     const st = params.get('shopify_token');
     const sn = params.get('shopify_name');
-    if (sd && st) {
-      const creds: ShopifyCredentials = { storeDomain: sd, accessToken: st, shopName: sn || undefined };
-      setStored(creds);
-      setCredentials(creds);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+
+    const t = setTimeout(() => {
+      if (err) {
+        setOauthError(err);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      if (sd && st) {
+        const creds: ShopifyCredentials = { storeDomain: sd, accessToken: st, shopName: sn || undefined };
+        setStored(creds);
+        setCredentials(creds);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   function handleConnected(creds: ShopifyCredentials) {

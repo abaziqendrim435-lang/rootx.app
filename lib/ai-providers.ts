@@ -1,20 +1,24 @@
 // ============================================================
 // RootX — Shared AI Provider Utilities
 // Robust JSON parsing, retry, fallback provider chain
+// Supports: OpenAI, Claude, Gemini, Kimi, Auto Best
 // ============================================================
 
 import type { AIProvider } from '@/lib/website-builder-types';
 
 // ── Types ────────────────────────────────────────────────────
 
+/** A concrete provider (excludes 'auto') */
+export type ConcreteProvider = Exclude<AIProvider, 'auto'>;
+
 export interface ProviderConfig {
-  provider: AIProvider;
+  provider: ConcreteProvider;
   apiKey: string;
 }
 
 export interface CallResult {
   raw: string;
-  provider: AIProvider;
+  provider: ConcreteProvider;
 }
 
 // ── JSON Parsing ─────────────────────────────────────────────
@@ -93,8 +97,15 @@ function fixTrailingCommas(json: string): string {
 
 // ── Error Helpers ────────────────────────────────────────────
 
-export function friendlyError(provider: AIProvider, status: number, body: string): string {
-  const providerName = { openai: 'OpenAI', claude: 'Anthropic', gemini: 'Gemini' }[provider];
+const PROVIDER_NAMES: Record<ConcreteProvider, string> = {
+  openai: 'OpenAI',
+  claude: 'Anthropic',
+  gemini: 'Gemini',
+  kimi: 'Kimi (Moonshot)',
+};
+
+export function friendlyError(provider: ConcreteProvider, status: number, body: string): string {
+  const providerName = PROVIDER_NAMES[provider] || provider;
   if (status === 401 || status === 403)
     return `${providerName} API key is invalid or missing.`;
   if (status === 429)
@@ -229,16 +240,75 @@ export async function callGemini(
   return raw;
 }
 
+/**
+ * Call Kimi (Moonshot AI) — OpenAI-compatible API.
+ * Uses model: kimi-k2 with long context window.
+ * Endpoint: https://api.moonshot.ai/v1/chat/completions
+ */
+export async function callKimi(
+  prompt: string,
+  apiKey: string,
+  maxTokens: number = 8000,
+  temperature: number = 0.7,
+): Promise<string> {
+  const response = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'kimi-k2',
+      messages: [
+        { role: 'system', content: 'You are a JSON-only response generator. Always respond with valid JSON. Never include markdown formatting, code fences, or explanatory text.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(friendlyError('kimi', response.status, errBody));
+  }
+
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content;
+
+  if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
+    const finish = data.choices?.[0]?.finish_reason ?? 'unknown';
+    throw new Error(`Kimi returned empty content (finish_reason: ${finish}). The prompt may be too large.`);
+  }
+
+  return raw;
+}
+
 // ── Retry + Fallback Dispatch ────────────────────────────────
 
 /**
+ * Auto Best fallback order: Gemini → Claude → Kimi → OpenAI
+ */
+const AUTO_BEST_ORDER: ConcreteProvider[] = ['gemini', 'claude', 'kimi', 'openai'];
+
+/**
+ * All concrete providers.
+ */
+const ALL_PROVIDERS: ConcreteProvider[] = ['openai', 'claude', 'gemini', 'kimi'];
+
+/**
  * Determine which API keys are available.
+ *
+ * When preferred is 'auto', uses the Auto Best order.
+ * Otherwise, puts the preferred provider first, then fills with remaining available providers.
  */
 export function getAvailableProviders(preferred: AIProvider): ProviderConfig[] {
-  const keyMap: Record<AIProvider, string | undefined> = {
+  const keyMap: Record<ConcreteProvider, string | undefined> = {
     openai: process.env.OPENAI_API_KEY,
     claude: process.env.ANTHROPIC_API_KEY,
     gemini: process.env.GEMINI_API_KEY,
+    kimi: process.env.KIMI_API_KEY,
   };
 
   const isReal = (key: string | undefined): key is string =>
@@ -247,10 +317,16 @@ export function getAvailableProviders(preferred: AIProvider): ProviderConfig[] {
     !key.startsWith('sk-ant-your') &&
     key !== 'YOUR_KEY_HERE';
 
-  const all: AIProvider[] = ['openai', 'claude', 'gemini'];
+  let ordered: ConcreteProvider[];
 
-  // Preferred first, then fallbacks
-  const ordered = [preferred, ...all.filter((p) => p !== preferred)];
+  if (preferred === 'auto') {
+    // Auto Best: use the optimal fallback order
+    ordered = [...AUTO_BEST_ORDER];
+  } else {
+    // Specific provider first, then fill with remaining in auto-best order
+    const concrete = preferred as ConcreteProvider;
+    ordered = [concrete, ...AUTO_BEST_ORDER.filter((p) => p !== concrete)];
+  }
 
   return ordered
     .filter((p) => isReal(keyMap[p]))
@@ -258,11 +334,33 @@ export function getAvailableProviders(preferred: AIProvider): ProviderConfig[] {
 }
 
 /**
+ * Call a specific provider.
+ */
+async function callProvider(
+  provider: ConcreteProvider,
+  prompt: string,
+  apiKey: string,
+  maxTokens: number,
+  temperature: number,
+): Promise<string> {
+  switch (provider) {
+    case 'openai':
+      return callOpenAI(prompt, apiKey, maxTokens, temperature);
+    case 'claude':
+      return callClaude(prompt, apiKey, maxTokens);
+    case 'gemini':
+      return callGemini(prompt, apiKey, maxTokens);
+    case 'kimi':
+      return callKimi(prompt, apiKey, maxTokens, temperature);
+  }
+}
+
+/**
  * Try calling the AI with the preferred provider, retry once on parse failure,
  * then fall through to alternative providers.
  *
  * @param prompt - The AI prompt
- * @param preferred - User's preferred provider
+ * @param preferred - User's preferred provider (or 'auto' for best routing)
  * @param maxTokens - Max tokens for the response
  * @param logPrefix - Logging prefix for console output
  * @returns Parsed JSON object and the provider that succeeded
@@ -273,11 +371,12 @@ export async function callWithRetryAndFallback(
   maxTokens: number,
   logPrefix: string,
   temperature: number = 0.7,
-): Promise<{ parsed: Record<string, unknown>; provider: AIProvider }> {
+): Promise<{ parsed: Record<string, unknown>; provider: ConcreteProvider }> {
   const providers = getAvailableProviders(preferred);
 
   if (providers.length === 0) {
-    return { parsed: {}, provider: 'openai' }; // Will trigger mock fallback upstream
+    // Signal to caller that no providers are available — will trigger mock
+    return { parsed: {}, provider: 'openai' };
   }
 
   const errors: string[] = [];
@@ -286,20 +385,9 @@ export async function callWithRetryAndFallback(
     // Try up to 2 attempts per provider (original + 1 retry)
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        console.log(`${logPrefix} Attempt ${attempt} with ${provider}`);
+        console.log(`${logPrefix} Attempt ${attempt} with ${provider}${preferred === 'auto' ? ' (Auto Best)' : ''}`);
 
-        let raw: string;
-        switch (provider) {
-          case 'openai':
-            raw = await callOpenAI(prompt, apiKey, maxTokens, temperature);
-            break;
-          case 'claude':
-            raw = await callClaude(prompt, apiKey, maxTokens);
-            break;
-          case 'gemini':
-            raw = await callGemini(prompt, apiKey, maxTokens);
-            break;
-        }
+        const raw = await callProvider(provider, prompt, apiKey, maxTokens, temperature);
 
         console.log(`${logPrefix} Got ${raw.length} chars from ${provider}`);
 

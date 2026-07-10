@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Sparkles, Loader2, Copy, Check, RefreshCw, AlertTriangle, Zap, Eye,
   Download, Settings, Search, Megaphone, Palette, Layout, Code, FileJson,
@@ -1319,7 +1319,7 @@ export default function WebsiteBuilderDemo() {
 
   // UI state
   const [activeTab, setActiveTab] = useState<'pages' | 'branding' | 'seo' | 'marketing' | 'preview' | 'export' | 'shopify' | 'settings'>('pages');
-  const [provider, setProvider] = useState<AIProvider>('openai');
+  const [provider, setProvider] = useState<AIProvider>('auto');
   const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [editMode, setEditMode] = useState(false);
   const [openFaqs, setOpenFaqs] = useState<Set<number>>(new Set());
@@ -1340,19 +1340,20 @@ export default function WebsiteBuilderDemo() {
   const [deployFileErrors, setDeployFileErrors] = useState<string[]>([]);
 
   // Load Shopify creds from localStorage on mount
-  const shopifyCredsLoaded = useRef(false);
-  if (!shopifyCredsLoaded.current) {
-    shopifyCredsLoaded.current = true;
+  useEffect(() => {
     try {
       const stored = typeof window !== 'undefined' ? localStorage.getItem(SHOPIFY_CREDS_KEY) : null;
       if (stored) {
         const c = JSON.parse(stored);
-        if (c.storeDomain) setShopifyDomain(c.storeDomain);
-        if (c.accessToken) setShopifyToken(c.accessToken);
-        if (c.shopName) setShopifyShopName(c.shopName);
+        const t = setTimeout(() => {
+          if (c.storeDomain) setShopifyDomain(c.storeDomain);
+          if (c.accessToken) setShopifyToken(c.accessToken);
+          if (c.shopName) setShopifyShopName(c.shopName);
+        }, 0);
+        return () => clearTimeout(t);
       }
     } catch { /* ignore */ }
-  }
+  }, []);
 
   // ── API call ──────────────────────────────────────────────────
   async function handleGenerate(e: React.FormEvent) {
@@ -1766,6 +1767,42 @@ export default function WebsiteBuilderDemo() {
         {builderMode === 'dropshipping' && (
           <div className="rounded-2xl p-6 md:p-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
 
+            {/* AI Model Selector */}
+            <div className="mb-6">
+              <label className="block text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#52525b' }}>
+                <Sparkles size={12} className="inline mr-1.5" style={{ verticalAlign: '-1px' }} />
+                AI Model
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { key: 'auto' as AIProvider, label: 'Auto Best', color: '#f59e0b', desc: 'Smart routing' },
+                  { key: 'gemini' as AIProvider, label: 'Gemini', color: '#60a5fa', desc: 'Fast extraction' },
+                  { key: 'claude' as AIProvider, label: 'Claude', color: '#a855f7', desc: 'Premium copy' },
+                  { key: 'kimi' as AIProvider, label: 'Kimi', color: '#06b6d4', desc: 'Long context' },
+                  { key: 'openai' as AIProvider, label: 'OpenAI', color: '#22c55e', desc: 'Reliable' },
+                ] as const).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setProvider(m.key)}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all"
+                    style={{
+                      background: provider === m.key ? `${m.color}12` : 'rgba(255,255,255,0.02)',
+                      border: `1.5px solid ${provider === m.key ? m.color : 'var(--color-border)'}`,
+                      color: provider === m.key ? m.color : '#71717a',
+                    }}
+                  >
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ background: provider === m.key ? m.color : '#3f3f46', boxShadow: provider === m.key ? `0 0 6px ${m.color}60` : 'none' }}
+                    />
+                    {m.label}
+                    <span className="text-[10px] font-normal" style={{ color: provider === m.key ? `${m.color}cc` : '#3f3f46' }}>· {m.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Step 1: Product URL */}
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
@@ -1836,6 +1873,48 @@ export default function WebsiteBuilderDemo() {
                 <div className="rounded-xl p-4 mb-5" style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)' }}>
                   <h4 className="font-bold mb-2">{productAnalysis.productTitle}</h4>
                   <p className="text-xs mb-3 leading-relaxed" style={{ color: '#a1a1aa' }}>{productAnalysis.productDescription}</p>
+
+                  {/* Product Images */}
+                  {productAnalysis.images && productAnalysis.images.length > 0 && (
+                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+                      {productAnalysis.images.slice(0, 6).map((img, i) => (
+                        <div
+                          key={i}
+                          className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden"
+                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)' }}
+                        >
+                          <img
+                            src={img}
+                            alt={`Product ${i + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Ratings */}
+                  {productAnalysis.ratings && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            size={12}
+                            style={{
+                              color: i < Math.round(productAnalysis.ratings!) ? '#eab308' : '#3f3f46',
+                              fill: i < Math.round(productAnalysis.ratings!) ? '#eab308' : 'transparent',
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs font-bold" style={{ color: '#eab308' }}>{productAnalysis.ratings.toFixed(1)}</span>
+                      {productAnalysis.reviewCount && (
+                        <span className="text-xs" style={{ color: '#52525b' }}>({productAnalysis.reviewCount.toLocaleString()} reviews)</span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     {[
@@ -3192,11 +3271,13 @@ export default function WebsiteBuilderDemo() {
             {activeTab === 'settings' && (
               <div className="flex flex-col gap-5 max-w-2xl">
                 <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#52525b' }}>AI Provider</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                   {([
-                    { key: 'openai' as AIProvider, name: 'OpenAI', model: 'GPT-4o', color: '#22c55e', icon: <Sparkles size={20} /> },
+                    { key: 'auto' as AIProvider, name: 'Auto Best', model: 'Smart Routing', color: '#f59e0b', icon: <Sparkles size={20} /> },
+                    { key: 'gemini' as AIProvider, name: 'Gemini', model: '2.5 Flash', color: '#60a5fa', icon: <Star size={20} /> },
                     { key: 'claude' as AIProvider, name: 'Claude', model: 'Sonnet 4', color: '#a855f7', icon: <Zap size={20} /> },
-                    { key: 'gemini' as AIProvider, name: 'Gemini', model: '2.5 Pro', color: '#60a5fa', icon: <Star size={20} /> },
+                    { key: 'kimi' as AIProvider, name: 'Kimi', model: 'K2', color: '#06b6d4', icon: <Globe size={20} /> },
+                    { key: 'openai' as AIProvider, name: 'OpenAI', model: 'GPT-4o', color: '#22c55e', icon: <Sparkles size={20} /> },
                   ]).map((p) => {
                     const active = provider === p.key;
                     return (
@@ -3241,7 +3322,7 @@ export default function WebsiteBuilderDemo() {
                 >
                   <Sparkles size={16} style={{ color: '#60a5fa', flexShrink: 0, marginTop: 1 }} />
                   <p className="text-xs leading-relaxed" style={{ color: '#93c5fd' }}>
-                    API keys are configured server-side. Switch between providers to compare output quality and style. Each provider generates unique content based on its AI model characteristics.
+                    <strong>Auto Best</strong> intelligently routes tasks to the optimal AI model: Gemini for fast extraction, Claude for premium copywriting, Kimi for long-context analysis, and OpenAI for reliable JSON. Fallback chain: Gemini → Claude → Kimi → OpenAI. API keys are configured server-side.
                   </p>
                 </div>
               </div>

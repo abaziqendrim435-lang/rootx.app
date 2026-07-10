@@ -17,7 +17,7 @@ export default function NotFound() {
         <div className="text-8xl font-black mb-4 gradient-text">404</div>
         <h1 className="text-2xl font-bold mb-4">Page not found</h1>
         <p className="mb-8" style={{ color: '#71717a' }}>
-          This page doesn't exist or the agent you're looking for may have moved.
+          This page doesn&apos;t exist or the agent you&apos;re looking for may have moved.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href="/" className="btn-secondary">

@@ -35,8 +35,11 @@ export default function Navbar() {
 
   // Close both menus on route change
   useEffect(() => {
-    setDropdownOpen(false);
-    setIsOpen(false);
+    const t = setTimeout(() => {
+      setDropdownOpen(false);
+      setIsOpen(false);
+    }, 0);
+    return () => clearTimeout(t);
   }, [pathname]);
 
   async function handleLogout() {

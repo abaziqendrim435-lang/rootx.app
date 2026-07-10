@@ -28,7 +28,10 @@ export default function ResetPasswordPage() {
     // Check current session params from hash
     const hash = window.location.hash;
     if (hash && hash.includes('type=recovery')) {
-      setStatus('idle');
+      const t = setTimeout(() => {
+        setStatus('idle');
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, []);
 

@@ -390,7 +390,7 @@ export default function AgentsPage() {
                       <CheckCircle2 size={32} style={{ color: '#22c55e' }} />
                     </div>
                     <h3 className="font-bold text-xl">Audit request received!</h3>
-                    <p className="text-sm" style={{ color: '#71717a' }}>We'll reach out within 24 hours to schedule your free call.</p>
+                    <p className="text-sm" style={{ color: '#71717a' }}>We&apos;ll reach out within 24 hours to schedule your free call.</p>
                     <button onClick={() => setAuditStatus('idle')} className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}>
                       Submit Another
                     </button>
@@ -517,7 +517,7 @@ export default function AgentsPage() {
                   </div>
                   <h3 className="font-bold text-xl">Request Sent! 🎉</h3>
                   <p className="text-sm" style={{ color: '#71717a' }}>
-                    We'll contact you within 24 hours to discuss your setup.
+                    We&apos;ll contact you within 24 hours to discuss your setup.
                   </p>
                   <div className="flex gap-3">
                     <button onClick={() => setModalAgent(null)} className="btn-secondary" style={{ fontSize: '0.85rem', padding: '0.5rem 1.2rem' }}>
@@ -603,7 +603,7 @@ export default function AgentsPage() {
                   </button>
 
                   <p className="text-xs text-center" style={{ color: '#3f3f46' }}>
-                    Your data is saved locally. We'll reach out within 24h.
+                    Your data is saved locally. We&apos;ll reach out within 24h.
                   </p>
                 </form>
               )}

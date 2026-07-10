@@ -570,7 +570,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Check if any provider is available
-    const selectedProvider = provider || 'openai';
+    const selectedProvider = provider || 'auto';
     const available = getAvailableProviders(selectedProvider);
 
     if (available.length === 0) {

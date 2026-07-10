@@ -73,7 +73,7 @@ export default function ForgotPasswordPage() {
           </Link>
           <h1 className="text-3xl font-black mb-2">Reset your password</h1>
           <p style={{ color: '#71717a', fontSize: '0.95rem' }}>
-            Enter your email and we'll send you a reset link
+            Enter your email and we&apos;ll send you a reset link
           </p>
         </div>
 
@@ -112,7 +112,7 @@ export default function ForgotPasswordPage() {
                 : 'Demo mode — no email was actually sent.'}
             </p>
             <p className="text-xs mb-8" style={{ color: '#52525b' }}>
-              Didn't get it? Check your spam folder or try again.
+              Didn&apos;t get it? Check your spam folder or try again.
             </p>
             <div className="flex flex-col gap-3">
               <button

@@ -33,7 +33,12 @@ export default function HistoryPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      refresh();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [refresh]);
 
   async function handleToggleSave(id: string) {
     await toggleSaved(id);

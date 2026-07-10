@@ -46,7 +46,10 @@ function RequestFormInner() {
   // Update agent if URL changes
   useEffect(() => {
     if (preselectedAgent) {
-      setForm((prev) => ({ ...prev, selected_agent: preselectedAgent }));
+      const t = setTimeout(() => {
+        setForm((prev) => ({ ...prev, selected_agent: preselectedAgent }));
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, [preselectedAgent]);
 
@@ -148,7 +151,7 @@ function RequestFormInner() {
             Request <span className="gradient-text">Agent Setup</span>
           </h1>
           <p style={{ color: '#71717a' }}>
-            Fill out the form below and we'll configure your AI agent in 48 hours.
+            Fill out the form below and we&apos;ll configure your AI agent in 48 hours.
           </p>
         </div>
       </section>

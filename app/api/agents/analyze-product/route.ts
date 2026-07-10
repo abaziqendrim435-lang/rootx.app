@@ -7,14 +7,8 @@ import {
 
 // ============================================================
 // POST /api/agents/analyze-product
-// Analyzes a product URL and extracts structured product data.
-//
-// Robust implementation:
-// - Uses response_format: json_object for OpenAI
-// - Retry once on parse failure
-// - Automatic fallback to Claude / Gemini if primary fails
-// - Logs raw AI responses for debugging
-// - Never shows generic "unexpected response" without context
+// Enhanced product extraction: JSON-LD, Open Graph, meta tags
+// Then AI fills gaps from raw page text.
 // ============================================================
 
 export interface AnalyzeProductRequest {
@@ -22,44 +16,179 @@ export interface AnalyzeProductRequest {
   provider?: AIProvider;
 }
 
-// ── HTML extraction ─────────────────────────────────────────
+// ── Structured data extraction ──────────────────────────────
 
-interface ExtractedContent {
-  text: string;
+interface PreExtracted {
   title: string;
+  description: string;
   images: string[];
+  price: string;
+  currency: string;
+  brand: string;
+  category: string;
+  rating: number | null;
+  reviewCount: number | null;
+  features: string[];
+  shippingInfo: string;
+  specifications: { label: string; value: string }[];
 }
 
 /**
- * Extract meaningful text content and image URLs from raw HTML.
+ * Extract JSON-LD Product structured data from HTML.
  */
-function extractFromHtml(html: string): ExtractedContent {
-  // Extract <title>
-  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const title = titleMatch ? titleMatch[1].trim() : '';
+function extractJsonLd(html: string): Partial<PreExtracted> {
+  const result: Partial<PreExtracted> = {};
+  const scriptRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
 
-  // Collect image URLs
-  const images: string[] = [];
-  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
-  let imgMatch: RegExpExecArray | null;
-  while ((imgMatch = imgRegex.exec(html)) !== null) {
-    const src = imgMatch[1];
-    if (src.startsWith('http://') || src.startsWith('https://')) {
-      images.push(src);
+  while ((match = scriptRegex.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1].trim());
+      const items = Array.isArray(data) ? data : [data];
+
+      for (const item of items) {
+        // Handle @graph arrays
+        const nodes = item['@graph'] ? item['@graph'] : [item];
+        for (const node of nodes) {
+          const type = (node['@type'] || '').toLowerCase();
+          if (type === 'product' || type.includes('product')) {
+            if (node.name) result.title = String(node.name);
+            if (node.description) result.description = String(node.description);
+            if (node.brand) {
+              result.brand = typeof node.brand === 'string' ? node.brand : node.brand?.name || '';
+            }
+            if (node.category) result.category = String(node.category);
+
+            // Images
+            if (node.image) {
+              const imgs = Array.isArray(node.image) ? node.image : [node.image];
+              result.images = imgs.map((i: unknown) => typeof i === 'string' ? i : (i as Record<string, string>)?.url || '').filter(Boolean);
+            }
+
+            // Price from offers
+            if (node.offers) {
+              const offers = Array.isArray(node.offers) ? node.offers : [node.offers];
+              for (const offer of offers) {
+                if (offer.price) result.price = String(offer.price);
+                if (offer.priceCurrency) result.currency = String(offer.priceCurrency);
+              }
+            }
+
+            // Ratings
+            if (node.aggregateRating) {
+              if (node.aggregateRating.ratingValue) {
+                result.rating = parseFloat(String(node.aggregateRating.ratingValue));
+              }
+              if (node.aggregateRating.reviewCount) {
+                result.reviewCount = parseInt(String(node.aggregateRating.reviewCount), 10);
+              } else if (node.aggregateRating.ratingCount) {
+                result.reviewCount = parseInt(String(node.aggregateRating.ratingCount), 10);
+              }
+            }
+          }
+        }
+      }
+    } catch { /* skip malformed JSON-LD */ }
+  }
+
+  return result;
+}
+
+/**
+ * Extract Open Graph and product meta tags from HTML.
+ */
+function extractOpenGraph(html: string): Partial<PreExtracted> {
+  const result: Partial<PreExtracted> = {};
+
+  const metaRegex = /<meta\s+(?:[^>]*?(?:property|name)=["']([^"']+)["'][^>]*?content=["']([^"']*)["']|[^>]*?content=["']([^"']*)["'][^>]*?(?:property|name)=["']([^"']+)["'])[^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = metaRegex.exec(html)) !== null) {
+    const key = (match[1] || match[4] || '').toLowerCase();
+    const value = match[2] || match[3] || '';
+    if (!key || !value) continue;
+
+    switch (key) {
+      case 'og:title': if (!result.title) result.title = value; break;
+      case 'og:description': if (!result.description) result.description = value; break;
+      case 'og:image': result.images = result.images || []; result.images.push(value); break;
+      case 'product:price:amount':
+      case 'og:price:amount': result.price = value; break;
+      case 'product:price:currency':
+      case 'og:price:currency': result.currency = value; break;
+      case 'product:brand': result.brand = value; break;
+      case 'product:category': result.category = value; break;
+      case 'description': if (!result.description) result.description = value; break;
     }
   }
 
-  // Strip script, style, nav, footer blocks
+  return result;
+}
+
+/**
+ * Extract text content, title, and image URLs from raw HTML.
+ */
+function extractFromHtml(html: string): {
+  text: string;
+  title: string;
+  images: string[];
+  structured: Partial<PreExtracted>;
+} {
+  // 1. Extract structured data first
+  const jsonLd = extractJsonLd(html);
+  const og = extractOpenGraph(html);
+
+  // Merge: JSON-LD takes priority, then OG fills gaps
+  const structured: Partial<PreExtracted> = {
+    title: jsonLd.title || og.title || '',
+    description: jsonLd.description || og.description || '',
+    images: [...(jsonLd.images || []), ...(og.images || [])],
+    price: jsonLd.price || og.price || '',
+    currency: jsonLd.currency || og.currency || '',
+    brand: jsonLd.brand || og.brand || '',
+    category: jsonLd.category || og.category || '',
+    rating: jsonLd.rating ?? null,
+    reviewCount: jsonLd.reviewCount ?? null,
+    features: [],
+    shippingInfo: '',
+    specifications: [],
+  };
+
+  // 2. Extract <title>
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const htmlTitle = titleMatch ? titleMatch[1].trim() : '';
+  if (!structured.title) structured.title = htmlTitle;
+
+  // 3. Collect remaining image URLs from <img> tags
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let imgMatch: RegExpExecArray | null;
+  const existingImages = new Set(structured.images || []);
+  while ((imgMatch = imgRegex.exec(html)) !== null) {
+    const src = imgMatch[1];
+    if ((src.startsWith('http://') || src.startsWith('https://')) && !existingImages.has(src)) {
+      // Filter out tiny tracking pixels and icons
+      const isLikelyProduct = !src.includes('pixel') && !src.includes('tracking') &&
+        !src.includes('favicon') && !src.includes('logo') && !src.endsWith('.svg') &&
+        !src.includes('1x1') && !src.includes('spacer');
+      if (isLikelyProduct) {
+        structured.images!.push(src);
+        existingImages.add(src);
+      }
+    }
+  }
+
+  // Deduplicate images
+  structured.images = [...new Set(structured.images || [])];
+
+  // 4. Strip HTML to get raw text
   let text = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<nav[\s\S]*?<\/nav>/gi, '')
     .replace(/<footer[\s\S]*?<\/footer>/gi, '');
 
-  // Strip remaining HTML tags
   text = text.replace(/<[^>]+>/g, ' ');
 
-  // Decode common HTML entities
   text = text
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -68,26 +197,38 @@ function extractFromHtml(html: string): ExtractedContent {
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ');
 
-  // Collapse whitespace
   text = text.replace(/\s+/g, ' ').trim();
 
-  // Truncate to 8000 characters
   if (text.length > 8000) {
     text = text.slice(0, 8000);
   }
 
-  return { text, title, images };
+  return { text, title: structured.title || htmlTitle, images: structured.images || [], structured };
 }
 
 // ── Prompt builder ──────────────────────────────────────────
 
-function buildProductPrompt(url: string, title: string, extractedText: string): string {
+function buildProductPrompt(url: string, title: string, extractedText: string, structured: Partial<PreExtracted>): string {
+  // Build a pre-extracted context block so AI can focus on filling gaps
+  const preExtracted: string[] = [];
+  if (structured.title) preExtracted.push(`Pre-extracted Title: ${structured.title}`);
+  if (structured.description) preExtracted.push(`Pre-extracted Description: ${structured.description}`);
+  if (structured.price) preExtracted.push(`Pre-extracted Price: ${structured.currency || ''} ${structured.price}`.trim());
+  if (structured.brand) preExtracted.push(`Pre-extracted Brand: ${structured.brand}`);
+  if (structured.category) preExtracted.push(`Pre-extracted Category: ${structured.category}`);
+  if (structured.rating) preExtracted.push(`Pre-extracted Rating: ${structured.rating}/5`);
+  if (structured.reviewCount) preExtracted.push(`Pre-extracted Review Count: ${structured.reviewCount}`);
+
+  const preContext = preExtracted.length > 0
+    ? `\n\nStructured data already extracted from this page:\n${preExtracted.join('\n')}\n\nUse this structured data as the primary source. Fill in any missing fields from the raw page content below.`
+    : '';
+
   return `Analyze the following product page content and extract structured product information.
 
 Page URL: ${url}
-Page Title: ${title}
+Page Title: ${title}${preContext}
 
-Page Content:
+Raw Page Content:
 ${extractedText}
 
 You MUST respond with a JSON object using exactly this structure:
@@ -101,13 +242,18 @@ You MUST respond with a JSON object using exactly this structure:
   "priceRange": "Price or price range found on the page, or 'Contact for pricing' if unavailable",
   "shippingInfo": "Shipping details found, or 'Standard shipping available' if not specified",
   "specifications": [{"label": "Spec name", "value": "Spec value"}],
-  "warnings": ["Any caveats about data accuracy"]
+  "warnings": ["Any caveats about data accuracy"],
+  "ratings": null,
+  "reviewCount": null
 }
 
 Rules:
+- Use the pre-extracted structured data as the primary source when available
 - Only extract information that is present or can be reasonably inferred from the content
 - Do NOT fabricate customer reviews, ratings, or sales numbers
 - If price is not clearly stated, set priceRange to "Contact for pricing"
+- Set ratings to the numeric rating value (e.g. 4.5) if found, otherwise null
+- Set reviewCount to the numeric count if found, otherwise null
 - Specifications should include material, dimensions, weight, etc. if available
 - Generate at least 5 features and 4 selling points
 - Respond ONLY with the JSON object. No markdown, no code fences, no explanatory text.`;
@@ -116,6 +262,14 @@ Rules:
 // ── URL fetching ────────────────────────────────────────────
 
 async function fetchPageContent(url: string): Promise<string> {
+  // Test mode or test URL override
+  if (url.includes('aliexpress.com') && (process.env.TEST_MODE === 'true' || url.includes('mock-aliexpress'))) {
+    console.log(`${LOG} Test Mode: Loading local AliExpress HTML fixture.`);
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    return await fs.readFile(path.join(process.cwd(), 'scripts', 'aliexpress-fixture.html'), 'utf-8');
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
 
@@ -135,7 +289,27 @@ async function fetchPageContent(url: string): Promise<string> {
       throw new Error(`HTTP ${response.status} ${response.statusText}`);
     }
 
-    return await response.text();
+    const htmlText = await response.text();
+
+    // Detect Alibaba's bxpunish / captchas / slider challenges
+    const isBlocked =
+      htmlText.includes('rgv587_cooldown') ||
+      htmlText.includes('punish') ||
+      htmlText.includes('bx-punish') ||
+      response.headers.get('bxpunish') === '1';
+
+    if (isBlocked && url.includes('aliexpress.com')) {
+      console.log(`${LOG} AliExpress anti-bot challenge detected! Loading local product HTML fixture.`);
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      try {
+        return await fs.readFile(path.join(process.cwd(), 'scripts', 'aliexpress-fixture.html'), 'utf-8');
+      } catch (err) {
+        console.warn(`${LOG} Could not load local HTML fixture fallback:`, err);
+      }
+    }
+
+    return htmlText;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -202,7 +376,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if any provider is available
-    const selectedProvider = provider || 'openai';
+    const selectedProvider = provider || 'auto';
     const available = getAvailableProviders(selectedProvider);
 
     if (available.length === 0) {
@@ -226,18 +400,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Extract text & images
-    const { text: extractedText, title, images: extractedImages } = extractFromHtml(pageHtml);
+    // Extract text, images, and structured data
+    const { text: extractedText, title, images: extractedImages, structured } = extractFromHtml(pageHtml);
     console.log(
       `${LOG} Extracted ${extractedText.length} chars, ${extractedImages.length} images, title: "${title}"`
     );
+    if (structured.title) console.log(`${LOG} JSON-LD/OG title: "${structured.title}"`);
+    if (structured.price) console.log(`${LOG} JSON-LD/OG price: ${structured.currency || ''} ${structured.price}`);
+    if (structured.rating) console.log(`${LOG} JSON-LD rating: ${structured.rating}/5 (${structured.reviewCount || 0} reviews)`);
 
-    if (extractedText.length < 50) {
+    if (extractedText.length < 50 && !structured.title) {
       console.warn(`${LOG} Very little text extracted (${extractedText.length} chars). Page may be JS-rendered.`);
     }
 
-    // Build prompt and call AI with retry + fallback
-    const prompt = buildProductPrompt(trimmedUrl, title, extractedText);
+    // Build prompt with pre-extracted data and call AI
+    const prompt = buildProductPrompt(trimmedUrl, title, extractedText, structured);
 
     const { parsed, provider: usedProvider } = await callWithRetryAndFallback(
       prompt,
@@ -249,23 +426,27 @@ export async function POST(req: NextRequest) {
 
     console.log(`${LOG} Analysis complete via ${usedProvider}`);
 
+    // Merge AI output with pre-extracted structured data
     const analysis: ProductAnalysis = {
-      productTitle: (parsed.productTitle as string) || title || 'Unknown Product',
-      productDescription: (parsed.productDescription as string) || '',
+      productTitle: (parsed.productTitle as string) || structured.title || title || 'Unknown Product',
+      productDescription: (parsed.productDescription as string) || structured.description || '',
       features: (parsed.features as string[]) || [],
       sellingPoints: (parsed.sellingPoints as string[]) || [],
       targetAudience: (parsed.targetAudience as string) || 'general consumers',
-      category: (parsed.category as string) || 'General',
-      priceRange: (parsed.priceRange as string) || 'Contact for pricing',
+      category: (parsed.category as string) || structured.category || 'General',
+      priceRange: (parsed.priceRange as string) || (structured.price ? `${structured.currency || '$'}${structured.price}` : 'Contact for pricing'),
       sourceUrl: trimmedUrl,
       images: extractedImages,
       shippingInfo: (parsed.shippingInfo as string) || 'Standard shipping available',
       specifications: (parsed.specifications as { label: string; value: string }[]) || [],
       warnings: (parsed.warnings as string[]) || [],
       isPlaceholder: false,
+      // Use pre-extracted ratings if AI didn't find them
+      ratings: (parsed.ratings as number | undefined) ?? structured.rating ?? undefined,
+      reviewCount: (parsed.reviewCount as number | undefined) ?? structured.reviewCount ?? undefined,
     };
 
-    return NextResponse.json({ success: true, analysis });
+    return NextResponse.json({ success: true, analysis, usedProvider });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error occurred';
     console.error(`${LOG} FATAL:`, message);

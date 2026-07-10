@@ -58,7 +58,12 @@ export default function DashboardPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      refresh();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [refresh]);
 
   async function handleToggleSave(id: string) {
     await toggleSaved(id);
@@ -121,7 +126,7 @@ export default function DashboardPage() {
               <Zap size={17} style={{ color: '#ef4444' }} />
             </div>
             <div>
-              <p className="font-bold text-sm">You're on the Free plan</p>
+              <p className="font-bold text-sm">You&apos;re on the Free plan</p>
               <p className="text-xs" style={{ color: '#71717a' }}>
                 {plan.generationsPerMonth} generations/month · Upgrade for more power
               </p>

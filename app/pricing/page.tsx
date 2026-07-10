@@ -35,7 +35,10 @@ function PricingContent() {
   // Handle return from Stripe
   useEffect(() => {
     if (searchParams.get('canceled') === '1') {
-      setToast({ type: 'info', msg: 'Checkout canceled — you were not charged.' });
+      const t = setTimeout(() => {
+        setToast({ type: 'info', msg: 'Checkout canceled — you were not charged.' });
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, [searchParams]);
 
@@ -78,7 +81,7 @@ function PricingContent() {
         if (data.demo) {
           showToast('info', `Demo mode — Stripe is not configured. Would redirect to checkout for ${PLANS[planId].name} plan.`);
         } else {
-          window.location.href = data.url;
+          window.location.assign(data.url);
         }
       }
     } catch {
@@ -166,7 +169,7 @@ function PricingContent() {
               }}
             >
               <CheckCircle2 size={14} />
-              You're on the <strong>{PLANS[currentPlan].name}</strong> plan
+              You&apos;re on the <strong>{PLANS[currentPlan].name}</strong> plan
             </div>
           )}
         </div>

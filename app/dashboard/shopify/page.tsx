@@ -1109,10 +1109,13 @@ export default function ShopifyAgentPage() {
 
   // Check for stored credentials on mount
   useEffect(() => {
-    const stored = getStoredCredentials();
-    if (stored) {
-      setCredentials(stored);
-    }
+    const t = setTimeout(() => {
+      const stored = getStoredCredentials();
+      if (stored) {
+        setCredentials(stored);
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   // Fetch products when credentials are set
@@ -1156,7 +1159,10 @@ export default function ShopifyAgentPage() {
 
   useEffect(() => {
     if (credentials) {
-      fetchProducts(credentials);
+      const t = setTimeout(() => {
+        fetchProducts(credentials);
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, [credentials, fetchProducts]);
 

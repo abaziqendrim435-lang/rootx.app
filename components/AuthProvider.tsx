@@ -32,7 +32,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Initial load
-    refresh();
+    const t = setTimeout(() => {
+      refresh();
+    }, 0);
 
     // Subscribe to auth state changes (login / logout / token refresh)
     const unsubscribe = onAuthStateChange((u) => {
@@ -40,7 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      clearTimeout(t);
+      unsubscribe();
+    };
   }, [refresh]);
 
   async function logout() {

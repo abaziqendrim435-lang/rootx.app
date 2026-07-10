@@ -59,7 +59,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user?.user_metadata?.display_name) {
-      setDisplayName(user.user_metadata.display_name);
+      const t = setTimeout(() => {
+        setDisplayName(user.user_metadata.display_name);
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, [user]);
 

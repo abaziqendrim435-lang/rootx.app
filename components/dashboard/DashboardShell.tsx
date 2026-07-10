@@ -20,17 +20,25 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // Detect desktop on mount & resize
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
-    setSidebarOpen(mq.matches);
+    const t = setTimeout(() => {
+      setSidebarOpen(mq.matches);
+    }, 0);
     const handler = (e: MediaQueryListEvent) => setSidebarOpen(e.matches);
     mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    return () => {
+      clearTimeout(t);
+      mq.removeEventListener('change', handler);
+    };
   }, []);
 
   // Close sidebar on mobile when navigating
   useEffect(() => {
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      setSidebarOpen(false);
-    }
+    const t = setTimeout(() => {
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        setSidebarOpen(false);
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, [pathname]);
 
   async function handleLogout() {

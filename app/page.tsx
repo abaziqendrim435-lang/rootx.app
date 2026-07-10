@@ -150,7 +150,7 @@ export default function HomePage() {
               Why businesses choose <span className="gradient-text">RootX</span>
             </h2>
             <p style={{ color: '#71717a' }}>
-              We don't sell software. We sell outcomes.
+              We don&apos;t sell software. We sell outcomes.
             </p>
           </div>
 
@@ -269,7 +269,7 @@ export default function HomePage() {
                   ))}
                 </div>
                 <p className="text-sm leading-relaxed italic" style={{ color: '#a1a1aa' }}>
-                  "{t.quote}"
+                  &quot;{t.quote}&quot;
                 </p>
                 <div className="mt-auto">
                   <p className="font-semibold text-sm">{t.author}</p>

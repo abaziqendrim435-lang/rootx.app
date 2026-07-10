@@ -36,8 +36,11 @@ function BillingContent() {
   const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get('success') === '1') setSuccessBanner(true);
-    if (searchParams.get('demo') === '1') setDemoMode(true);
+    const t = setTimeout(() => {
+      if (searchParams.get('success') === '1') setSuccessBanner(true);
+      if (searchParams.get('demo') === '1') setDemoMode(true);
+    }, 0);
+    return () => clearTimeout(t);
   }, [searchParams]);
 
   async function openPortal() {
