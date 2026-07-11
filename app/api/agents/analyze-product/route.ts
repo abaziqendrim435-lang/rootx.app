@@ -196,7 +196,37 @@ function extractFromHtml(html: string): {
   // Deduplicate images
   structured.images = [...new Set(structured.images || [])];
 
-  // 4. Strip HTML to get raw text
+  // 5. Extract specifications from lists and tables
+  const specList: { label: string; value: string }[] = [];
+  const liRegex = /<li[^>]*>([^<]+:[^<]+)<\/li>/gi;
+  let liMatch: RegExpExecArray | null;
+  while ((liMatch = liRegex.exec(html)) !== null) {
+    const parts = liMatch[1].split(':');
+    if (parts.length >= 2) {
+      const label = parts[0].replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').trim();
+      const value = parts.slice(1).join(':').replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').trim();
+      if (label.length > 2 && label.length < 30 && value.length > 0 && value.length < 100) {
+        if (!specList.some(s => s.label === label)) {
+          specList.push({ label, value });
+        }
+      }
+    }
+  }
+
+  const trRegex = /<tr[^>]*>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi;
+  let trMatch: RegExpExecArray | null;
+  while ((trMatch = trRegex.exec(html)) !== null) {
+    const labelRaw = trMatch[1].replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').trim();
+    const valueRaw = trMatch[2].replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').trim();
+    if (labelRaw.length > 2 && labelRaw.length < 30 && valueRaw.length > 0 && valueRaw.length < 100) {
+      if (!specList.some(s => s.label === labelRaw) && !labelRaw.includes('\n')) {
+        specList.push({ label: labelRaw, value: valueRaw });
+      }
+    }
+  }
+  structured.specifications = specList.slice(0, 15);
+
+  // 6. Strip HTML to get raw text
   let text = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -264,6 +294,7 @@ You MUST respond with a JSON object using exactly this structure:
 }
 
 Rules:
+- CRITICAL: Do NOT invent or fabricate product prices, product images, variants, or specifications. Factual specifications, prices, and images must match the scraped context.
 - Use the pre-extracted structured data as the primary source when available
 - Only extract information that is present or can be reasonably inferred from the content
 - Do NOT fabricate customer reviews, ratings, or sales numbers
@@ -301,9 +332,13 @@ async function fetchPageContent(url: string): Promise<string> {
                     url.includes('different-product-999.html') || 
                     url.includes('fixture-2') || 
                     url.includes('fixture-3') ||
+                    url.includes('fixture-4') ||
+                    url.includes('fixture-5') ||
                     url.includes('usb-drive-fixture') ||
                     url.includes('bluetooth-mouse-fixture') ||
-                    url.includes('headphones-fixture');
+                    url.includes('headphones-fixture') ||
+                    url.includes('smart-watch-fixture') ||
+                    url.includes('espresso-machine-fixture');
 
   // Test mode or test URL override
   if (isMockUrl) {
@@ -315,6 +350,10 @@ async function fetchPageContent(url: string): Promise<string> {
       fixtureName = 'aliexpress-fixture-2.html';
     } else if (url.includes('fixture-3') || url.includes('headphones-fixture')) {
       fixtureName = 'aliexpress-fixture-3.html';
+    } else if (url.includes('fixture-4') || url.includes('smart-watch-fixture')) {
+      fixtureName = 'aliexpress-fixture-4.html';
+    } else if (url.includes('fixture-5') || url.includes('espresso-machine-fixture')) {
+      fixtureName = 'aliexpress-fixture-5.html';
     }
     return await fs.readFile(path.join(process.cwd(), 'scripts', fixtureName), 'utf-8');
   }
@@ -359,13 +398,17 @@ async function fetchPageContent(url: string): Promise<string> {
             fixtureName = 'aliexpress-fixture-2.html';
           } else if (url.includes('fixture-3') || url.includes('headphones-fixture')) {
             fixtureName = 'aliexpress-fixture-3.html';
+          } else if (url.includes('fixture-4') || url.includes('smart-watch-fixture')) {
+            fixtureName = 'aliexpress-fixture-4.html';
+          } else if (url.includes('fixture-5') || url.includes('espresso-machine-fixture')) {
+            fixtureName = 'aliexpress-fixture-5.html';
           }
           return await fs.readFile(path.join(process.cwd(), 'scripts', fixtureName), 'utf-8');
         } catch (err) {
           console.warn(`${LOG} Could not load local HTML fixture fallback:`, err);
         }
       }
-      throw new Error('AliExpress security challenge / anti-bot captcha detected. Unable to extract product content from this URL.');
+      throw new Error('AliExpress security challenge / anti-bot captcha detected. Unable to extract product content from this URL. Please try again later or use the Manual Product Import fallback.');
     }
 
     return htmlText;
@@ -496,11 +539,13 @@ export async function POST(req: NextRequest) {
       sellingPoints: (parsed.sellingPoints as string[]) || [],
       targetAudience: (parsed.targetAudience as string) || 'general consumers',
       category: (parsed.category as string) || structured.category || 'General',
-      priceRange: (parsed.priceRange as string) || (structured.price ? `${structured.currency || '$'}${structured.price}` : 'Contact for pricing'),
+      priceRange: (structured.price ? `${structured.currency || '$'}${structured.price}` : null) || (parsed.priceRange as string) || 'Contact for pricing',
       sourceUrl: trimmedUrl,
       images: extractedImages,
       shippingInfo: (parsed.shippingInfo as string) || 'Standard shipping available',
-      specifications: (parsed.specifications as { label: string; value: string }[]) || [],
+      specifications: (structured.specifications && structured.specifications.length > 0)
+        ? (structured.specifications as { label: string; value: string }[])
+        : (parsed.specifications as { label: string; value: string }[]) || [],
       warnings: (parsed.warnings as string[]) || [],
       isPlaceholder: false,
       ratings: (parsed.ratings as number | undefined) ?? structured.rating ?? undefined,

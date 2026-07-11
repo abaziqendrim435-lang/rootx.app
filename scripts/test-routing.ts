@@ -174,8 +174,8 @@ async function runTests() {
   }
   console.log('✓ Test 2 Passed.\n');
 
-  // Test Case 3: AliExpress End-to-End Extraction with 3 Different URLs
-  console.log('--- Test 3: AliExpress End-to-End Extraction with 3 Different URLs ---');
+  // Test Case 3: AliExpress End-to-End Extraction with 5 Different URLs
+  console.log('--- Test 3: AliExpress End-to-End Extraction with 5 Different URLs ---');
   process.env.TEST_MODE = 'true';
 
   const testUrls = [
@@ -183,26 +183,43 @@ async function runTests() {
       url: 'https://www.aliexpress.com/item/usb-drive-fixture.html',
       expectedTitle: 'Super Fast USB 3.0 Flash Drive 2TB Metal Pen Drive',
       priceSnippet: '12.99',
-      imageSnippet: 'S5a8b548b5.jpg'
+      imageSnippet: 'S5a8b548b5.jpg',
+      specSnippet: 'Capacity'
     },
     {
       url: 'https://www.aliexpress.com/item/bluetooth-mouse-fixture.html',
       expectedTitle: 'Wireless Ergonomic Bluetooth Mouse 1600 DPI',
       priceSnippet: '24.99',
-      imageSnippet: 'S9a77348b5.jpg'
+      imageSnippet: 'S9a77348b5.jpg',
+      specSnippet: 'DPI'
     },
     {
       url: 'https://www.aliexpress.com/item/headphones-fixture.html',
       expectedTitle: 'Premium Noise Cancelling Wireless Headphones',
       priceSnippet: '79.99',
-      imageSnippet: 'S7a99348b5.jpg'
+      imageSnippet: 'S7a99348b5.jpg',
+      specSnippet: 'Bluetooth Version'
+    },
+    {
+      url: 'https://www.aliexpress.com/item/smart-watch-fixture.html',
+      expectedTitle: 'Smart Watch Fitness Tracker Heart Rate Monitor',
+      priceSnippet: '45.99',
+      imageSnippet: 'S4a99348b5.jpg',
+      specSnippet: 'Battery Life'
+    },
+    {
+      url: 'https://www.aliexpress.com/item/espresso-machine-fixture.html',
+      expectedTitle: 'Portable Espresso Machine Handheld Coffee Maker',
+      priceSnippet: '59.99',
+      imageSnippet: 'S2a99348b5.jpg',
+      specSnippet: 'Pressure Capacity'
     }
   ];
 
   const results: any[] = [];
 
   for (let i = 0; i < testUrls.length; i++) {
-    const { url, expectedTitle, priceSnippet, imageSnippet } = testUrls[i];
+    const { url, expectedTitle, priceSnippet, imageSnippet, specSnippet } = testUrls[i];
     console.log(`\n--- Sub-test 3.${i + 1}: Testing URL: "${url}" ---`);
 
     const mockReq = {
@@ -253,6 +270,16 @@ async function runTests() {
       throw new Error('Expected analysisId, timestamp, and requestId to be defined');
     }
 
+    // Verify specifications are extracted
+    const specs = analysis.specifications;
+    if (!specs || specs.length === 0) {
+      throw new Error(`Expected specifications to be parsed from HTML, but got empty specifications array.`);
+    }
+    const hasSpecSnippet = specs.some((s: any) => s.label.includes(specSnippet) || s.value.includes(specSnippet));
+    if (!hasSpecSnippet) {
+      throw new Error(`Expected specifications to contain "${specSnippet}". Specifications found: ${JSON.stringify(specs)}`);
+    }
+
     results.push(analysis);
   }
 
@@ -289,7 +316,7 @@ async function runTests() {
     }
   }
 
-  console.log('✓ Cross-Product Isolation Verified: All 3 products have completely unique titles, descriptions, prices, images, and features!');
+  console.log('✓ Cross-Product Isolation Verified: All 5 products have completely unique titles, descriptions, prices, images, and features!');
   console.log('✓ Test 3 Passed.\n');
 
   console.log('=== All Multi-Model, Fallback & URL Isolation Verification Tests Passed Successfully! ===\n');

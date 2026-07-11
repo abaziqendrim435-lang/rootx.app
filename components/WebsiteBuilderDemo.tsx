@@ -2230,6 +2230,18 @@ export default function WebsiteBuilderDemo() {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [manualImageUrl, setManualImageUrl] = useState('');
 
+  // Manual import states
+  const [isManualImport, setIsManualImport] = useState(false);
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
+  const [manualDescription, setManualDescription] = useState('');
+  const [manualShipping, setManualShipping] = useState('');
+  const [manualImagesInput, setManualImagesInput] = useState<string[]>([]);
+  const [newManualImageUrl, setNewManualImageUrl] = useState('');
+  const [manualSpecsInput, setManualSpecsInput] = useState<{ label: string; value: string }[]>([]);
+  const [newSpecLabel, setNewSpecLabel] = useState('');
+  const [newSpecValue, setNewSpecValue] = useState('');
+
   // Generation state
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<WebsiteGeneration | null>(null);
@@ -2373,6 +2385,76 @@ export default function WebsiteBuilderDemo() {
       setErrorMsg(err instanceof Error ? err.message : 'Product analysis failed');
       setDropStatus('error');
     }
+  }
+
+  function handleSaveManualProduct() {
+    if (!manualTitle.trim() || !manualPrice.trim()) {
+      setErrorMsg('Product Title and Price are required.');
+      return;
+    }
+    const mockRequestId = `req_manual_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const manualAnalysis: ProductAnalysis = {
+      productTitle: manualTitle.trim(),
+      productDescription: manualDescription.trim() || 'No description provided.',
+      features: [
+        'Premium quality materials',
+        'Modern ergonomic design',
+        'Durable construction',
+        'Easy to use',
+        'Compact and portable'
+      ],
+      sellingPoints: [
+        'Free shipping on qualified orders',
+        '30-day satisfaction guarantee',
+        'Premium value at competitive pricing',
+        'Reliable support and fast dispatch'
+      ],
+      targetAudience: 'general consumers',
+      category: 'General',
+      priceRange: manualPrice.trim(),
+      sourceUrl: 'manual://import',
+      images: manualImagesInput,
+      shippingInfo: manualShipping.trim() || 'Standard shipping available',
+      specifications: manualSpecsInput,
+      warnings: ['Manually imported product details'],
+      isPlaceholder: false,
+      analysisId: `manual_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      requestId: mockRequestId
+    };
+
+    console.log('[Frontend] Saving manual product details:', JSON.stringify(manualAnalysis));
+    
+    setProductAnalysis(manualAnalysis);
+    setSelectedImages(manualImagesInput);
+    setDropInput((prev) => ({
+      ...prev,
+      productUrl: 'manual://import',
+      storeName: `${manualTitle.trim()} Store`
+    }));
+    setDropStatus('analyzed');
+    setIsManualImport(false);
+  }
+
+  function handleAddManualImportImage() {
+    if (!newManualImageUrl.trim()) return;
+    setManualImagesInput((prev) => [...prev, newManualImageUrl.trim()]);
+    setNewManualImageUrl('');
+  }
+
+  function handleRemoveManualImportImage(index: number) {
+    setManualImagesInput((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleAddManualSpec() {
+    if (!newSpecLabel.trim() || !newSpecValue.trim()) return;
+    setManualSpecsInput((prev) => [...prev, { label: newSpecLabel.trim(), value: newSpecValue.trim() }]);
+    setNewSpecLabel('');
+    setNewSpecValue('');
+  }
+
+  function handleRemoveManualSpec(index: number) {
+    setManualSpecsInput((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleAddManualImage() {
@@ -2761,56 +2843,245 @@ export default function WebsiteBuilderDemo() {
               </div>
             </div>
 
-            {/* Step 1: Product URL */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                <Link2 size={14} className="inline mr-1.5" style={{ verticalAlign: '-2px' }} />
-                Paste your product or supplier URL <span style={{ color: '#818cf8' }}>*</span>
-              </label>
-              <div className="flex gap-3">
-                <input
-                  type="url"
-                  placeholder="https://www.aliexpress.com/item/... or any product page URL"
-                  value={productUrl}
-                  onChange={(e) => {
-                    const newVal = e.target.value;
-                    setProductUrl(newVal);
-                    // Invalidate all previous analysis, selected images, and generated store content immediately when URL changes
-                    setProductAnalysis(null);
-                    setSelectedImages([]);
-                    setResult(null);
-                    setErrorMsg('');
-                    if (dropStatus !== 'idle') {
-                      setDropStatus('idle');
-                    }
-                  }}
-                  className="input-field flex-1"
-                  disabled={dropStatus === 'analyzing' || dropStatus === 'generating'}
-                />
+            {/* Step 1: Product Import Mode Selection */}
+            <div className="flex gap-4 mb-4 border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <button
+                type="button"
+                className={`pb-2 text-sm font-semibold transition-all ${!isManualImport ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
+                onClick={() => {
+                  setIsManualImport(false);
+                  setErrorMsg('');
+                }}
+              >
+                Import via Product URL
+              </button>
+              <button
+                type="button"
+                id="manual-import-tab"
+                className={`pb-2 text-sm font-semibold transition-all ${isManualImport ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
+                onClick={() => {
+                  setIsManualImport(true);
+                  setErrorMsg('');
+                }}
+              >
+                Manual Product Import
+              </button>
+            </div>
+
+            {isManualImport ? (
+              <div className="rounded-xl p-4 mb-6" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h4 className="text-sm font-bold mb-4" style={{ color: '#e4e4e7' }}>Manual Product Ingestion</h4>
+                
+                {/* Title */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#a1a1aa' }}>Product Title *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Wireless Ergonomic Bluetooth Mouse"
+                    value={manualTitle}
+                    onChange={(e) => setManualTitle(e.target.value)}
+                    className="input-field w-full text-sm"
+                  />
+                </div>
+
+                {/* Price */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#a1a1aa' }}>Price ($) *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 29.99"
+                    value={manualPrice}
+                    onChange={(e) => setManualPrice(e.target.value)}
+                    className="input-field w-full text-sm"
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#a1a1aa' }}>Description</label>
+                  <textarea
+                    placeholder="Enter product description..."
+                    value={manualDescription}
+                    onChange={(e) => setManualDescription(e.target.value)}
+                    className="input-field w-full text-sm min-h-[80px] py-2"
+                  />
+                </div>
+
+                {/* Shipping Info */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#a1a1aa' }}>Shipping Information</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Free shipping, delivery in 3-5 days"
+                    value={manualShipping}
+                    onChange={(e) => setManualShipping(e.target.value)}
+                    className="input-field w-full text-sm"
+                  />
+                </div>
+
+                {/* Images */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#a1a1aa' }}>Product Images</label>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="url"
+                      placeholder="Paste image URL..."
+                      value={newManualImageUrl}
+                      onChange={(e) => setNewManualImageUrl(e.target.value)}
+                      className="input-field flex-1 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddManualImportImage}
+                      className="px-3 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {manualImagesInput.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                      {manualImagesInput.map((img, idx) => (
+                        <div key={idx} className="relative w-12 h-12 rounded border border-zinc-700 overflow-hidden group">
+                          <img src={img} className="w-full h-full object-cover" alt="" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveManualImportImage(idx)}
+                            className="absolute inset-0 bg-red-600 bg-opacity-70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-white text-[10px]"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Specifications */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#a1a1aa' }}>Specifications</label>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Label (e.g. Material)"
+                      value={newSpecLabel}
+                      onChange={(e) => setNewSpecLabel(e.target.value)}
+                      className="input-field flex-1 text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Value (e.g. ABS Polymer)"
+                      value={newSpecValue}
+                      onChange={(e) => setNewSpecValue(e.target.value)}
+                      className="input-field flex-1 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddManualSpec}
+                      className="px-3 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {manualSpecsInput.length > 0 && (
+                    <div className="mt-2 text-xs flex flex-col gap-1 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                      {manualSpecsInput.map((spec, idx) => (
+                        <div key={idx} className="flex justify-between items-center py-1 border-b border-zinc-800">
+                          <span>{spec.label}: <strong style={{ color: '#e4e4e7' }}>{spec.value}</strong></span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveManualSpec(idx)}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Save button */}
                 <button
                   type="button"
-                  onClick={handleAnalyzeProduct}
-                  disabled={!productUrl.trim() || dropStatus === 'analyzing'}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex-shrink-0"
-                  style={{
-                    background: productUrl.trim() ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'rgba(99,102,241,0.06)',
-                    color: productUrl.trim() ? '#fff' : '#52525b',
-                    border: 'none',
-                    boxShadow: productUrl.trim() ? '0 4px 16px rgba(99,102,241,0.3)' : 'none',
-                    opacity: !productUrl.trim() || dropStatus === 'analyzing' ? 0.5 : 1,
-                    cursor: !productUrl.trim() ? 'not-allowed' : 'pointer',
-                  }}
+                  onClick={handleSaveManualProduct}
+                  disabled={!manualTitle.trim() || !manualPrice.trim()}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2"
                 >
-                  {dropStatus === 'analyzing'
-                    ? <><Loader2 size={16} className="animate-spin" /> Analyzing...</>
-                    : <><BarChart3 size={16} /> Analyze Product</>
-                  }
+                  Save & Validate Product
                 </button>
               </div>
-              <p className="text-xs mt-2" style={{ color: '#52525b' }}>
-                Supports AliExpress, Amazon, Shopify stores, Alibaba, Temu, and any public product page.
-              </p>
-            </div>
+            ) : (
+              /* Step 1: Product URL */
+              <div className="mb-6">
+                <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                  <Link2 size={14} className="inline mr-1.5" style={{ verticalAlign: '-2px' }} />
+                  Paste your product or supplier URL <span style={{ color: '#818cf8' }}>*</span>
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    type="url"
+                    placeholder="https://www.aliexpress.com/item/... or any product page URL"
+                    value={productUrl}
+                    onChange={(e) => {
+                      const newVal = e.target.value;
+                      setProductUrl(newVal);
+                      // Invalidate all previous analysis, selected images, and generated store content immediately when URL changes
+                      setProductAnalysis(null);
+                      setSelectedImages([]);
+                      setResult(null);
+                      setErrorMsg('');
+                      if (dropStatus !== 'idle') {
+                        setDropStatus('idle');
+                      }
+                    }}
+                    className="input-field flex-1"
+                    disabled={dropStatus === 'analyzing' || dropStatus === 'generating'}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAnalyzeProduct}
+                    disabled={!productUrl.trim() || dropStatus === 'analyzing'}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex-shrink-0"
+                    style={{
+                      background: productUrl.trim() ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'rgba(99,102,241,0.06)',
+                      color: productUrl.trim() ? '#fff' : '#52525b',
+                      border: 'none',
+                      boxShadow: productUrl.trim() ? '0 4px 16px rgba(99,102,241,0.3)' : 'none',
+                      opacity: !productUrl.trim() || dropStatus === 'analyzing' ? 0.5 : 1,
+                      cursor: !productUrl.trim() ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {dropStatus === 'analyzing'
+                      ? <><Loader2 size={16} className="animate-spin" /> Analyzing...</>
+                      : <><BarChart3 size={16} /> Analyze Product</>
+                    }
+                  </button>
+                </div>
+                
+                {/* Captcha/Anti-bot fail help message */}
+                {dropStatus === 'error' && errorMsg.includes('captcha') && (
+                  <div className="mt-3 p-3 rounded-xl border text-xs" style={{ background: 'rgba(239,68,68,0.04)', borderColor: 'rgba(239,68,68,0.2)', color: '#f87171' }}>
+                    <p className="font-semibold mb-1">⚠️ Extraction Blocked by CAPTCHA</p>
+                    <p className="mb-2">AliExpress security challenge prevented automatic ingestion. You can import the product manually instead.</p>
+                    <button
+                      type="button"
+                      id="manual-import-btn"
+                      onClick={() => {
+                        setIsManualImport(true);
+                        setErrorMsg('');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-red-950/40 border border-red-500/30 text-red-300 hover:bg-red-950/60 font-bold transition-all"
+                    >
+                      Use Manual Import Fallback
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-xs mt-2" style={{ color: '#52525b' }}>
+                  Supports AliExpress, Amazon, Shopify stores, Alibaba, Temu, and any public product page.
+                </p>
+              </div>
+            )}
 
             {/* Analyzing skeleton */}
             {dropStatus === 'analyzing' && (
