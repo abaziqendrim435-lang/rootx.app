@@ -488,11 +488,927 @@ function InputForm({
   );
 }
 
+function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderInput): string {
+  const pc = input.primaryColor || '#6366f1';
+  const sc = input.secondaryColor || '#06b6d4';
+  const headingFont = result.branding.typography.heading || 'Inter';
+  const bodyFont = result.branding.typography.body || 'Inter';
+  const fontsUrl = result.branding.typography.googleFontsUrl || `https://fonts.googleapis.com/css2?family=${headingFont.replace(/ /g, '+')}:wght@400;600;700;800&family=${bodyFont.replace(/ /g, '+')}:wght@300;400;500;600&display=swap`;
+
+  const eco = result.ecommerce || {
+    announcementBar: '⚡ LIMITED TIME OFFER: FREE SHIPPING WORLDWIDE!',
+    navigation: ['Home', 'Shop', 'Our Story', 'Reviews', 'FAQs'],
+    price: '$29.99',
+    compareAtPrice: '$59.99',
+    variants: [{ name: 'Color', values: ['Midnight Black', 'Metallic Silver'] }],
+    images: result.homepage.hero.backgroundStyle.includes('http') ? [result.homepage.hero.backgroundStyle] : [],
+    trustBadges: ['30-Day Money-Back Guarantee', '100% Secure Checkout', 'Worldwide Tracked Shipping'],
+    shippingText: 'Dispatched in 24-48 hours. Estimated delivery: 7-12 days.',
+    featureSections: [],
+    specifications: [],
+    howItWorks: [],
+    faq: [],
+    reviews: [],
+    stickyAddToCartText: 'Get Yours Now'
+  };
+
+  const mainImage = eco.images?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=800';
+  const priceVal = eco.price || '$29.99';
+  const compareVal = eco.compareAtPrice || '$59.99';
+  const title = result.seo.title.split('|')[0]?.trim() || result.homepage.hero.headline;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${result.seo.title}</title>
+  <meta name="description" content="${result.seo.metaDescription}"/>
+  <link href="${fontsUrl}" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: ${pc};
+      --secondary: ${sc};
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --text: #17171f;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --radius: 12px;
+    }
+    body {
+      font-family: '${bodyFont}', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding-bottom: 80px;
+    }
+    h1, h2, h3, h4 { font-family: '${headingFont}', sans-serif; font-weight: 700; line-height: 1.25; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    
+    .announcement-bar {
+      background: var(--primary);
+      color: #fff;
+      text-align: center;
+      padding: 8px 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.02);
+    }
+    header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 70px;
+    }
+    .logo {
+      font-family: '${headingFont}', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--primary);
+      text-decoration: none;
+      letter-spacing: -0.5px;
+    }
+    nav {
+      display: flex;
+      gap: 28px;
+    }
+    nav a {
+      text-decoration: none;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+    nav a:hover { color: var(--primary); }
+    .header-icons {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .cart-btn {
+      position: relative;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+    .cart-badge {
+      position: absolute;
+      top: -6px;
+      right: -8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .product-hero {
+      background: var(--surface);
+      padding: 40px 0 60px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+    
+    .gallery-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .main-image-box {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      aspect-ratio: 1;
+      background: #fbfbfb;
+    }
+    .main-image-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transition: opacity 0.2s;
+    }
+    .thumbnails {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+    }
+    .thumbnail {
+      width: 70px;
+      height: 70px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      background: #fff;
+      flex-shrink: 0;
+      transition: border-color 0.2s;
+    }
+    .thumbnail:hover, .thumbnail.active {
+      border-color: var(--primary);
+    }
+    .thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .product-info {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .product-meta {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--primary);
+    }
+    .product-title {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .rating-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .stars { color: #f59e0b; font-size: 1rem; }
+    
+    .price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin: 4px 0;
+    }
+    .price {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--primary);
+    }
+    .compare-price {
+      font-size: 1.4rem;
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+    .discount-badge {
+      background: rgba(34,197,94,0.12);
+      color: #22c55e;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+    
+    .product-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .option-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .option-label {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .option-values {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .option-btn {
+      background: #fff;
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .option-btn:hover { border-color: var(--primary); }
+    .option-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .qty-selector {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 120px;
+      background: #fff;
+    }
+    .qty-btn {
+      background: none;
+      border: none;
+      width: 36px;
+      height: 38px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qty-input {
+      border: none;
+      width: 48px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .purchase-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btn-add-to-cart {
+      background: var(--primary);
+      color: #fff;
+      padding: 16px;
+      border-radius: var(--radius);
+      font-weight: 700;
+      font-size: 1rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.25s;
+      box-shadow: 0 4px 16px ${pc}25;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .btn-add-to-cart:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+    .btn-buy-now {
+      background: #111;
+      color: #fff;
+      padding: 16px;
+      border-radius: var(--radius);
+      font-weight: 700;
+      font-size: 1rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .btn-buy-now:hover { background: #000; }
+
+    .shipping-box {
+      border: 1px solid var(--border);
+      background: #fbfbfb;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .trust-badges {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      margin-top: 10px;
+    }
+    .badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    .badge-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(34,197,94,0.1);
+      color: #22c55e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+    }
+
+    .section { padding: 70px 0; border-bottom: 1px solid var(--border); }
+    .section-alt { background: var(--surface); }
+    .section-title { font-size: 1.75rem; font-weight: 800; text-align: center; margin-bottom: 12px; }
+    .section-subtitle { font-size: 0.95rem; text-align: center; color: var(--text-muted); margin-bottom: 48px; max-width: 600px; margin-left: auto; margin-right: auto; }
+    
+    .feature-showcase {
+      display: flex;
+      flex-direction: column;
+      gap: 60px;
+    }
+    .spotlight-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+    }
+    .spotlight-row.reverse {
+      direction: rtl;
+    }
+    .spotlight-row.reverse .spotlight-text {
+      direction: ltr;
+    }
+    .spotlight-image {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      aspect-ratio: 4/3;
+      background: #fff;
+    }
+    .spotlight-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .spotlight-text {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .spotlight-text h3 {
+      font-size: 1.6rem;
+      font-weight: 800;
+    }
+    .spotlight-text p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .specs-table {
+      max-width: 800px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .spec-row {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      border-bottom: 1px solid var(--border);
+    }
+    .spec-row:last-child { border-bottom: none; }
+    .spec-label {
+      background: #fbfbfb;
+      padding: 14px 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      border-right: 1px solid var(--border);
+    }
+    .spec-value {
+      background: #fff;
+      padding: 14px 20px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 32px;
+    }
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 32px;
+      border-radius: var(--radius);
+      position: relative;
+    }
+    .step-num {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--primary);
+      opacity: 0.15;
+    }
+    .step-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .step-card p {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .faq-list {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .faq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+    }
+    .faq-item h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; }
+    .faq-item p { color: var(--text-muted); font-size: 0.88rem; }
+
+    .reviews-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+    .review-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .review-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .reviewer-name { font-weight: 700; font-size: 0.9rem; }
+    .review-date { font-size: 0.75rem; color: var(--text-muted); }
+    .review-title { font-weight: 700; font-size: 0.95rem; }
+    .review-body { color: var(--text-muted); font-size: 0.88rem; line-height: 1.6; }
+    
+    footer {
+      background: #111;
+      color: #fff;
+      padding: 60px 0 30px;
+      border-top: 1px solid #222;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    .footer-grid h4 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+      color: #fff;
+    }
+    .footer-grid a {
+      display: block;
+      color: #9ca3af;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 6px 0;
+      transition: color 0.2s;
+    }
+    .footer-grid a:hover { color: var(--primary); }
+    .footer-bottom {
+      border-top: 1px solid #222;
+      padding-top: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .sticky-cart-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 12px 0;
+      z-index: 99;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+    }
+    .sticky-bar-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .sticky-product-details {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .sticky-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .sticky-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .sticky-title { font-weight: 700; font-size: 0.88rem; color: var(--text); }
+    .sticky-price { font-weight: 800; font-size: 0.95rem; color: var(--primary); }
+    .sticky-btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 10px ${pc}20;
+    }
+
+    @media (max-width: 768px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 32px; }
+      .spotlight-row { grid-template-columns: 1fr; gap: 24px; }
+      .spotlight-row.reverse { direction: ltr; }
+      .sticky-product-details { display: none; }
+      .sticky-btn { width: 100%; }
+      header nav { display: none; }
+    }
+  </style>
+  <script>
+    function changeMainImage(element, url) {
+      document.getElementById('main-product-img').src = url;
+      const ths = document.getElementsByClassName('thumbnail');
+      for (let i = 0; i < ths.length; i++) {
+        ths[i].classList.remove('active');
+      }
+      element.classList.add('active');
+    }
+    
+    function changeVariant(element) {
+      const parent = element.parentElement;
+      const btns = parent.getElementsByClassName('option-btn');
+      for (let i = 0; i < btns.length; i++) {
+        btns[i].classList.remove('active');
+      }
+      element.classList.add('active');
+    }
+    
+    function changeQty(delta) {
+      const input = document.getElementById('qty-input');
+      let val = parseInt(input.value) || 1;
+      val += delta;
+      if (val < 1) val = 1;
+      input.value = val;
+    }
+  </script>
+</head>
+<body>
+  <div class="announcement-bar">
+    ${eco.announcementBar}
+  </div>
+
+  <header>
+    <div class="container">
+      <a href="#" class="logo">${input.businessName}</a>
+      <nav>
+        ${eco.navigation.map((n) => `<a href="#${n.toLowerCase().replace(/ /g, '-')}">${n}</a>`).join('\n        ')}
+      </nav>
+      <div class="header-icons">
+        <button class="cart-btn">🛒<span class="cart-badge">0</span></button>
+      </div>
+    </div>
+  </header>
+
+  <section class="product-hero">
+    <div class="container">
+      <div class="hero-grid">
+        <div class="gallery-container">
+          <div class="main-image-box">
+            <img id="main-product-img" src="${mainImage}" alt="${title}" />
+          </div>
+          ${eco.images && eco.images.length > 0 ? `
+          <div class="thumbnails">
+            ${eco.images.map((img, i) => `
+              <div class="thumbnail ${i === 0 ? 'active' : ''}" onclick="changeMainImage(this, '${img}')">
+                <img src="${img}" alt="Thumb ${i + 1}" />
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
+        </div>
+
+        <div class="product-info">
+          <p class="product-meta">${result.seo.keywords?.[0] || 'Exclusive Offer'}</p>
+          <h1 class="product-title">${title}</h1>
+          
+          <div class="rating-row">
+            <span class="stars">★★★★★</span>
+            <span>4.9/5</span>
+            <span style="color: var(--text-muted)">(${result.testimonials.testimonials.length * 24}+ reviews)</span>
+          </div>
+
+          <div class="price-row">
+            <span class="price">${priceVal}</span>
+            <span class="compare-price">${compareVal}</span>
+            <span class="discount-badge">Save 50%</span>
+          </div>
+
+          <p class="product-desc">
+            ${result.homepage.hero.subheadline}
+          </p>
+
+          ${eco.variants && eco.variants.length > 0 ? eco.variants.map((v) => `
+            <div class="option-group">
+              <span class="option-label">${v.name}</span>
+              <div class="option-values">
+                ${v.values.map((val, idx) => `
+                  <button type="button" class="option-btn ${idx === 0 ? 'active' : ''}" onclick="changeVariant(this)">
+                    ${val}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          `).join('') : ''}
+
+          <div class="option-group">
+            <span class="option-label">Quantity</span>
+            <div class="qty-selector">
+              <button class="qty-btn" onclick="changeQty(-1)">-</button>
+              <input type="text" id="qty-input" class="qty-input" value="1" readonly />
+              <button class="qty-btn" onclick="changeQty(1)">+</button>
+            </div>
+          </div>
+
+          <div class="purchase-actions">
+            <button class="btn-add-to-cart" onclick="alert('Added to cart!')">Add to Cart</button>
+            <button class="btn-buy-now" onclick="alert('Proceeding to instant checkout...')">Buy It Now</button>
+          </div>
+
+          <div class="shipping-box">
+            🚚 <span>${eco.shippingText}</span>
+          </div>
+
+          <div class="trust-badges">
+            ${eco.trustBadges.map((badge) => `
+              <div class="badge">
+                <span class="badge-icon">✓</span>
+                <span>${badge}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  ${eco.featureSections && eco.featureSections.length > 0 ? `
+  <section id="features" class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Designed for Excellence</h2>
+      <p class="section-subtitle">${result.homepage.socialProof}</p>
+      
+      <div class="feature-showcase">
+        ${eco.featureSections.map((f, i) => `
+          <div class="spotlight-row ${i % 2 === 1 ? 'reverse' : ''}">
+            <div class="spotlight-image">
+              <img src="${f.imageUrl || mainImage}" alt="${f.title}" />
+            </div>
+            <div class="spotlight-text">
+              <h3>${f.title}</h3>
+              <p>${f.description}</p>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+  ` : `
+  <section id="features" class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Core Benefits</h2>
+      <p class="section-subtitle">${result.homepage.socialProof}</p>
+      <div class="steps-grid">
+        ${result.homepage.features.map((f) => `
+          <div class="step-card">
+            <h3>${f.title}</h3>
+            <p>${f.description}</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+  `}
+
+  ${eco.specifications && eco.specifications.length > 0 ? `
+  <section id="specifications" class="section">
+    <div class="container">
+      <h2 class="section-title">Product Specifications</h2>
+      <p class="section-subtitle">Full details and technical capabilities</p>
+      <div class="specs-table">
+        ${eco.specifications.map((spec) => `
+          <div class="spec-row">
+            <div class="spec-label">${spec.label}</div>
+            <div class="spec-value">${spec.value}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+  ` : ''}
+
+  ${eco.howItWorks && eco.howItWorks.length > 0 ? `
+  <section id="how-it-works" class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-subtitle">Get started with your new product in minutes</p>
+      <div class="steps-grid">
+        ${eco.howItWorks.map((step) => `
+          <div class="step-card">
+            <span class="step-num">${step.step}</span>
+            <h3>${step.title}</h3>
+            <p>${step.description}</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+  ` : ''}
+
+  <section id="faqs" class="section">
+    <div class="container">
+      <h2 class="section-title">${result.faq.title}</h2>
+      <p class="section-subtitle">${result.faq.subtitle}</p>
+      <div class="faq-list">
+        ${(eco.faq.length > 0 ? eco.faq : result.faq.items).map((item) => `
+          <div class="faq-item">
+            <h4>${item.question}</h4>
+            <p>${item.answer}</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+
+  <section id="reviews" class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">${result.testimonials.title}</h2>
+      <p class="section-subtitle">${result.testimonials.subtitle}</p>
+      <div class="reviews-grid">
+        ${(eco.reviews.length > 0 ? eco.reviews.map(r => ({ name: r.author, rating: r.rating, quote: r.content, company: r.date, role: r.title })) : result.testimonials.testimonials).map((t) => `
+          <div class="review-card">
+            <div class="review-header">
+              <span class="reviewer-name">${t.name}</span>
+              <span class="review-date">${t.company}</span>
+            </div>
+            <div class="stars">${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}</div>
+            <p class="review-title">${t.role}</p>
+            <p class="review-body">"${t.quote}"</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <h4 style="color: var(--primary)">${input.businessName}</h4>
+          <p style="color: #6b7280; font-size: 0.8rem; line-height: 1.6; margin-top: 12px;">
+            ${result.footer.tagline}
+          </p>
+        </div>
+        ${result.footer.columns.map((col) => `
+          <div>
+            <h4>${col.title}</h4>
+            ${col.links.map((link) => `<a href="${link.url}">${link.label}</a>`).join('')}
+          </div>
+        `).join('')}
+      </div>
+      <div class="footer-bottom">
+        <p>${result.footer.copyright}</p>
+        <div class="payment-icons">
+          💳 Visa • Mastercard • PayPal • Apple Pay
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="sticky-cart-bar">
+    <div class="container">
+      <div class="sticky-bar-content">
+        <div class="sticky-product-details">
+          <div class="sticky-thumb">
+            <img src="${mainImage}" alt="${title}" />
+          </div>
+          <div>
+            <p class="sticky-title">${title}</p>
+            <p class="sticky-price">${priceVal}</p>
+          </div>
+        </div>
+        <button class="sticky-btn" onclick="alert('Instant Checkout!')">${eco.stickyAddToCartText || 'Buy Now'}</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+`;
+}
+
 // ════════════════════════════════════════════════════════════════
 // Preview HTML Generator
 // ════════════════════════════════════════════════════════════════
 
 function generatePreviewHtml(result: WebsiteGeneration, input: WebsiteBuilderInput): string {
+  if (result.ecommerce) {
+    return generateEcommerceHtml(result, input);
+  }
+
   const pc = input.primaryColor;
   const sc = input.secondaryColor;
   const headingFont = result.branding.typography.heading || 'Inter';
@@ -1311,6 +2227,8 @@ export default function WebsiteBuilderDemo() {
     language: 'English', country: 'United States',
   });
   const [dropStatus, setDropStatus] = useState<'idle' | 'analyzing' | 'analyzed' | 'generating' | 'done' | 'error'>('idle');
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [manualImageUrl, setManualImageUrl] = useState('');
 
   // Generation state
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -1412,21 +2330,42 @@ export default function WebsiteBuilderDemo() {
 
   async function handleAnalyzeProduct() {
     if (!productUrl.trim()) return;
+    const submittedUrl = productUrl.trim();
+    console.log('[Frontend] Exact URL received by frontend:', submittedUrl);
     setDropStatus('analyzing');
     setErrorMsg('');
     setProductAnalysis(null);
+    setSelectedImages([]);
     try {
-      const res = await fetch('/api/agents/analyze-product', {
+      const res = await fetch(`/api/agents/analyze-product?cb=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: productUrl.trim(), provider }),
+        cache: 'no-store',
+        body: JSON.stringify({ url: submittedUrl, provider }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned status ${res.status}`);
+      }
       const data = await res.json();
+      console.log('[Frontend] Final JSON returned to frontend:', JSON.stringify(data));
       if (!data.success) throw new Error(data.error || 'Analysis failed');
+      
+      // Strict URL verification check
+      if (!data.sourceUrl || data.sourceUrl !== submittedUrl) {
+        console.error('[Frontend] Product URL mismatch detected!', 'Expected:', submittedUrl, 'Got:', data.sourceUrl);
+        throw new Error('Product analysis mismatch. Please try again.');
+      }
+      if (data.analysis.sourceUrl !== submittedUrl) {
+        console.error('[Frontend] Product Analysis object URL mismatch detected!', 'Expected:', submittedUrl, 'Got:', data.analysis.sourceUrl);
+        throw new Error('Product analysis mismatch. Please try again.');
+      }
+
       setProductAnalysis(data.analysis);
+      setSelectedImages(data.analysis.images || []);
       setDropInput((prev) => ({
         ...prev,
-        productUrl: productUrl.trim(),
+        productUrl: submittedUrl,
         storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
       }));
       setDropStatus('analyzed');
@@ -1436,8 +2375,23 @@ export default function WebsiteBuilderDemo() {
     }
   }
 
+  function handleAddManualImage() {
+    if (!manualImageUrl.trim() || !productAnalysis) return;
+    const url = manualImageUrl.trim();
+    setProductAnalysis({
+      ...productAnalysis,
+      images: [...(productAnalysis.images || []), url],
+    });
+    setSelectedImages((prev) => [...prev, url]);
+    setManualImageUrl('');
+  }
+
   async function handleGenerateStore() {
     if (!productAnalysis || !dropInput.storeName.trim()) return;
+    if (selectedImages.length === 0) {
+      setErrorMsg('Cannot generate store: At least one product image must be selected.');
+      return;
+    }
     setDropStatus('generating');
     setResult(null);
     setErrorMsg('');
@@ -1445,7 +2399,11 @@ export default function WebsiteBuilderDemo() {
       const res = await fetch('/api/agents/dropshipping-store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ analysis: productAnalysis, input: dropInput, provider }),
+        body: JSON.stringify({
+          analysis: { ...productAnalysis, images: selectedImages },
+          input: dropInput,
+          provider
+        }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -1814,7 +2772,18 @@ export default function WebsiteBuilderDemo() {
                   type="url"
                   placeholder="https://www.aliexpress.com/item/... or any product page URL"
                   value={productUrl}
-                  onChange={(e) => setProductUrl(e.target.value)}
+                  onChange={(e) => {
+                    const newVal = e.target.value;
+                    setProductUrl(newVal);
+                    // Invalidate all previous analysis, selected images, and generated store content immediately when URL changes
+                    setProductAnalysis(null);
+                    setSelectedImages([]);
+                    setResult(null);
+                    setErrorMsg('');
+                    if (dropStatus !== 'idle') {
+                      setDropStatus('idle');
+                    }
+                  }}
                   className="input-field flex-1"
                   disabled={dropStatus === 'analyzing' || dropStatus === 'generating'}
                 />
@@ -1873,26 +2842,111 @@ export default function WebsiteBuilderDemo() {
                 <div className="rounded-xl p-4 mb-5" style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)' }}>
                   <h4 className="font-bold mb-2">{productAnalysis.productTitle}</h4>
                   <p className="text-xs mb-3 leading-relaxed" style={{ color: '#a1a1aa' }}>{productAnalysis.productDescription}</p>
-
-                  {/* Product Images */}
-                  {productAnalysis.images && productAnalysis.images.length > 0 && (
-                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-                      {productAnalysis.images.slice(0, 6).map((img, i) => (
-                        <div
-                          key={i}
-                          className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden"
-                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)' }}
-                        >
-                          <img
-                            src={img}
-                            alt={`Product ${i + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
-                        </div>
-                      ))}
+                  
+                  {/* Analysis details */}
+                  <div className="rounded-lg p-3 mb-4 flex flex-col gap-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', color: '#a1a1aa' }}>
+                    <div className="flex justify-between gap-4">
+                      <span className="font-semibold text-zinc-500">Source URL:</span>
+                      <a href={productAnalysis.sourceUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline" style={{ color: '#818cf8', maxWidth: '75%' }}>
+                        {productAnalysis.sourceUrl}
+                      </a>
                     </div>
-                  )}
+                    {productAnalysis.analysisId && (
+                      <div className="flex justify-between gap-4">
+                        <span className="font-semibold text-zinc-500">Analysis ID:</span>
+                        <span className="font-mono">{productAnalysis.analysisId}</span>
+                      </div>
+                    )}
+                    {productAnalysis.requestId && (
+                      <div className="flex justify-between gap-4">
+                        <span className="font-semibold text-zinc-500">Request ID:</span>
+                        <span className="font-mono">{productAnalysis.requestId}</span>
+                      </div>
+                    )}
+                    {productAnalysis.timestamp && (
+                      <div className="flex justify-between gap-4">
+                        <span className="font-semibold text-zinc-500">Analyzed At:</span>
+                        <span>{new Date(productAnalysis.timestamp).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Product Images Selector */}
+                  <div className="mb-4">
+                    <p className="text-xs font-bold mb-2" style={{ color: '#52525b' }}>
+                      Product Images ({selectedImages.length} selected of {productAnalysis.images?.length || 0} found)
+                    </p>
+                    
+                    {(!productAnalysis.images || productAnalysis.images.length === 0) ? (
+                      <div className="rounded-xl p-3 mb-3 text-sm" style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)', color: '#eab308' }}>
+                        ⚠️ No product images could be extracted from this URL.
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 mb-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+                        {productAnalysis.images.map((img, i) => {
+                          const isSelected = selectedImages.includes(img);
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedImages((prev) => prev.filter((url) => url !== img));
+                                } else {
+                                  setSelectedImages((prev) => [...prev, img]);
+                                }
+                              }}
+                              className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden relative p-0"
+                              style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                border: `2px solid ${isSelected ? '#6366f1' : 'var(--color-border)'}`,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <img
+                                src={img}
+                                alt={`Product ${i + 1}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center border border-white/20" style={{ zIndex: 10 }}>
+                                  <Check size={8} style={{ color: '#fff' }} />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Manual Image URL Upload */}
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        placeholder="Add product image URL manually"
+                        value={manualImageUrl}
+                        onChange={(e) => setManualImageUrl(e.target.value)}
+                        className="input-field flex-1 text-xs"
+                        style={{ height: '36px' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddManualImage}
+                        disabled={!manualImageUrl.trim()}
+                        className="flex items-center gap-1.5 px-4 rounded-lg text-xs font-bold transition-all"
+                        style={{
+                          background: manualImageUrl.trim() ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.02)',
+                          color: manualImageUrl.trim() ? '#a5b4fc' : '#52525b',
+                          border: `1px solid ${manualImageUrl.trim() ? 'rgba(99,102,241,0.3)' : 'var(--color-border)'}`,
+                          cursor: manualImageUrl.trim() ? 'pointer' : 'not-allowed',
+                          height: '36px'
+                        }}
+                      >
+                        <Upload size={12} /> Add Image
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Ratings */}
                   {productAnalysis.ratings && (

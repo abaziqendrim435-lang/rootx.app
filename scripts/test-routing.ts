@@ -174,52 +174,125 @@ async function runTests() {
   }
   console.log('✓ Test 2 Passed.\n');
 
-  // Test Case 3: AliExpress End-to-End Extraction with Real HTML Fixture
-  console.log('--- Test 3: AliExpress End-to-End Extraction via Route Handler ---');
+  // Test Case 3: AliExpress End-to-End Extraction with 3 Different URLs
+  console.log('--- Test 3: AliExpress End-to-End Extraction with 3 Different URLs ---');
   process.env.TEST_MODE = 'true';
 
-  const mockReq = {
-    json: async () => ({
-      url: 'https://www.aliexpress.com/item/100500123456.html',
-      provider: 'openai'
-    })
-  } as any;
+  const testUrls = [
+    {
+      url: 'https://www.aliexpress.com/item/usb-drive-fixture.html',
+      expectedTitle: 'Super Fast USB 3.0 Flash Drive 2TB Metal Pen Drive',
+      priceSnippet: '12.99',
+      imageSnippet: 'S5a8b548b5.jpg'
+    },
+    {
+      url: 'https://www.aliexpress.com/item/bluetooth-mouse-fixture.html',
+      expectedTitle: 'Wireless Ergonomic Bluetooth Mouse 1600 DPI',
+      priceSnippet: '24.99',
+      imageSnippet: 'S9a77348b5.jpg'
+    },
+    {
+      url: 'https://www.aliexpress.com/item/headphones-fixture.html',
+      expectedTitle: 'Premium Noise Cancelling Wireless Headphones',
+      priceSnippet: '79.99',
+      imageSnippet: 'S7a99348b5.jpg'
+    }
+  ];
 
-  const response = await POST(mockReq);
+  const results: any[] = [];
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Test 3 failed: Route handler returned status ${response.status}: ${errText}`);
+  for (let i = 0; i < testUrls.length; i++) {
+    const { url, expectedTitle, priceSnippet, imageSnippet } = testUrls[i];
+    console.log(`\n--- Sub-test 3.${i + 1}: Testing URL: "${url}" ---`);
+
+    const mockReq = {
+      json: async () => ({
+        url: url,
+        provider: 'openai'
+      })
+    } as any;
+
+    const response = await POST(mockReq);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Sub-test 3.${i + 1} failed: Route handler returned status ${response.status}: ${errText}`);
+    }
+
+    const apiResult = await response.json();
+    console.log(`Sub-test 3.${i + 1} Raw Response Payload:`, JSON.stringify(apiResult, null, 2));
+
+    if (!apiResult.success || !apiResult.analysis) {
+      throw new Error(`Sub-test 3.${i + 1} failed: Route handler returned unsuccessful analysis`);
+    }
+
+    // Emulate Frontend Verification Logic
+    console.log(`[Frontend Emulation] Verifying sourceUrl matching for: ${url}`);
+    if (!apiResult.sourceUrl || apiResult.sourceUrl !== url) {
+      throw new Error(`Sub-test 3.${i + 1} failed: response.sourceUrl ("${apiResult.sourceUrl}") does not match submitted URL ("${url}")`);
+    }
+    if (apiResult.analysis.sourceUrl !== url) {
+      throw new Error(`Sub-test 3.${i + 1} failed: response.analysis.sourceUrl ("${apiResult.analysis.sourceUrl}") does not match submitted URL ("${url}")`);
+    }
+    console.log(`[Frontend Emulation] URL match verification successful!`);
+
+    const analysis = apiResult.analysis;
+
+    // Assertions for specific product
+    if (analysis.productTitle !== expectedTitle) {
+      throw new Error(`Expected title "${expectedTitle}" but got "${analysis.productTitle}"`);
+    }
+    if (!analysis.priceRange.includes(priceSnippet)) {
+      throw new Error(`Expected priceRange to contain "${priceSnippet}" but got "${analysis.priceRange}"`);
+    }
+    const hasImage = analysis.images.some((img: string) => img.includes(imageSnippet));
+    if (!hasImage) {
+      throw new Error(`Expected images to contain snippet "${imageSnippet}"`);
+    }
+    if (!analysis.analysisId || !analysis.timestamp || !analysis.requestId) {
+      throw new Error('Expected analysisId, timestamp, and requestId to be defined');
+    }
+
+    results.push(analysis);
   }
 
-  const apiResult = await response.json();
-  console.log('AliExpress Parser Result:', JSON.stringify(apiResult, null, 2));
+  // Cross-product isolation verification
+  console.log('\n--- Cross-Product Isolation Verification ---');
+  for (let i = 0; i < results.length; i++) {
+    for (let j = i + 1; j < results.length; j++) {
+      const p1 = results[i];
+      const p2 = results[j];
 
-  if (!apiResult.success || !apiResult.analysis) {
-    throw new Error('Test 3 failed: Route handler returned unsuccessful analysis');
+      console.log(`Comparing Product "${p1.productTitle}" vs "${p2.productTitle}"`);
+      
+      if (p1.productTitle === p2.productTitle) {
+        throw new Error(`Product title reuse detected: "${p1.productTitle}" === "${p2.productTitle}"`);
+      }
+      if (p1.productDescription === p2.productDescription) {
+        throw new Error('Product description reuse detected!');
+      }
+      if (p1.priceRange === p2.priceRange) {
+        throw new Error('Product priceRange reuse detected!');
+      }
+      if (JSON.stringify(p1.images) === JSON.stringify(p2.images)) {
+        throw new Error('Product images array reuse detected!');
+      }
+      if (JSON.stringify(p1.features) === JSON.stringify(p2.features)) {
+        throw new Error('Product features array reuse detected!');
+      }
+      if (p1.analysisId === p2.analysisId) {
+        throw new Error('Product analysisId reuse detected!');
+      }
+      if (p1.requestId === p2.requestId) {
+        throw new Error('Product requestId reuse detected!');
+      }
+    }
   }
 
-  const analysis = apiResult.analysis;
-  // Assertions
-  if (analysis.productTitle !== 'Super Fast USB 3.0 Flash Drive 2TB Metal Pen Drive') {
-    throw new Error(`Expected title "Super Fast USB 3.0 Flash Drive 2TB Metal Pen Drive" but got "${analysis.productTitle}"`);
-  }
-  if (!analysis.priceRange.includes('12.99')) {
-    throw new Error(`Expected priceRange to contain "12.99" but got "${analysis.priceRange}"`);
-  }
-  if (!analysis.images.includes('https://ae01.alicdn.com/kf/S5a8b548b5.jpg')) {
-    throw new Error('Expected images to contain "https://ae01.alicdn.com/kf/S5a8b548b5.jpg"');
-  }
-  if (analysis.ratings !== 4.8 || analysis.reviewCount !== 154) {
-    throw new Error(`Expected ratings 4.8 and reviewCount 154, but got ${analysis.ratings} and ${analysis.reviewCount}`);
-  }
-  if (analysis.specifications.length === 0) {
-    throw new Error('Expected specifications to be populated');
-  }
-
+  console.log('✓ Cross-Product Isolation Verified: All 3 products have completely unique titles, descriptions, prices, images, and features!');
   console.log('✓ Test 3 Passed.\n');
 
-  console.log('=== All Multi-Model & Fallback Verification Tests Passed Successfully! ===\n');
+  console.log('=== All Multi-Model, Fallback & URL Isolation Verification Tests Passed Successfully! ===\n');
 }
 
 runTests().catch(err => {

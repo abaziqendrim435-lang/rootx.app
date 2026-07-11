@@ -182,6 +182,44 @@ export interface MarketingData {
   };
 }
 
+// ── Ecommerce (Dropshipping Store) ─────────────────────────────
+
+export interface EcommerceProductVariant {
+  name: string;
+  values: string[];
+}
+
+export interface EcommerceFeatureSection {
+  title: string;
+  description: string;
+  imageUrl: string;
+}
+
+export interface EcommerceReview {
+  author: string;
+  rating: number;
+  date: string;
+  title: string;
+  content: string;
+}
+
+export interface EcommerceData {
+  announcementBar: string;
+  navigation: string[];
+  price: string;
+  compareAtPrice: string;
+  variants: EcommerceProductVariant[];
+  images: string[];
+  trustBadges: string[];
+  shippingText: string;
+  featureSections: EcommerceFeatureSection[];
+  specifications: { label: string; value: string }[];
+  howItWorks: { step: string; title: string; description: string }[];
+  faq: { question: string; answer: string }[];
+  reviews: EcommerceReview[];
+  stickyAddToCartText: string;
+}
+
 // ── Full Generation Response ───────────────────────────────────
 
 export interface WebsiteGeneration {
@@ -198,6 +236,7 @@ export interface WebsiteGeneration {
   marketing: MarketingData;
   isDemo: boolean;
   provider: string;
+  ecommerce?: EcommerceData;
 }
 
 // ── Export ──────────────────────────────────────────────────────
@@ -226,6 +265,9 @@ export interface ProductAnalysis {
   isPlaceholder: boolean;
   ratings?: number;
   reviewCount?: number;
+  analysisId?: string;
+  timestamp?: string;
+  requestId?: string;
 }
 
 export interface DropshippingInput {

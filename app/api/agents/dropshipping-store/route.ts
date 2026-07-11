@@ -31,7 +31,16 @@ export interface DropshippingStoreRequest {
 // ── Shared prompt ───────────────────────────────────────────
 
 function buildDropshippingPrompt(analysis: ProductAnalysis, input: DropshippingInput): string {
+  const imageUrlList = analysis.images.length > 0 ? analysis.images : [];
+
   return `You are an expert e-commerce copywriter and conversion specialist. Generate a complete, high-converting product storefront for a dropshipping store.
+  
+Visual & Brand Identity Analysis:
+Analyze the product category (${analysis.category}), target customer (${analysis.targetAudience}), product colors, and price positioning. Use this analysis to establish a custom design direction:
+1. Typography: Select premium, modern typography pairs.
+2. Color Palette: Tailor a cohesive color scheme centered around the primary color (${input.primaryColor}) and secondary color (${input.secondaryColor}).
+3. Layout & Section Order: Organize sections for maximum conversion, placing social proof and hero specs above features.
+4. Copywriting Tone: Match the target audience's aspirations (e.g., luxury, minimal, tech, wellness).
 
 Store Name: ${input.storeName}
 Product: ${analysis.productTitle}
@@ -47,6 +56,9 @@ Primary Color: ${input.primaryColor}
 Secondary Color: ${input.secondaryColor}
 Language: ${input.language || 'English'}
 Country: ${input.country || 'US'}
+
+Available Product Images (Use these EXACT URLs for image inputs):
+${imageUrlList.map((url, i) => `[Image ${i + 1}] ${url}`).join('\n')}
 
 You MUST respond with a JSON object using exactly this structure:
 {
@@ -85,11 +97,11 @@ You MUST respond with a JSON object using exactly this structure:
     ]
   },
   "pricing": {
-    "title": "Pricing section title",
-    "subtitle": "Pricing section subtitle",
+    "title": "Pricing & Packages",
+    "subtitle": "Choose the bundle that fits your needs best",
     "plans": [
       {
-        "name": "Plan name (e.g. Single, Bundle 2-Pack, Family Pack 5-Pack)",
+        "name": "Plan name (e.g. Single Pack, Double Bundle, Family Pack)",
         "price": "$XX",
         "period": "/unit or /pack",
         "description": "One-line plan description",
@@ -171,6 +183,46 @@ You MUST respond with a JSON object using exactly this structure:
       "body": "Full email body content",
       "cta": "Email CTA button text"
     }
+  },
+  "ecommerce": {
+    "announcementBar": "A compelling promo like 'FREE WORLDWIDE SHIPPING THIS WEEK!'",
+    "navigation": ["Home", "Shop", "Our Story", "Reviews", "FAQs"],
+    "price": "Calculated unit price (e.g. $19.99)",
+    "compareAtPrice": "Higher retail price showing discount (e.g. $39.99)",
+    "variants": [
+      { "name": "Color", "values": ["Black", "Silver"] },
+      { "name": "Size", "values": ["Default"] }
+    ],
+    "images": ["Pick 2-4 exact URLs from the Available Product Images list above"],
+    "trustBadges": ["30-Day Money-Back Guarantee", "100% Secure Checkout", "Worldwide Tracked Shipping", "Premium Product Guarantee"],
+    "shippingText": "Dispatched in 24-48 hours. Estimated delivery: 7-12 business days with full online tracking.",
+    "featureSections": [
+      {
+        "title": "A headline spotlighting a key product benefit",
+        "description": "3-4 sentences of persuasive product copywriting centered around this benefit.",
+        "imageUrl": "Use one exact URL from the Available Product Images list above"
+      },
+      {
+        "title": "Another benefit-driven feature spotlight",
+        "description": "3-4 sentences explaining another crucial use case or technical advantage.",
+        "imageUrl": "Use a different exact URL from the Available Product Images list above"
+      }
+    ],
+    "specifications": [
+      { "label": "Material", "value": "..." },
+      { "label": "Dimensions", "value": "..." }
+    ],
+    "howItWorks": [
+      { "step": "01", "title": "Setup & Connect", "description": "Detailed setup instruction (1-2 sentences)" },
+      { "step": "02", "title": "Use & Enjoy", "description": "Actionable usage instruction (1-2 sentences)" }
+    ],
+    "faq": [
+      { "question": "Question about charging, compatibility or size?", "answer": "Detailed answer (2-3 sentences)" }
+    ],
+    "reviews": [
+      { "author": "Name", "rating": 5, "date": "June 2026", "title": "Verified Review Headline", "content": "Persuasive testimonial describing product benefits, quality, and fast shipping." }
+    ],
+    "stickyAddToCartText": "Add to Cart"
   }
 }
 
@@ -192,9 +244,6 @@ Requirements:
 - Do NOT fabricate sales numbers, ratings, or unverified claims
 - Respond ONLY with the JSON object. No markdown, no code fences, no explanatory text.`;
 }
-
-// ── Mock response ──────────────────────────────────────────
-
 function getMockDropshippingResponse(analysis: ProductAnalysis, input: DropshippingInput): WebsiteGeneration {
   const store = input.storeName || 'Premium Store';
   const product = analysis.productTitle || 'Premium Product';
@@ -210,6 +259,10 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
   const style = input.preferredStyle || 'modern';
   const country = input.country || 'US';
   const slug = store.toLowerCase().replace(/\s+/g, '-');
+  const productImages = analysis.images.length > 0 ? analysis.images : [
+    'https://ae01.alicdn.com/kf/S5a8b548b5.jpg',
+    'https://ae01.alicdn.com/kf/S8f77348e3.jpg'
+  ];
 
   return {
     homepage: {
@@ -520,6 +573,46 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
         body: `Hi there,\n\nWe're excited to introduce you to the ${product} — one of our most popular ${category} products at ${store}.\n\nHere's why customers love it:\n\n• ${features[0] || 'Premium quality materials'}\n• ${features[1] || 'Thoughtful, modern design'}\n• ${features[2] || 'Easy to use right out of the box'}\n• ${sellingPoints[0] || 'Unbeatable value'}\n\nAnd right now, you can save even more with our bundle deals:\n\n🏷️ Single — ${priceRange.split('-')[0]?.trim().split(' ')[0] || '$29.99'}\n🏷️ Bundle (2-Pack) — Save 10% per unit\n🏷️ Family Pack (5-Pack) — Save 20% per unit\n\nEvery order includes tracked shipping and our 30-day hassle-free return guarantee.\n\nDon't miss out — shop the ${product} today!\n\nBest,\nThe ${store} Team`,
         cta: `Shop the ${product} Now →`,
       },
+    },
+    ecommerce: {
+      announcementBar: '⚡ LIMITED TIME OFFER: FREE WORLDWIDE SHIPPING THIS WEEK!',
+      navigation: ['Home', 'Shop', 'Our Story', 'Reviews', 'FAQs'],
+      price: priceRange.split('-')[0]?.trim().split(' ')[0] || '$29.99',
+      compareAtPrice: '$' + (parseFloat((priceRange.split('-')[0]?.trim().split(' ')[0] || '$29.99').replace('$', '')) * 1.5).toFixed(2),
+      variants: [
+        { name: 'Color', values: ['Midnight Black', 'Metallic Silver'] },
+        { name: 'Size', values: ['Default'] }
+      ],
+      images: productImages,
+      trustBadges: ['30-Day Money-Back Guarantee', '100% Secure Checkout', 'Worldwide Tracked Shipping', 'Premium Product Guarantee'],
+      shippingText: `Dispatched in 24-48 hours. ${shippingInfo}.`,
+      featureSections: [
+        {
+          title: `Why the ${product} is a Game Changer`,
+          description: `Engineered for performance and built using state-of-the-art technology, the ${product} solves your daily challenges effortlessly. Experience unparalleled quality that visually stands out and keeps performing day in and day out.`,
+          imageUrl: productImages[0] || ''
+        },
+        {
+          title: 'Premium Materials, Built for Durability',
+          description: `Featuring a sleek design combined with rugged construction, the ${product} is made from premium zinc alloy materials designed to withstand everyday drops and wear. Take it anywhere knowing your data and hardware is secure.`,
+          imageUrl: productImages[1] || productImages[0] || ''
+        }
+      ],
+      specifications: analysis.specifications.length > 0 ? analysis.specifications : [
+        { label: 'Material', value: 'Premium Zinc Alloy' },
+        { label: 'Weight', value: 'Lightweight & Compact' }
+      ],
+      howItWorks: [
+        { step: '01', title: 'Connect & Interface', description: 'Plug the device into any compatible USB port on your PC, laptop or OTG phone.' },
+        { step: '02', title: 'High-Speed Transfer', description: 'Experience lightning-fast file read and write operations instantly without setup.' }
+      ],
+      faq: [
+        { question: 'Is it compatible with my device?', answer: 'Yes! It features plug-and-play compatibility with Windows, Mac, Android OTG, and Linux operating systems.' }
+      ],
+      reviews: [
+        { author: 'Jordan K.', rating: 5, date: 'July 2026', title: 'Absolutely brilliant product!', content: `I bought the 2-Pack and use them daily for backup. File transfer speeds are outstanding and the metal build feels incredibly premium.` }
+      ],
+      stickyAddToCartText: 'Get Yours Now'
     },
     isDemo: true,
     provider: 'demo',

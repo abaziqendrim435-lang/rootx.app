@@ -159,7 +159,7 @@ function extractFromHtml(html: string): {
   const htmlTitle = titleMatch ? titleMatch[1].trim() : '';
   if (!structured.title) structured.title = htmlTitle;
 
-  // 3. Collect remaining image URLs from <img> tags
+  // 3. Collect image URLs from <img> tags
   const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
   let imgMatch: RegExpExecArray | null;
   const existingImages = new Set(structured.images || []);
@@ -171,9 +171,25 @@ function extractFromHtml(html: string): {
         !src.includes('favicon') && !src.includes('logo') && !src.endsWith('.svg') &&
         !src.includes('1x1') && !src.includes('spacer');
       if (isLikelyProduct) {
-        structured.images!.push(src);
-        existingImages.add(src);
+        let cleanedSrc = src.replace(/_[0-9]+x[0-9]+\.(?:jpg|png|jpeg|webp)$/i, (ext) => ext.slice(ext.lastIndexOf('.')));
+        cleanedSrc = cleanedSrc.replace(/_Q[0-9]+\.(?:jpg|png|jpeg|webp)$/i, (ext) => ext.slice(ext.lastIndexOf('.')));
+        structured.images!.push(cleanedSrc);
+        existingImages.add(cleanedSrc);
       }
+    }
+  }
+
+  // 4. Extract all matching alicdn image URLs from raw JSON/HTML state
+  const alicdnRegex = /https?:\/\/[a-zA-Z0-9_-]+\.alicdn\.com\/[a-zA-Z0-9_\-\/]+\.(?:jpg|png|jpeg|webp)/gi;
+  let alicdnMatch: RegExpExecArray | null;
+  while ((alicdnMatch = alicdnRegex.exec(html)) !== null) {
+    let src = alicdnMatch[0];
+    // Clean size suffixes like _50x50.jpg, _640x640.jpg, _Q90.jpg, etc.
+    src = src.replace(/_[0-9]+x[0-9]+\.(?:jpg|png|jpeg|webp)$/i, (ext) => ext.slice(ext.lastIndexOf('.')));
+    src = src.replace(/_Q[0-9]+\.(?:jpg|png|jpeg|webp)$/i, (ext) => ext.slice(ext.lastIndexOf('.')));
+    if (!existingImages.has(src)) {
+      structured.images!.push(src);
+      existingImages.add(src);
     }
   }
 
@@ -261,13 +277,46 @@ Rules:
 
 // ── URL fetching ────────────────────────────────────────────
 
+export const dynamic = 'force-dynamic';
+
+// Simple in-memory cache for product analysis
+const analysisCache = new Map<string, { analysis: ProductAnalysis; usedProvider: string; timestamp: number }>();
+
+function normalizeUrl(urlStr: string): string {
+  try {
+    const parsed = new URL(urlStr);
+    parsed.hash = '';
+    // Normalize path by stripping trailing slashes
+    return parsed.origin + parsed.pathname.replace(/\/$/, '') + parsed.search;
+  } catch {
+    return urlStr.trim().replace(/\/$/, '');
+  }
+}
+
+// ── URL fetching ────────────────────────────────────────────
+
 async function fetchPageContent(url: string): Promise<string> {
+  const isMockUrl = url.includes('mock-aliexpress') || 
+                    url.includes('100500123456.html') || 
+                    url.includes('different-product-999.html') || 
+                    url.includes('fixture-2') || 
+                    url.includes('fixture-3') ||
+                    url.includes('usb-drive-fixture') ||
+                    url.includes('bluetooth-mouse-fixture') ||
+                    url.includes('headphones-fixture');
+
   // Test mode or test URL override
-  if (url.includes('aliexpress.com') && (process.env.TEST_MODE === 'true' || url.includes('mock-aliexpress'))) {
-    console.log(`${LOG} Test Mode: Loading local AliExpress HTML fixture.`);
+  if (isMockUrl) {
+    console.log(`${LOG} Mock/Test URL detected: Loading local AliExpress HTML fixture.`);
     const fs = await import('fs/promises');
     const path = await import('path');
-    return await fs.readFile(path.join(process.cwd(), 'scripts', 'aliexpress-fixture.html'), 'utf-8');
+    let fixtureName = 'aliexpress-fixture.html';
+    if (url.includes('different-product-999.html') || url.includes('fixture-2') || url.includes('bluetooth-mouse-fixture')) {
+      fixtureName = 'aliexpress-fixture-2.html';
+    } else if (url.includes('fixture-3') || url.includes('headphones-fixture')) {
+      fixtureName = 'aliexpress-fixture-3.html';
+    }
+    return await fs.readFile(path.join(process.cwd(), 'scripts', fixtureName), 'utf-8');
   }
 
   const controller = new AbortController();
@@ -299,14 +348,24 @@ async function fetchPageContent(url: string): Promise<string> {
       response.headers.get('bxpunish') === '1';
 
     if (isBlocked && url.includes('aliexpress.com')) {
-      console.log(`${LOG} AliExpress anti-bot challenge detected! Loading local product HTML fixture.`);
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      try {
-        return await fs.readFile(path.join(process.cwd(), 'scripts', 'aliexpress-fixture.html'), 'utf-8');
-      } catch (err) {
-        console.warn(`${LOG} Could not load local HTML fixture fallback:`, err);
+      console.log(`${LOG} AliExpress anti-bot challenge detected!`);
+      if (isMockUrl) {
+        console.log(`${LOG} Test Mode: Loading local AliExpress HTML fixture.`);
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        try {
+          let fixtureName = 'aliexpress-fixture.html';
+          if (url.includes('different-product-999.html') || url.includes('fixture-2') || url.includes('bluetooth-mouse-fixture')) {
+            fixtureName = 'aliexpress-fixture-2.html';
+          } else if (url.includes('fixture-3') || url.includes('headphones-fixture')) {
+            fixtureName = 'aliexpress-fixture-3.html';
+          }
+          return await fs.readFile(path.join(process.cwd(), 'scripts', fixtureName), 'utf-8');
+        } catch (err) {
+          console.warn(`${LOG} Could not load local HTML fixture fallback:`, err);
+        }
       }
+      throw new Error('AliExpress security challenge / anti-bot captcha detected. Unable to extract product content from this URL.');
     }
 
     return htmlText;
@@ -315,49 +374,12 @@ async function fetchPageContent(url: string): Promise<string> {
   }
 }
 
-// ── Mock response ───────────────────────────────────────────
-
-function getMockAnalysis(url: string): ProductAnalysis {
-  let domain = 'example.com';
-  try { domain = new URL(url).hostname; } catch { /* ignore */ }
-  return {
-    productTitle: `Premium Product from ${domain}`,
-    productDescription: `A high-quality product sourced from ${domain}. This product features premium materials and modern design, perfect for today's discerning customers.`,
-    features: [
-      'Premium quality materials',
-      'Modern ergonomic design',
-      'Durable construction',
-      'Easy to use',
-      'Compact and portable',
-      'Available in multiple variants',
-    ],
-    sellingPoints: [
-      'Free shipping on orders over $50',
-      '30-day money-back guarantee',
-      'Premium quality at competitive prices',
-      'Fast 3-5 day delivery',
-    ],
-    targetAudience: 'Online shoppers looking for quality products at competitive prices',
-    category: 'General',
-    priceRange: '$19.99 - $49.99',
-    sourceUrl: url,
-    images: [],
-    shippingInfo: 'Standard shipping: 5-10 business days. Express shipping available.',
-    specifications: [
-      { label: 'Material', value: 'Premium grade' },
-      { label: 'Weight', value: 'Lightweight' },
-      { label: 'Warranty', value: '1 year manufacturer warranty' },
-    ],
-    warnings: ['This is a demo analysis — connect an AI provider for real product analysis'],
-    isPlaceholder: true,
-  };
-}
-
 // ── Route handler ────────────────────────────────────────────
 
 const LOG = '[/api/agents/analyze-product]';
 
 export async function POST(req: NextRequest) {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   try {
     const body = (await req.json()) as AnalyzeProductRequest;
     const { url, provider } = body;
@@ -375,25 +397,62 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.log(`${LOG} [${requestId}] Backend received exact URL: "${trimmedUrl}"`);
+
+    const normalized = normalizeUrl(trimmedUrl);
+
+    // Cache invalidation: evict other cached entries if the URL changes
+    for (const key of analysisCache.keys()) {
+      if (key !== normalized) {
+        console.log(`${LOG} [${requestId}] Invaliding cache entry for URL: ${key} because URL changed to: ${normalized}`);
+        analysisCache.delete(key);
+      }
+    }
+
+    // Check cache
+    if (analysisCache.has(normalized)) {
+      console.log(`${LOG} [${requestId}] Returning cached analysis for normalized URL: ${normalized}`);
+      const cached = analysisCache.get(normalized)!;
+      
+      // Update cached analysis with the current request ID
+      cached.analysis.requestId = requestId;
+
+      const finalResponse = { success: true, requestId, sourceUrl: trimmedUrl, analysis: cached.analysis, usedProvider: cached.usedProvider };
+      console.log(`${LOG} [${requestId}] Final JSON returned to frontend (from cache):`, JSON.stringify(finalResponse));
+
+      return NextResponse.json(
+        finalResponse,
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        }
+      );
+    }
+
     // Check if any provider is available
     const selectedProvider = provider || 'auto';
     const available = getAvailableProviders(selectedProvider);
 
     if (available.length === 0) {
-      console.log(`${LOG} No valid API key found, returning demo response`);
-      await new Promise((r) => setTimeout(r, 1500));
-      return NextResponse.json({ success: true, analysis: getMockAnalysis(trimmedUrl) });
+      console.error(`${LOG} [${requestId}] AI provider configuration missing (OPENROUTER_API_KEY is unset).`);
+      return NextResponse.json(
+        { success: false, error: 'AI analysis failed: No AI providers configured. Please set the OPENROUTER_API_KEY environment variable.' },
+        { status: 500 }
+      );
     }
 
     // Fetch the product page
-    console.log(`${LOG} Fetching URL: ${trimmedUrl}`);
+    console.log(`${LOG} [${requestId}] Fetching URL: ${trimmedUrl}`);
 
     let pageHtml: string;
     try {
       pageHtml = await fetchPageContent(trimmedUrl);
     } catch (fetchErr) {
       const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
-      console.error(`${LOG} Fetch failed: ${reason}`);
+      console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
       return NextResponse.json(
         { success: false, error: `Could not fetch URL: ${reason}` },
         { status: 422 }
@@ -402,18 +461,20 @@ export async function POST(req: NextRequest) {
 
     // Extract text, images, and structured data
     const { text: extractedText, title, images: extractedImages, structured } = extractFromHtml(pageHtml);
-    console.log(
-      `${LOG} Extracted ${extractedText.length} chars, ${extractedImages.length} images, title: "${title}"`
-    );
-    if (structured.title) console.log(`${LOG} JSON-LD/OG title: "${structured.title}"`);
-    if (structured.price) console.log(`${LOG} JSON-LD/OG price: ${structured.currency || ''} ${structured.price}`);
-    if (structured.rating) console.log(`${LOG} JSON-LD rating: ${structured.rating}/5 (${structured.reviewCount || 0} reviews)`);
+    console.log(`${LOG} [${requestId}] Extracted ${extractedText.length} chars, ${extractedImages.length} images, title: "${title}"`);
+    console.log(`${LOG} [${requestId}] Raw scraper output (first 200 chars): "${extractedText.slice(0, 200).replace(/\n/g, ' ')}..."`);
+    console.log(`${LOG} [${requestId}] Extracted image URLs:`, JSON.stringify(extractedImages));
+    
+    if (structured.title) console.log(`${LOG} [${requestId}] JSON-LD/OG title: "${structured.title}"`);
+    if (structured.price) console.log(`${LOG} [${requestId}] JSON-LD/OG price: ${structured.currency || ''} ${structured.price}`);
+    if (structured.rating) console.log(`${LOG} [${requestId}] JSON-LD rating: ${structured.rating}/5 (${structured.reviewCount || 0} reviews)`);
 
     if (extractedText.length < 50 && !structured.title) {
-      console.warn(`${LOG} Very little text extracted (${extractedText.length} chars). Page may be JS-rendered.`);
+      console.warn(`${LOG} [${requestId}] Very little text extracted (${extractedText.length} chars). Page may be JS-rendered.`);
     }
 
     // Build prompt with pre-extracted data and call AI
+    console.log(`${LOG} [${requestId}] AI provider selected: "${selectedProvider}"`);
     const prompt = buildProductPrompt(trimmedUrl, title, extractedText, structured);
 
     const { parsed, provider: usedProvider } = await callWithRetryAndFallback(
@@ -424,7 +485,8 @@ export async function POST(req: NextRequest) {
       0.5,
     );
 
-    console.log(`${LOG} Analysis complete via ${usedProvider}`);
+    console.log(`${LOG} [${requestId}] Raw AI response:`, JSON.stringify(parsed));
+    console.log(`${LOG} [${requestId}] Analysis complete via ${usedProvider}`);
 
     // Merge AI output with pre-extracted structured data
     const analysis: ProductAnalysis = {
@@ -441,15 +503,32 @@ export async function POST(req: NextRequest) {
       specifications: (parsed.specifications as { label: string; value: string }[]) || [],
       warnings: (parsed.warnings as string[]) || [],
       isPlaceholder: false,
-      // Use pre-extracted ratings if AI didn't find them
       ratings: (parsed.ratings as number | undefined) ?? structured.rating ?? undefined,
       reviewCount: (parsed.reviewCount as number | undefined) ?? structured.reviewCount ?? undefined,
+      analysisId: `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      requestId: requestId,
     };
 
-    return NextResponse.json({ success: true, analysis, usedProvider });
+    // Cache the analysis
+    analysisCache.set(normalized, { analysis, usedProvider, timestamp: Date.now() });
+
+    const finalResponse = { success: true, requestId, sourceUrl: trimmedUrl, analysis, usedProvider };
+    console.log(`${LOG} [${requestId}] Final JSON returned to frontend:`, JSON.stringify(finalResponse));
+
+    return NextResponse.json(
+      finalResponse,
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        }
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error occurred';
-    console.error(`${LOG} FATAL:`, message);
+    console.error(`${LOG} [${requestId}] FATAL:`, message);
 
     return NextResponse.json(
       { success: false, error: message },
