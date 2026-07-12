@@ -4,10 +4,16 @@ import type {
   DropshippingInput,
   WebsiteGeneration,
   AIProvider,
+  PreferredStyle,
 } from '@/lib/website-builder-types';
 import {
   callWithRetryAndFallback,
   getAvailableProviders,
+  callOpenAI,
+  callClaude,
+  callGemini,
+  callKimi,
+  parseJsonRobust
 } from '@/lib/ai-providers';
 
 // ============================================================
@@ -15,11 +21,9 @@ import {
 // Generates a complete e-commerce storefront from product analysis.
 //
 // Robust implementation:
-// - Uses response_format: json_object for OpenAI
-// - 8000 max_tokens (large JSON output)
-// - Retry once on parse failure
-// - Automatic fallback to Claude / Gemini if primary fails
-// - Logs raw AI responses for debugging
+// - Multi-Model orchestration for 'auto_best' style
+// - Supports new design mode options
+// - Automatic fallback if keys are missing
 // ============================================================
 
 export interface DropshippingStoreRequest {
@@ -36,11 +40,15 @@ function buildDropshippingPrompt(analysis: ProductAnalysis, input: DropshippingI
   return `You are an expert e-commerce copywriter and conversion specialist. Generate a complete, high-converting product storefront for a dropshipping store.
   
 Visual & Brand Identity Analysis:
-Analyze the product category (${analysis.category}), target customer (${analysis.targetAudience}), product colors, and price positioning. Use this analysis to establish a custom design direction:
-1. Typography: Select premium, modern typography pairs.
-2. Color Palette: Tailor a cohesive color scheme centered around the primary color (${input.primaryColor}) and secondary color (${input.secondaryColor}).
-3. Layout & Section Order: Organize sections for maximum conversion, placing social proof and hero specs above features.
-4. Copywriting Tone: Match the target audience's aspirations (e.g., luxury, minimal, tech, wellness).
+Analyze the product category (${analysis.category}), target customer (${analysis.targetAudience}), product colors, and price positioning. Use this analysis to establish a custom design direction.
+If preferred style is 'auto_best', you must classify the product category and visual style into one of these 5 classes:
+- 'tech_futuristic' (e.g. smart watch, wireless earbuds: clean dark tech, monospace elements, neon accents)
+- 'soft_lifestyle' (e.g. beauty, wellness: elegant, soft pastels, serif typography, cream/beige tones)
+- 'bold_conversion' (e.g. fitness, performance: high contrast, neon red/orange accents, bold impact headers)
+- 'modern_commerce' (e.g. home/gardening/kitchen: warm minimal, earth tones, forest green/brown accents, friendly rounded corners)
+- 'luxury_editorial' (e.g. premium fashion/jewelry: black/white editorial layouts, serif headlines, spacious clean headers)
+
+Establish the typography, layout, and copywriting tone matching this design class. Return this classified style key under the "preferredStyle" parameter in the "ecommerce" block!
 
 Store Name: ${input.storeName}
 Product: ${analysis.productTitle}
@@ -189,6 +197,7 @@ You MUST respond with a JSON object using exactly this structure:
     "navigation": ["Home", "Shop", "Our Story", "Reviews", "FAQs"],
     "price": "Calculated unit price (e.g. $19.99)",
     "compareAtPrice": "Higher retail price showing discount (e.g. $39.99)",
+    "preferredStyle": "tech_futuristic",
     "variants": [
       { "name": "Color", "values": ["Black", "Silver"] },
       { "name": "Size", "values": ["Default"] }
@@ -244,6 +253,7 @@ Requirements:
 - Do NOT fabricate sales numbers, ratings, or unverified claims
 - Respond ONLY with the JSON object. No markdown, no code fences, no explanatory text.`;
 }
+
 function getMockDropshippingResponse(analysis: ProductAnalysis, input: DropshippingInput): WebsiteGeneration {
   const store = input.storeName || 'Premium Store';
   const product = analysis.productTitle || 'Premium Product';
@@ -264,6 +274,69 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
     'https://ae01.alicdn.com/kf/S8f77348e3.jpg'
   ];
 
+  // Set style-specific variables for mockup purposes
+  let classifiedStyle = 'modern_commerce';
+  let headingFont = 'Inter';
+  let bodyFont = 'Inter';
+  let accentFont = 'JetBrains Mono';
+  let primaryColor = primary;
+  let secondaryColor = secondary;
+  let bgColor = '#fafafa';
+  let surfaceColor = '#ffffff';
+  let textPrimary = '#17171f';
+  let textMuted = '#6b7280';
+  let fontsUrl = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap';
+
+  if (style === 'tech_futuristic' || (style === 'auto_best' && (category.toLowerCase().includes('watch') || category.toLowerCase().includes('tech') || category.toLowerCase().includes('electronic')))) {
+    classifiedStyle = 'tech_futuristic';
+    headingFont = 'Space Grotesk';
+    bodyFont = 'Inter';
+    accentFont = 'JetBrains Mono';
+    primaryColor = '#06b6d4'; // Cyan
+    secondaryColor = '#3b82f6';
+    bgColor = '#0a0b10';
+    surfaceColor = '#12131a';
+    textPrimary = '#f3f4f6';
+    textMuted = '#9ca3af';
+    fontsUrl = 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap';
+  } else if (style === 'soft_lifestyle' || (style === 'auto_best' && (category.toLowerCase().includes('beauty') || category.toLowerCase().includes('skin') || category.toLowerCase().includes('care')))) {
+    classifiedStyle = 'soft_lifestyle';
+    headingFont = 'Playfair Display';
+    bodyFont = 'Inter';
+    accentFont = 'Cormorant Garamond';
+    primaryColor = '#ec4899'; // Pastel Pink
+    secondaryColor = '#f43f5e';
+    bgColor = '#fdfbfb';
+    surfaceColor = '#ffffff';
+    textPrimary = '#1c1917';
+    textMuted = '#78716c';
+    fontsUrl = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Inter:wght@300;400;500&family=Cormorant+Garamond:ital,wght@1,500&display=swap';
+  } else if (style === 'bold_conversion' || (style === 'auto_best' && (category.toLowerCase().includes('fit') || category.toLowerCase().includes('sport') || category.toLowerCase().includes('gym')))) {
+    classifiedStyle = 'bold_conversion';
+    headingFont = 'Oswald';
+    bodyFont = 'Montserrat';
+    accentFont = 'Oswald';
+    primaryColor = '#ea580c'; // Intense Orange
+    secondaryColor = '#e11d48';
+    bgColor = '#0f0f11';
+    surfaceColor = '#18181b';
+    textPrimary = '#fafafa';
+    textMuted = '#a1a1aa';
+    fontsUrl = 'https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Montserrat:wght@400;600;700;800&display=swap';
+  } else if (style === 'luxury_editorial' || (style === 'auto_best' && (category.toLowerCase().includes('lux') || category.toLowerCase().includes('watch') || category.toLowerCase().includes('jewelry')))) {
+    classifiedStyle = 'luxury_editorial';
+    headingFont = 'Cinzel';
+    bodyFont = 'Montserrat';
+    accentFont = 'Cinzel';
+    primaryColor = '#d4af37'; // Gold
+    secondaryColor = '#111111';
+    bgColor = '#faf9f6'; // Off-white
+    surfaceColor = '#ffffff';
+    textPrimary = '#000000';
+    textMuted = '#4a4a4a';
+    fontsUrl = 'https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Montserrat:wght@300;400;500;600&display=swap';
+  }
+
   return {
     homepage: {
       hero: {
@@ -273,7 +346,7 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
           { label: 'Buy Now', url: '#buy-now', variant: 'primary' },
           { label: 'Learn More', url: '#learn-more', variant: 'secondary' },
         ],
-        backgroundStyle: `${style} gradient from ${primary} to deep charcoal with a subtle product silhouette overlay and floating particle animation`,
+        backgroundStyle: `${classifiedStyle} gradient centered around ${primaryColor}`,
       },
       features: [
         { title: features[0] || 'Premium Quality', description: `Every ${product} is crafted with meticulous attention to detail. ${sellingPoints[0] || 'Built to last'}, ensuring you get the best value for your investment. Experience the difference quality makes.`, icon: 'Star' },
@@ -287,7 +360,7 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
     },
     about: {
       title: `About ${store}`,
-      content: `${store} was born from a simple belief: everyone deserves access to high-quality products at fair prices. We started our journey by discovering the ${product} — a product that truly delivers on its promises — and knew we had to share it with the world.\n\nOur team carefully vets every product we offer, testing for quality, durability, and real-world performance. The ${product} passed every test with flying colors, and the feedback from our early customers confirmed what we already knew — this is something special.\n\nAt ${store}, we're not just another online store. We're a curated destination for ${audience} who value quality, transparency, and exceptional service. Every order is handled with care, and every customer is treated like family.\n\nBased in ${country}, we've built a reputation for reliability and trust. Our commitment to customer satisfaction isn't just a tagline — it's the foundation of everything we do.`,
+      content: `${store} was born from a simple belief: everyone deserves access to high-quality products at fair prices. We started our journey by discovering the ${product} — a product that truly delivers on its promises — and knew we had to share it with the world.\n\nOur team carefully vets every product we offer, testing for quality, durability, and real-world performance. The ${product} passed every test with failing colors, and the feedback from our early customers confirmed what we already knew — this is something special.\n\nAt ${store}, we're not just another online store. We're a curated destination for ${audience} who value quality, transparency, and exceptional service. Every order is handled with care, and every customer is treated like family.\n\nBased in ${country}, we've built a reputation for reliability and trust. Our commitment to customer satisfaction isn't just a tagline — it's the foundation of everything we do.`,
       mission: `To bring the best ${category} products to ${audience} worldwide, combining quality craftsmanship with accessible pricing and outstanding customer service.`,
       vision: `A world where every ${audience.replace(/s$/, '')} has access to premium products without premium price tags.`,
       values: [
@@ -508,7 +581,7 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
       ],
       ogTitle: `${product} — Now Available at ${store}`,
       ogDescription: `Discover the ${product}. ${sellingPoints[0] || 'Premium quality'} at an unbeatable price. Shop now at ${store}!`,
-      ogImagePrompt: `A ${style}, high-converting product hero image for the ${product}. Feature the brand colors ${primary} and ${secondary} with clean product photography, subtle gradient background, and bold typography. 1200x630 resolution, suitable for social sharing and e-commerce ads.`,
+      ogImagePrompt: `A ${classifiedStyle}, high-converting product hero image for the ${product}. Feature the brand colors ${primaryColor} and ${secondaryColor} with clean product photography, subtle gradient background, and bold typography. 1200x630 resolution, suitable for social sharing and e-commerce ads.`,
       canonicalUrl: `https://www.${slug}.com`,
       structuredData: JSON.stringify({
         '@context': 'https://schema.org',
@@ -527,18 +600,18 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
     },
     branding: {
       colorPalette: [
-        { name: 'Primary', hex: primary, usage: 'Buy Now buttons, primary CTAs, price highlights, and brand accents' },
-        { name: 'Secondary', hex: secondary, usage: 'Secondary buttons, links, badges, and supporting accents' },
-        { name: 'Background', hex: '#0a0a0f', usage: 'Main page background and dark sections' },
-        { name: 'Surface', hex: '#141419', usage: 'Product cards, modals, and elevated surfaces' },
-        { name: 'Text Primary', hex: '#f8f8f8', usage: 'Product titles, body text, and primary content' },
-        { name: 'Text Muted', hex: '#71717a', usage: 'Captions, labels, secondary text, and placeholders' },
+        { name: 'Primary', hex: primaryColor, usage: 'Buy Now buttons, primary CTAs, price highlights, and brand accents' },
+        { name: 'Secondary', hex: secondaryColor, usage: 'Secondary buttons, links, badges, and supporting accents' },
+        { name: 'Background', hex: bgColor, usage: 'Main page background and dark sections' },
+        { name: 'Surface', hex: surfaceColor, usage: 'Product cards, modals, and elevated surfaces' },
+        { name: 'Text Primary', hex: textPrimary, usage: 'Product titles, body text, and primary content' },
+        { name: 'Text Muted', hex: textMuted, usage: 'Captions, labels, secondary text, and placeholders' },
       ],
       typography: {
-        heading: 'Inter',
-        body: 'Inter',
-        accent: 'JetBrains Mono',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap',
+        heading: headingFont,
+        body: bodyFont,
+        accent: accentFont,
+        googleFontsUrl: fontsUrl,
       },
       iconSuggestions: [
         { name: 'ShoppingCart', usage: 'Add to cart and checkout buttons', emoji: '🛒' },
@@ -548,7 +621,7 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
         { name: 'RotateCcw', usage: 'Returns and exchange policy', emoji: '🔄' },
         { name: 'Package', usage: `Bundle deals and ${category} product packaging`, emoji: '📦' },
       ],
-      logoDescription: `A ${style} wordmark for "${store}" using the primary color ${primary} as the accent. The logo features clean, modern letterforms with a subtle shopping bag or product icon integrated into the design. The look should feel trustworthy, premium, and conversion-focused — suitable for both dark and light backgrounds at any scale.`,
+      logoDescription: `A ${classifiedStyle} wordmark for "${store}" using the primary color ${primaryColor} as the accent. The logo features clean, modern letterforms with a subtle shopping bag or product icon integrated into the design. The look should feel trustworthy, premium, and conversion-focused — suitable for both dark and light backgrounds at any scale.`,
     },
     marketing: {
       googleAdsHeadlines: [
@@ -565,7 +638,7 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
       ],
       facebookAdCopy: `Still searching for the perfect ${category} product? 🔍\n\nMeet the ${product} — and discover why customers are raving about it.\n\n✅ ${features[0] || 'Premium quality materials'}\n✅ ${features[1] || 'Thoughtful, modern design'}\n✅ ${features[2] || 'Easy to use right out of the box'}\n✅ ${sellingPoints[0] || 'Best-in-class quality'}\n\n🚚 ${shippingInfo}\n🔄 30-day hassle-free returns\n💰 Save more with our bundle deals\n\nJoin thousands of happy customers who have made the switch!\n\n👉 Shop now — link in comments.\n\n#${store.replace(/\s+/g, '')} #${category.replace(/\s+/g, '')} #ShopNow #QualityProducts`,
       instagramCaption: `Your new favorite ${category} product just dropped. ✨\n\nIntroducing the ${product} from ${store}:\n🌟 ${features[0] || 'Premium quality'}\n⚡ ${features[1] || 'Modern design'}\n💪 ${features[2] || 'Built to last'}\n🚚 ${shippingInfo}\n\nBundle up and save — check our link in bio! 🛒\n\n#${store.replace(/\s+/g, '')} #${category.replace(/\s+/g, '')} #OnlineShopping #ProductLaunch #MustHave #ShopOnline #QualityMatters #TrendingProducts`,
-      linkedInPost: `Excited to announce that ${store} is now offering the ${product} — a ${category} product that's been getting incredible feedback from our customers.\n\nHere's what sets it apart:\n\n1️⃣ ${features[0] || 'Premium materials'} — we don't cut corners on quality.\n2️⃣ ${sellingPoints[0] || 'Exceptional value'} — quality shouldn't break the bank.\n3️⃣ Customer-first experience — from order to delivery, every touchpoint is designed to delight.\n\nWe're committed to building a brand that ${audience} can trust. Every product is quality-inspected, every order is tracked, and our support team is always ready to help.\n\nIf you're looking for a reliable ${category} product, check out the link in comments.\n\n#Ecommerce #${category.replace(/\s+/g, '')} #ProductLaunch #CustomerExperience`,
+      linkedInPost: `Excited to announce that ${store} is now offering the ${product} — a ${category} product that's been getting incredible feedback from our customers.\n\nHere's what sets it apart:\n\n1️⃣ ${features[0] || 'Premium materials'} — we don't cut corners on quality.\n2️⃣ ${sellingPoints[0] || 'Exceptional value'} — quality shouldn't break the bank.\n3️⃣ Customer-first experience — from order to delivery, every touchpoint is designed to delight.\n\nWe're committed to building a brand that ${audience} can trust. Every product is quality-inspected, every order is tracked, and our support team is always ready to help.\n\nIf you're looking for a reliable ${category} product, check out the link in comments.\n\n#MainProduct #${category.replace(/\s+/g, '')} #ProductLaunch #CustomerExperience`,
       twitterPost: `🛒 The ${product} is here!\n\n${sellingPoints[0] || 'Premium quality'}. ${shippingInfo}. 30-day returns.\n\nShop now → ${slug}.com`,
       emailCampaign: {
         subject: `Your ${product} is waiting — shop now at ${store}`,
@@ -579,6 +652,7 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
       navigation: ['Home', 'Shop', 'Our Story', 'Reviews', 'FAQs'],
       price: priceRange.split('-')[0]?.trim().split(' ')[0] || '$29.99',
       compareAtPrice: '$' + (parseFloat((priceRange.split('-')[0]?.trim().split(' ')[0] || '$29.99').replace('$', '')) * 1.5).toFixed(2),
+      preferredStyle: classifiedStyle as PreferredStyle,
       variants: [
         { name: 'Color', values: ['Midnight Black', 'Metallic Silver'] },
         { name: 'Size', values: ['Default'] }
@@ -672,7 +746,148 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(getMockDropshippingResponse(sanitizedAnalysis, sanitizedInput));
     }
 
-    // Build prompt and call AI with retry + fallback
+    // Orchestrated Multi-Model workflow for Auto Best
+    const hasGemini = !!process.env.GEMINI_API_KEY;
+    const hasClaude = !!process.env.ANTHROPIC_API_KEY;
+    const hasKimi = !!process.env.KIMI_API_KEY;
+    const hasOpenAI = !!process.env.OPENAI_API_KEY;
+
+    if (sanitizedInput.preferredStyle === 'auto_best' && (hasGemini || hasClaude || hasKimi || hasOpenAI)) {
+      console.log(`${LOG} Orchestrating Multi-Model Auto Best workflow...`);
+      
+      let visualAnalysis: any = null;
+      let copywriting: any = null;
+      let storytelling: any = null;
+
+      // Step 1: Visual Identity Analysis via Gemini (or fallback)
+      try {
+        const geminiPrompt = `Analyze the product category: ${sanitizedAnalysis.category}, description: ${sanitizedAnalysis.productDescription}, price level: ${sanitizedAnalysis.priceRange}, and images: ${sanitizedAnalysis.images.join(', ')}.
+        Determine:
+        1. Classified style (one of: tech_futuristic, soft_lifestyle, bold_conversion, modern_commerce, luxury_editorial).
+        2. Cohesive e-commerce typography Google Fonts Url (e.g. Outfit, Playfair Display, Space Grotesk, Oswald, Lora).
+        3. A hex color palette: primary, secondary, background, surface, textPrimary, textMuted.
+        4. Brief brand positioning description.
+        Respond ONLY with a JSON object like:
+        {"style": "...", "googleFontsUrl": "...", "typography": {"heading": "...", "body": "...", "accent": "..."}, "palette": {"primary": "...", "secondary": "...", "background": "...", "surface": "...", "textPrimary": "...", "textMuted": "..."}, "positioning": "..."}`;
+
+        const key = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.KIMI_API_KEY;
+        const providerName = process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : process.env.ANTHROPIC_API_KEY ? 'claude' : 'kimi';
+        
+        console.log(`${LOG} Multi-Model Step 1: Visual Identity via ${providerName}`);
+        let rawVisual = '';
+        if (providerName === 'gemini') rawVisual = await callGemini(geminiPrompt, key!);
+        else if (providerName === 'openai') rawVisual = await callOpenAI(geminiPrompt, key!);
+        else if (providerName === 'claude') rawVisual = await callClaude(geminiPrompt, key!);
+        else rawVisual = await callKimi(geminiPrompt, key!);
+        
+        visualAnalysis = parseJsonRobust(rawVisual);
+      } catch (err) {
+        console.error(`${LOG} Visual analysis step failed, using auto defaults:`, err);
+        const isTech = sanitizedAnalysis.category.toLowerCase().includes('watch') || sanitizedAnalysis.category.toLowerCase().includes('tech') || sanitizedAnalysis.category.toLowerCase().includes('electronic');
+        visualAnalysis = {
+          style: isTech ? 'tech_futuristic' : 'modern_commerce',
+          palette: { primary: sanitizedInput.primaryColor, secondary: sanitizedInput.secondaryColor }
+        };
+      }
+
+      // Step 2: Copywriting via Claude (or fallback)
+      try {
+        const claudePrompt = `You are a professional e-commerce copywriter. Write high-converting marketing copywriting for store name "${sanitizedInput.storeName}" selling "${sanitizedAnalysis.productTitle}".
+        Design Direction Class: ${visualAnalysis?.style || 'modern_commerce'}
+        Price Level: ${sanitizedAnalysis.priceRange}
+        Target Customer: ${sanitizedAnalysis.targetAudience}
+        Brand Positioning: ${visualAnalysis?.positioning || 'Premium quality and utility'}
+        
+        Generate:
+        - Compelling, benefit-driven product headlines (6 items)
+        - PERSUASIVE AIDA + PAS product story content (4 paragraphs)
+        - Why Choose Us core arguments (4 sections, 4 bullet features each)
+        - 2 feature spotlight sections with headlines and 3-4 sentence detailed descriptions.
+        - FAQ questions and answers (8 items)
+        - Testimonials quotes (4 items)
+        
+        Respond ONLY with a JSON object containing these copywriting blocks.`;
+
+        const key = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.KIMI_API_KEY;
+        const providerName = process.env.ANTHROPIC_API_KEY ? 'claude' : process.env.OPENAI_API_KEY ? 'openai' : process.env.GEMINI_API_KEY ? 'gemini' : 'kimi';
+
+        console.log(`${LOG} Multi-Model Step 2: Copywriting via ${providerName}`);
+        let rawCopy = '';
+        if (providerName === 'claude') rawCopy = await callClaude(claudePrompt, key!);
+        else if (providerName === 'openai') rawCopy = await callOpenAI(claudePrompt, key!);
+        else if (providerName === 'gemini') rawCopy = await callGemini(claudePrompt, key!);
+        else rawCopy = await callKimi(claudePrompt, key!);
+        
+        copywriting = parseJsonRobust(rawCopy);
+      } catch (err) {
+        console.error(`${LOG} Copywriting step failed:`, err);
+      }
+
+      // Step 3: Storytelling via Kimi (or fallback)
+      try {
+        const kimiPrompt = `Write a long-form product storytelling section for the store. Incorporate PAS (Problem-Agitate-Solution) and emotional triggers. Keep it engaging, professional, and high-converting. Product: ${sanitizedAnalysis.productTitle}, Description: ${sanitizedAnalysis.productDescription}. Respond with a plain text paragraph.`;
+        
+        const key = process.env.KIMI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY;
+        const providerName = process.env.KIMI_API_KEY ? 'kimi' : process.env.OPENAI_API_KEY ? 'openai' : process.env.ANTHROPIC_API_KEY ? 'claude' : 'gemini';
+
+        console.log(`${LOG} Multi-Model Step 3: Storytelling via ${providerName}`);
+        let rawStory = '';
+        if (providerName === 'kimi') rawStory = await callKimi(kimiPrompt, key!);
+        else if (providerName === 'openai') rawStory = await callOpenAI(kimiPrompt, key!);
+        else if (providerName === 'claude') rawStory = await callClaude(kimiPrompt, key!);
+        else rawStory = await callGemini(kimiPrompt, key!);
+
+        storytelling = rawStory.trim();
+      } catch (err) {
+        console.error(`${LOG} Storytelling step failed:`, err);
+      }
+
+      // Step 4: Final JSON Generation and Validation via OpenAI (or fallback)
+      try {
+        const key = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.KIMI_API_KEY;
+        const providerName = process.env.OPENAI_API_KEY ? 'openai' : process.env.ANTHROPIC_API_KEY ? 'claude' : process.env.GEMINI_API_KEY ? 'gemini' : 'kimi';
+
+        const finalPrompt = `Assemble the final dropshipping store JSON conforming precisely to the WebsiteGeneration schema.
+        Use this data to fill in the schema:
+        - Store Name: ${sanitizedInput.storeName}
+        - Product Title: ${sanitizedAnalysis.productTitle}
+        - Price Range: ${sanitizedAnalysis.priceRange}
+        - Shipping: ${sanitizedAnalysis.shippingInfo}
+        - Available Images: ${JSON.stringify(sanitizedAnalysis.images)}
+        - Specs: ${JSON.stringify(sanitizedAnalysis.specifications)}
+        
+        Incorporated Visual Directions:
+        ${JSON.stringify(visualAnalysis)}
+        
+        Incorporated Persuasive Copywriting:
+        ${JSON.stringify(copywriting)}
+        
+        Incorporated Long-Form Storytelling:
+        "${storytelling || ''}"
+        
+        Make sure the output includes the "ecommerce" block containing the announcementBar, price, compareAtPrice, featureSections, specifications, howItWorks, reviews, and especially "preferredStyle": "${visualAnalysis?.style || 'modern_commerce'}"!
+        Respond ONLY with a valid JSON object.`;
+
+        console.log(`${LOG} Multi-Model Step 4: JSON Generation via ${providerName}`);
+        let rawFinal = '';
+        if (providerName === 'openai') rawFinal = await callOpenAI(finalPrompt, key!);
+        else if (providerName === 'claude') rawFinal = await callClaude(finalPrompt, key!);
+        else if (providerName === 'gemini') rawFinal = await callGemini(finalPrompt, key!);
+        else rawFinal = await callKimi(finalPrompt, key!);
+
+        const parsed = parseJsonRobust(rawFinal);
+        const result: WebsiteGeneration = {
+          ...(parsed as unknown as WebsiteGeneration),
+          isDemo: false,
+          provider: 'multi-model',
+        };
+        return NextResponse.json(result);
+      } catch (err) {
+        console.error(`${LOG} Final validation step failed, falling back to standard prompt:`, err);
+      }
+    }
+
+    // Build prompt and call AI with retry + fallback (Standard flow)
     const prompt = buildDropshippingPrompt(sanitizedAnalysis, sanitizedInput);
     console.log(`${LOG} Generating with preferred: ${selectedProvider}, available: ${available.map(p => p.provider).join(', ')}`);
 

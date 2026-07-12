@@ -8,7 +8,7 @@ import {
   ExternalLink, Mail, Phone, MapPin, Star, Quote, ArrowRight, Hash,
   Type, Image as ImageIcon, Layers, Target, PenTool, Briefcase,
   ShoppingBag, Upload, CheckCircle2, Plug,
-  Package, Link2, BarChart3, Store, Truck,
+  Package, Link2, BarChart3, Store, Truck, Shield,
 } from 'lucide-react';
 import type {
   WebsiteBuilderInput, WebsiteGeneration, PreferredStyle, AIProvider, ExportFormat,
@@ -500,6 +500,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
     navigation: ['Home', 'Shop', 'Our Story', 'Reviews', 'FAQs'],
     price: '$29.99',
     compareAtPrice: '$59.99',
+    preferredStyle: 'modern_commerce',
     variants: [{ name: 'Color', values: ['Midnight Black', 'Metallic Silver'] }],
     images: result.homepage.hero.backgroundStyle.includes('http') ? [result.homepage.hero.backgroundStyle] : [],
     trustBadges: ['30-Day Money-Back Guarantee', '100% Secure Checkout', 'Worldwide Tracked Shipping'],
@@ -509,13 +510,345 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
     howItWorks: [],
     faq: [],
     reviews: [],
-    stickyAddToCartText: 'Get Yours Now'
+    stickyAddToCartText: 'Get Yours Now',
+    sectionOrder: ['hero', 'features', 'specifications', 'howItWorks', 'faqs', 'reviews']
   };
 
   const mainImage = eco.images?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=800';
   const priceVal = eco.price || '$29.99';
   const compareVal = eco.compareAtPrice || '$59.99';
   const title = result.seo.title.split('|')[0]?.trim() || result.homepage.hero.headline;
+  const sectionOrder = eco.sectionOrder || ['hero', 'features', 'specifications', 'howItWorks', 'faqs', 'reviews'];
+
+  // Style CSS Variables & Rules mapping
+  const style = eco.preferredStyle || 'modern_commerce';
+  let cssVariables = `
+    --primary: ${pc};
+    --secondary: ${sc};
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --text: #17171f;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --radius: 12px;
+  `;
+  let additionalCss = '';
+
+  if (style === 'tech_futuristic') {
+    cssVariables = `
+      --primary: ${pc};
+      --secondary: ${sc};
+      --bg: #090a0f;
+      --surface: #12131a;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border: #1f2937;
+      --radius: 8px;
+    `;
+    additionalCss = `
+      body { background: var(--bg); color: var(--text); }
+      .product-hero, .section, footer { background: var(--surface); border-color: var(--border); }
+      .spec-row { border-color: var(--border); }
+      .spec-label { background: #181922; border-color: var(--border); }
+      .spec-value { background: #12131a; }
+      .step-card, .faq-item, .review-card { background: #181922; border-color: var(--border); }
+      .option-btn { background: #181922; border-color: var(--border); color: #fff; }
+      .qty-selector { background: #181922; border-color: var(--border); }
+      .qty-btn, .qty-input { color: #fff; background: none; }
+      .sticky-cart-bar { background: var(--surface); border-color: var(--border); }
+      .shipping-box { background: #181922; border-color: var(--border); color: #fff; }
+      .spotlight-image { border-color: var(--border); }
+      h1, h2, h3, h4 { color: #fff; }
+    `;
+  } else if (style === 'soft_lifestyle') {
+    cssVariables = `
+      --primary: ${pc};
+      --secondary: ${sc};
+      --bg: #fdfbfb;
+      --surface: #ffffff;
+      --text: #292524;
+      --text-muted: #78716c;
+      --border: #f5ece5;
+      --radius: 20px;
+    `;
+    additionalCss = `
+      body { background: var(--bg); color: var(--text); }
+      h1, h2, h3, h4 { font-family: '${headingFont}', serif; }
+      .product-hero, .section, footer { background: var(--surface); border-color: var(--border); }
+      .spec-row { border-color: var(--border); }
+      .spec-label { background: #fdfbf7; border-color: var(--border); }
+      .spec-value { background: #ffffff; }
+      .step-card, .faq-item, .review-card { background: #fdfbf7; border-color: var(--border); border-radius: 24px; }
+      .option-btn { background: #ffffff; border-color: var(--border); border-radius: 20px; }
+      .qty-selector { background: #ffffff; border-color: var(--border); border-radius: 20px; }
+      .sticky-cart-bar { background: #ffffff; border-color: var(--border); }
+      .shipping-box { background: #fdfbf7; border-color: var(--border); }
+    `;
+  } else if (style === 'bold_conversion') {
+    cssVariables = `
+      --primary: ${pc};
+      --secondary: ${sc};
+      --bg: #0b0c10;
+      --surface: #1f2833;
+      --text: #c5c6c7;
+      --text-muted: #a1a1aa;
+      --border: #dc2626;
+      --radius: 4px;
+    `;
+    additionalCss = `
+      body { background: var(--bg); color: var(--text); }
+      h1, h2, h3, h4 { font-family: '${headingFont}', sans-serif; text-transform: uppercase; font-weight: 800; color: #fff; }
+      .product-hero, .section, footer { background: var(--bg); border-color: #27272a; }
+      .btn-add-to-cart { background: var(--primary); border-radius: 4px; transform: skewX(-6deg); }
+      .btn-buy-now { background: #fff; color: #000; border-radius: 4px; transform: skewX(-6deg); }
+      .step-card, .faq-item, .review-card { background: #18181b; border-color: #27272a; }
+      .option-btn { background: #0f0f11; border-color: #27272a; color: #fff; border-radius: 4px; }
+      .qty-selector { background: #0f0f11; border-color: #27272a; border-radius: 4px; }
+      .qty-btn, .qty-input { color: #fff; background: none; }
+      .sticky-cart-bar { background: #18181b; border-color: #27272a; }
+    `;
+  } else if (style === 'luxury_editorial') {
+    cssVariables = `
+      --primary: #111111;
+      --secondary: #d4af37;
+      --bg: #faf9f6;
+      --surface: #ffffff;
+      --text: #111111;
+      --text-muted: #555555;
+      --border: #111111;
+      --radius: 0px;
+    `;
+    additionalCss = `
+      body { background: var(--bg); color: var(--text); }
+      h1, h2, h3, h4 { font-family: '${headingFont}', serif; letter-spacing: 1.5px; text-transform: uppercase; }
+      .product-hero, .section, footer { background: #ffffff; border-color: #eee; }
+      .btn-add-to-cart { background: #000; border-radius: 0px; border: 1px solid #000; letter-spacing: 2px; }
+      .btn-buy-now { background: transparent; color: #000; border: 1px solid #000; border-radius: 0px; }
+      .btn-add-to-cart:hover { background: #fff; color: #000; }
+      .btn-buy-now:hover { background: #000; color: #fff; }
+      .step-card, .faq-item, .review-card { background: #ffffff; border: 1px solid #eee; border-radius: 0px; }
+      .option-btn { background: #ffffff; border: 1px solid #111; border-radius: 0px; }
+      .qty-selector { background: #ffffff; border: 1px solid #111; border-radius: 0px; }
+      .sticky-cart-bar { background: #ffffff; border-top: 1px solid #111; }
+    `;
+  }
+
+  // Build section HTML rendering functions
+  const renderHero = () => `
+    <section id="shop" class="product-hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div class="gallery-container">
+            <div class="main-image-box">
+              <img id="main-product-img" src="${mainImage}" alt="${title}" />
+            </div>
+            ${eco.images && eco.images.length > 1 ? `
+            <div class="thumbnails">
+              ${eco.images.map((img, i) => `
+                <div class="thumbnail ${i === 0 ? 'active' : ''}" onclick="changeMainImage(this, '${img}')">
+                  <img src="${img}" alt="Thumb ${i + 1}" />
+                </div>
+              `).join('')}
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="product-info">
+            <p class="product-meta">${result.seo.keywords?.[0] || 'Exclusive Offer'}</p>
+            <h1 class="product-title">${title}</h1>
+            
+            <div class="rating-row">
+              <span class="stars">★★★★★</span>
+              <span>4.9/5</span>
+              <span style="color: var(--text-muted)">(${result.testimonials.testimonials.length * 24}+ reviews)</span>
+            </div>
+
+            <div class="price-row">
+              <span class="price">${priceVal}</span>
+              <span class="compare-price">${compareVal}</span>
+              <span class="discount-badge">Save 50%</span>
+            </div>
+
+            <p class="product-desc">
+              ${result.homepage.hero.subheadline}
+            </p>
+
+            ${eco.variants && eco.variants.length > 0 ? eco.variants.map((v) => `
+              <div class="option-group">
+                <span class="option-label">${v.name}</span>
+                <div class="option-values">
+                  ${v.values.map((val, idx) => `
+                    <button type="button" class="option-btn ${idx === 0 ? 'active' : ''}" onclick="changeVariant(this)">
+                      ${val}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('') : ''}
+
+            <div class="option-group">
+              <span class="option-label">Quantity</span>
+              <div class="qty-selector">
+                <button class="qty-btn" onclick="changeQty(-1)">-</button>
+                <input type="text" id="qty-input" class="qty-input" value="1" readonly />
+                <button class="qty-btn" onclick="changeQty(1)">+</button>
+              </div>
+            </div>
+
+            <div class="purchase-actions">
+              <button class="btn-add-to-cart" onclick="alert('Added to cart!')">Add to Cart</button>
+              <button class="btn-buy-now" onclick="alert('Proceeding to instant checkout...')">Buy It Now</button>
+            </div>
+
+            <div class="shipping-box">
+              🚚 <span>${eco.shippingText}</span>
+            </div>
+
+            <div class="trust-badges">
+              ${eco.trustBadges.map((badge) => `
+                <div class="badge">
+                  <span class="badge-icon">✓</span>
+                  <span>${badge}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+
+  const renderFeatures = () => `
+    ${eco.featureSections && eco.featureSections.length > 0 ? `
+    <section id="features" class="section section-alt">
+      <div class="container">
+        <h2 class="section-title">Designed for Excellence</h2>
+        <p class="section-subtitle">${result.homepage.socialProof}</p>
+        
+        <div class="feature-showcase">
+          ${eco.featureSections.map((f, i) => `
+            <div class="spotlight-row ${i % 2 === 1 ? 'reverse' : ''}">
+              <div class="spotlight-image">
+                <img src="${f.imageUrl || mainImage}" alt="${f.title}" />
+              </div>
+              <div class="spotlight-text">
+                <h3>${f.title}</h3>
+                <p>${f.description}</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+    ` : `
+    <section id="features" class="section section-alt">
+      <div class="container">
+        <h2 class="section-title">Core Benefits</h2>
+        <p class="section-subtitle">${result.homepage.socialProof}</p>
+        <div class="steps-grid">
+          ${result.homepage.features.map((f) => `
+            <div class="step-card">
+              <h3>${f.title}</h3>
+              <p>${f.description}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+    `}
+  `;
+
+  const renderSpecifications = () => `
+    ${eco.specifications && eco.specifications.length > 0 ? `
+    <section id="specifications" class="section">
+      <div class="container">
+        <h2 class="section-title">Product Specifications</h2>
+        <p class="section-subtitle">Full details and technical capabilities</p>
+        <div class="specs-table">
+          ${eco.specifications.map((spec) => `
+            <div class="spec-row">
+              <div class="spec-label">${spec.label}</div>
+              <div class="spec-value">${spec.value}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+    ` : ''}
+  `;
+
+  const renderHowItWorks = () => `
+    ${eco.howItWorks && eco.howItWorks.length > 0 ? `
+    <section id="how-it-works" class="section section-alt">
+      <div class="container">
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-subtitle">Get started with your new product in minutes</p>
+        <div class="steps-grid">
+          ${eco.howItWorks.map((step) => `
+            <div class="step-card">
+              <span class="step-num">${step.step}</span>
+              <h3>${step.title}</h3>
+              <p>${step.description}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+    ` : ''}
+  `;
+
+  const renderFaqs = () => `
+    <section id="faqs" class="section">
+      <div class="container">
+        <h2 class="section-title">${result.faq.title}</h2>
+        <p class="section-subtitle">${result.faq.subtitle}</p>
+        <div class="faq-list">
+          ${(eco.faq.length > 0 ? eco.faq : result.faq.items).map((item) => `
+            <div class="faq-item">
+              <h4>${item.question}</h4>
+              <p>${item.answer}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+  `;
+
+  const renderReviews = () => `
+    <section id="reviews" class="section section-alt">
+      <div class="container">
+        <h2 class="section-title">${result.testimonials.title}</h2>
+        <p class="section-subtitle">${result.testimonials.subtitle}</p>
+        <div class="reviews-grid">
+          ${(eco.reviews.length > 0 ? eco.reviews.map(r => ({ name: r.author, rating: r.rating, quote: r.content, company: r.date, role: r.title })) : result.testimonials.testimonials).map((t) => `
+            <div class="review-card">
+              <div class="review-header">
+                <span class="reviewer-name">${t.name}</span>
+                <span class="review-date">${t.company}</span>
+              </div>
+              <div class="stars">${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}</div>
+              <p class="review-title">${t.role}</p>
+              <p class="review-body">"${t.quote}"</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+  `;
+
+  // Map section key to render function
+  const sectionRenders: Record<string, () => string> = {
+    hero: renderHero,
+    features: renderFeatures,
+    specifications: renderSpecifications,
+    howItWorks: renderHowItWorks,
+    faqs: renderFaqs,
+    reviews: renderReviews
+  };
+
+  const renderedSectionsHtml = sectionOrder
+    .map((key: string) => sectionRenders[key]?.() || '')
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -528,14 +861,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --primary: ${pc};
-      --secondary: ${sc};
-      --bg: #fafafa;
-      --surface: #ffffff;
-      --text: #17171f;
-      --text-muted: #6b7280;
-      --border: #e5e7eb;
-      --radius: 12px;
+      ${cssVariables}
     }
     body {
       font-family: '${bodyFont}', sans-serif;
@@ -812,7 +1138,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
       border: none;
       cursor: pointer;
       transition: all 0.25s;
-      box-shadow: 0 4px 16px ${pc}25;
+      box-shadow: 0 4px 16px var(--primary);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -1107,7 +1433,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
       cursor: pointer;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      box-shadow: 0 4px 10px ${pc}20;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }
 
     @media (max-width: 768px) {
@@ -1118,6 +1444,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
       .sticky-btn { width: 100%; }
       header nav { display: none; }
     }
+    ${additionalCss}
   </style>
   <script>
     function changeMainImage(element, url) {
@@ -1164,195 +1491,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
     </div>
   </header>
 
-  <section class="product-hero">
-    <div class="container">
-      <div class="hero-grid">
-        <div class="gallery-container">
-          <div class="main-image-box">
-            <img id="main-product-img" src="${mainImage}" alt="${title}" />
-          </div>
-          ${eco.images && eco.images.length > 0 ? `
-          <div class="thumbnails">
-            ${eco.images.map((img, i) => `
-              <div class="thumbnail ${i === 0 ? 'active' : ''}" onclick="changeMainImage(this, '${img}')">
-                <img src="${img}" alt="Thumb ${i + 1}" />
-              </div>
-            `).join('')}
-          </div>
-          ` : ''}
-        </div>
-
-        <div class="product-info">
-          <p class="product-meta">${result.seo.keywords?.[0] || 'Exclusive Offer'}</p>
-          <h1 class="product-title">${title}</h1>
-          
-          <div class="rating-row">
-            <span class="stars">★★★★★</span>
-            <span>4.9/5</span>
-            <span style="color: var(--text-muted)">(${result.testimonials.testimonials.length * 24}+ reviews)</span>
-          </div>
-
-          <div class="price-row">
-            <span class="price">${priceVal}</span>
-            <span class="compare-price">${compareVal}</span>
-            <span class="discount-badge">Save 50%</span>
-          </div>
-
-          <p class="product-desc">
-            ${result.homepage.hero.subheadline}
-          </p>
-
-          ${eco.variants && eco.variants.length > 0 ? eco.variants.map((v) => `
-            <div class="option-group">
-              <span class="option-label">${v.name}</span>
-              <div class="option-values">
-                ${v.values.map((val, idx) => `
-                  <button type="button" class="option-btn ${idx === 0 ? 'active' : ''}" onclick="changeVariant(this)">
-                    ${val}
-                  </button>
-                `).join('')}
-              </div>
-            </div>
-          `).join('') : ''}
-
-          <div class="option-group">
-            <span class="option-label">Quantity</span>
-            <div class="qty-selector">
-              <button class="qty-btn" onclick="changeQty(-1)">-</button>
-              <input type="text" id="qty-input" class="qty-input" value="1" readonly />
-              <button class="qty-btn" onclick="changeQty(1)">+</button>
-            </div>
-          </div>
-
-          <div class="purchase-actions">
-            <button class="btn-add-to-cart" onclick="alert('Added to cart!')">Add to Cart</button>
-            <button class="btn-buy-now" onclick="alert('Proceeding to instant checkout...')">Buy It Now</button>
-          </div>
-
-          <div class="shipping-box">
-            🚚 <span>${eco.shippingText}</span>
-          </div>
-
-          <div class="trust-badges">
-            ${eco.trustBadges.map((badge) => `
-              <div class="badge">
-                <span class="badge-icon">✓</span>
-                <span>${badge}</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  ${eco.featureSections && eco.featureSections.length > 0 ? `
-  <section id="features" class="section section-alt">
-    <div class="container">
-      <h2 class="section-title">Designed for Excellence</h2>
-      <p class="section-subtitle">${result.homepage.socialProof}</p>
-      
-      <div class="feature-showcase">
-        ${eco.featureSections.map((f, i) => `
-          <div class="spotlight-row ${i % 2 === 1 ? 'reverse' : ''}">
-            <div class="spotlight-image">
-              <img src="${f.imageUrl || mainImage}" alt="${f.title}" />
-            </div>
-            <div class="spotlight-text">
-              <h3>${f.title}</h3>
-              <p>${f.description}</p>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </section>
-  ` : `
-  <section id="features" class="section section-alt">
-    <div class="container">
-      <h2 class="section-title">Core Benefits</h2>
-      <p class="section-subtitle">${result.homepage.socialProof}</p>
-      <div class="steps-grid">
-        ${result.homepage.features.map((f) => `
-          <div class="step-card">
-            <h3>${f.title}</h3>
-            <p>${f.description}</p>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </section>
-  `}
-
-  ${eco.specifications && eco.specifications.length > 0 ? `
-  <section id="specifications" class="section">
-    <div class="container">
-      <h2 class="section-title">Product Specifications</h2>
-      <p class="section-subtitle">Full details and technical capabilities</p>
-      <div class="specs-table">
-        ${eco.specifications.map((spec) => `
-          <div class="spec-row">
-            <div class="spec-label">${spec.label}</div>
-            <div class="spec-value">${spec.value}</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </section>
-  ` : ''}
-
-  ${eco.howItWorks && eco.howItWorks.length > 0 ? `
-  <section id="how-it-works" class="section section-alt">
-    <div class="container">
-      <h2 class="section-title">How It Works</h2>
-      <p class="section-subtitle">Get started with your new product in minutes</p>
-      <div class="steps-grid">
-        ${eco.howItWorks.map((step) => `
-          <div class="step-card">
-            <span class="step-num">${step.step}</span>
-            <h3>${step.title}</h3>
-            <p>${step.description}</p>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </section>
-  ` : ''}
-
-  <section id="faqs" class="section">
-    <div class="container">
-      <h2 class="section-title">${result.faq.title}</h2>
-      <p class="section-subtitle">${result.faq.subtitle}</p>
-      <div class="faq-list">
-        ${(eco.faq.length > 0 ? eco.faq : result.faq.items).map((item) => `
-          <div class="faq-item">
-            <h4>${item.question}</h4>
-            <p>${item.answer}</p>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </section>
-
-  <section id="reviews" class="section section-alt">
-    <div class="container">
-      <h2 class="section-title">${result.testimonials.title}</h2>
-      <p class="section-subtitle">${result.testimonials.subtitle}</p>
-      <div class="reviews-grid">
-        ${(eco.reviews.length > 0 ? eco.reviews.map(r => ({ name: r.author, rating: r.rating, quote: r.content, company: r.date, role: r.title })) : result.testimonials.testimonials).map((t) => `
-          <div class="review-card">
-            <div class="review-header">
-              <span class="reviewer-name">${t.name}</span>
-              <span class="review-date">${t.company}</span>
-            </div>
-            <div class="stars">${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}</div>
-            <p class="review-title">${t.role}</p>
-            <p class="review-body">"${t.quote}"</p>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </section>
+  ${renderedSectionsHtml}
 
   <footer>
     <div class="container">
@@ -1396,8 +1535,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
     </div>
   </div>
 </body>
-</html>
-`;
+</html>`;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -3532,19 +3670,27 @@ export default function WebsiteBuilderDemo() {
                   <div>
                     <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>Style</label>
                     <div className="flex flex-wrap gap-2">
-                      {(['minimal', 'luxury', 'startup', 'dark', 'modern', 'corporate'] as const).map((s) => (
+                      {([
+                        { key: 'auto_best', label: 'Auto Best' },
+                        { key: 'premium_minimal', label: 'Premium Minimal' },
+                        { key: 'modern_commerce', label: 'Modern Commerce' },
+                        { key: 'luxury_editorial', label: 'Luxury Editorial' },
+                        { key: 'bold_conversion', label: 'Bold Conversion' },
+                        { key: 'tech_futuristic', label: 'Tech Futuristic' },
+                        { key: 'soft_lifestyle', label: 'Soft Lifestyle' }
+                      ] as const).map((s) => (
                         <button
-                          key={s}
+                          key={s.key}
                           type="button"
-                          onClick={() => setDropInput({ ...dropInput, preferredStyle: s })}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all capitalize"
+                          onClick={() => setDropInput({ ...dropInput, preferredStyle: s.key })}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                           style={{
-                            background: dropInput.preferredStyle === s ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${dropInput.preferredStyle === s ? '#6366f1' : 'var(--color-border)'}`,
-                            color: dropInput.preferredStyle === s ? '#818cf8' : '#71717a',
+                            background: dropInput.preferredStyle === s.key ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${dropInput.preferredStyle === s.key ? '#6366f1' : 'var(--color-border)'}`,
+                            color: dropInput.preferredStyle === s.key ? '#818cf8' : '#71717a',
                           }}
                         >
-                          {s}
+                          {s.label}
                         </button>
                       ))}
                     </div>
@@ -3714,235 +3860,375 @@ export default function WebsiteBuilderDemo() {
             {/* ═══════ PAGES TAB ═══════ */}
             {activeTab === 'pages' && (
               <div className="flex flex-col gap-4">
-                {/* Homepage */}
-                <SectionCard title="Homepage" icon={<Layout size={16} style={{ color: '#ef4444' }} />} color="#ef4444" defaultOpen>
-                  {/* Hero preview */}
-                  <div
-                    className="rounded-xl p-6 mb-5 text-center"
-                    style={{
-                      background: `linear-gradient(135deg, ${input.primaryColor} 0%, ${input.secondaryColor} 100%)`,
-                      color: '#fff',
-                    }}
-                  >
-                    <div className="flex items-center justify-end gap-1 mb-4">
-                      <CopyBtn text={result.homepage.hero.headline} id="hero-hl" copiedId={copiedId} onCopy={copy} size="xs" />
-                    </div>
-                    <h3 className="text-2xl font-black mb-2">{result.homepage.hero.headline}</h3>
-                    <p className="text-sm mb-4" style={{ opacity: 0.9 }}>{result.homepage.hero.subheadline}</p>
-                    <div className="flex gap-2 justify-center flex-wrap">
-                      {result.homepage.hero.ctaButtons.map((btn, i) => (
-                        <span
-                          key={i}
-                          className="text-xs font-bold px-4 py-2 rounded-lg"
-                          style={{
-                            background: btn.variant === 'primary' ? '#fff' : 'transparent',
-                            color: btn.variant === 'primary' ? input.primaryColor : '#fff',
-                            border: btn.variant === 'secondary' ? '1px solid rgba(255,255,255,0.4)' : 'none',
-                          }}
-                        >
-                          {btn.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Social proof */}
-                  <p className="text-xs mb-4" style={{ color: '#71717a' }}>
-                    <strong style={{ color: '#a1a1aa' }}>Social Proof:</strong> {result.homepage.socialProof}
-                  </p>
-                  {/* Features grid */}
-                  <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#52525b' }}>Features</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {result.homepage.features.map((f, i) => (
-                      <div key={i} className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                        <div className="text-2xl mb-2">{f.icon}</div>
-                        <h4 className="text-sm font-bold mb-1">{f.title}</h4>
-                        <p className="text-xs" style={{ color: '#71717a' }}>{f.description}</p>
-                      </div>
-                    ))}
+                {/* Section Order Editor */}
+                <SectionCard title="Layout Section Order" icon={<Layers size={16} style={{ color: '#ef4444' }} />} color="#ef4444" defaultOpen>
+                  <div className="flex flex-col gap-2.5">
+                    {(() => {
+                      const order = result.ecommerce?.sectionOrder || ['hero', 'features', 'specifications', 'howItWorks', 'faqs', 'reviews'];
+                      return order.map((section: string, idx: number) => (
+                        <div key={section} className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+                          <span className="text-xs font-bold uppercase tracking-wider capitalize">
+                            {section.replace(/([A-Z])/g, ' $1')}
+                          </span>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                const nextOrder = [...order];
+                                const temp = nextOrder[idx];
+                                nextOrder[idx] = nextOrder[idx - 1];
+                                nextOrder[idx - 1] = temp;
+                                const nextResult = { ...result };
+                                if (nextResult.ecommerce) {
+                                  nextResult.ecommerce.sectionOrder = nextOrder;
+                                  setResult(nextResult);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold rounded text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              ▲ Up
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === order.length - 1}
+                              onClick={() => {
+                                const nextOrder = [...order];
+                                const temp = nextOrder[idx];
+                                nextOrder[idx] = nextOrder[idx + 1];
+                                nextOrder[idx + 1] = temp;
+                                const nextResult = { ...result };
+                                if (nextResult.ecommerce) {
+                                  nextResult.ecommerce.sectionOrder = nextOrder;
+                                  setResult(nextResult);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold rounded text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              ▼ Down
+                            </button>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </SectionCard>
 
-                {/* About */}
-                <SectionCard title="About" icon={<Briefcase size={16} style={{ color: '#60a5fa' }} />} color="#60a5fa">
+                {/* Announcement Bar & Navigation */}
+                <SectionCard title="Navigation & Announcement" icon={<Layout size={16} style={{ color: '#ef4444' }} />} color="#ef4444">
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Announcement Bar Text</label>
+                      <input
+                        type="text"
+                        className="input-field w-full text-xs"
+                        value={result.ecommerce?.announcementBar || ''}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          if (nextResult.ecommerce) {
+                            nextResult.ecommerce.announcementBar = e.target.value;
+                            setResult(nextResult);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </SectionCard>
+
+                {/* Homepage */}
+                <SectionCard title="Homepage Hero Section" icon={<Layout size={16} style={{ color: '#ef4444' }} />} color="#ef4444">
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Headline</label>
+                      <input
+                        type="text"
+                        className="input-field w-full text-xs"
+                        value={result.homepage.hero.headline}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          nextResult.homepage.hero.headline = e.target.value;
+                          setResult(nextResult);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Subheadline</label>
+                      <textarea
+                        className="input-field w-full text-xs min-h-[60px]"
+                        value={result.homepage.hero.subheadline}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          nextResult.homepage.hero.subheadline = e.target.value;
+                          setResult(nextResult);
+                        }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Primary CTA Label</label>
+                        <input
+                          type="text"
+                          className="input-field w-full text-xs"
+                          value={result.homepage.hero.ctaButtons[0]?.label || ''}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.homepage.hero.ctaButtons[0]) {
+                              nextResult.homepage.hero.ctaButtons[0].label = e.target.value;
+                              setResult(nextResult);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Secondary CTA Label</label>
+                        <input
+                          type="text"
+                          className="input-field w-full text-xs"
+                          value={result.homepage.hero.ctaButtons[1]?.label || ''}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.homepage.hero.ctaButtons[1]) {
+                              nextResult.homepage.hero.ctaButtons[1].label = e.target.value;
+                              setResult(nextResult);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </SectionCard>
+
+                {/* About story content */}
+                <SectionCard title="About Story Content" icon={<Briefcase size={16} style={{ color: '#60a5fa' }} />} color="#60a5fa">
                   <div className="flex flex-col gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Mission</p>
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>{result.about.mission}</p>
-                        <CopyBtn text={result.about.mission} id="about-mission" copiedId={copiedId} onCopy={copy} size="xs" />
-                      </div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Mission</label>
+                      <textarea
+                        className="input-field w-full text-xs min-h-[60px]"
+                        value={result.about.mission}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          nextResult.about.mission = e.target.value;
+                          setResult(nextResult);
+                        }}
+                      />
                     </div>
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Vision</p>
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>{result.about.vision}</p>
-                        <CopyBtn text={result.about.vision} id="about-vision" copiedId={copiedId} onCopy={copy} size="xs" />
-                      </div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Vision</label>
+                      <textarea
+                        className="input-field w-full text-xs min-h-[60px]"
+                        value={result.about.vision}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          nextResult.about.vision = e.target.value;
+                          setResult(nextResult);
+                        }}
+                      />
                     </div>
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Values</p>
-                      <div className="flex flex-wrap gap-2">
-                        {result.about.values.map((v, i) => (
-                          <span key={i} className="text-xs px-2.5 py-1 rounded-full font-medium"
-                            style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
-                            {v}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Content</p>
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm leading-relaxed" style={{ color: '#a1a1aa' }}>{result.about.content}</p>
-                        <CopyBtn text={result.about.content} id="about-content" copiedId={copiedId} onCopy={copy} size="xs" />
-                      </div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Story Content</label>
+                      <textarea
+                        className="input-field w-full text-xs min-h-[100px]"
+                        value={result.about.content}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          nextResult.about.content = e.target.value;
+                          setResult(nextResult);
+                        }}
+                      />
                     </div>
                   </div>
                 </SectionCard>
 
-                {/* Services */}
-                <SectionCard title="Services" icon={<Layers size={16} style={{ color: '#a855f7' }} />} color="#a855f7">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {result.services.services.map((s, i) => (
-                      <div key={i} className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">{s.icon}</span>
-                            <h4 className="text-sm font-bold">{s.title}</h4>
-                          </div>
-                          <CopyBtn text={`${s.title}\n${s.description}\n${s.features.join('\n')}`} id={`svc-${i}`} copiedId={copiedId} onCopy={copy} size="xs" />
-                        </div>
-                        <p className="text-xs mb-3" style={{ color: '#71717a' }}>{s.description}</p>
-                        <ul className="flex flex-col gap-1">
-                          {s.features.map((f, fi) => (
-                            <li key={fi} className="text-xs flex items-center gap-1.5" style={{ color: '#a1a1aa' }}>
-                              <span style={{ color: '#a855f7', fontWeight: 700 }}>✓</span> {f}
-                            </li>
-                          ))}
-                        </ul>
+                {/* Image Gallery Editor */}
+                <SectionCard title="Product Image Gallery" icon={<Layers size={16} style={{ color: '#a855f7' }} />} color="#a855f7">
+                  <div className="flex flex-col gap-3">
+                    {result.ecommerce?.images?.map((img, idx) => (
+                      <div key={idx} className="flex flex-col gap-1">
+                        <label className="block text-xs font-semibold" style={{ color: '#a1a1aa' }}>Image URL {idx + 1}</label>
+                        <input
+                          type="text"
+                          className="input-field w-full text-xs"
+                          value={img}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.ecommerce?.images) {
+                              nextResult.ecommerce.images[idx] = e.target.value;
+                              setResult(nextResult);
+                            }
+                          }}
+                        />
                       </div>
                     ))}
                   </div>
                 </SectionCard>
 
-                {/* Pricing */}
-                <SectionCard title="Pricing" icon={<Target size={16} style={{ color: '#22c55e' }} />} color="#22c55e">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {result.pricing.plans.map((plan, i) => (
-                      <div
-                        key={i}
-                        className="rounded-xl p-5 text-center relative"
-                        style={{
-                          background: plan.isPopular ? 'rgba(220,38,38,0.04)' : 'var(--color-surface-2)',
-                          border: plan.isPopular ? '1px solid rgba(220,38,38,0.3)' : '1px solid var(--color-border)',
+                {/* Pricing & Display */}
+                <SectionCard title="Product Pricing & Variations" icon={<Target size={16} style={{ color: '#22c55e' }} />} color="#22c55e">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Product Price</label>
+                      <input
+                        type="text"
+                        className="input-field w-full text-xs"
+                        value={result.ecommerce?.price || ''}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          if (nextResult.ecommerce) {
+                            nextResult.ecommerce.price = e.target.value;
+                            setResult(nextResult);
+                          }
                         }}
-                      >
-                        {plan.isPopular && (
-                          <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-0.5 rounded-full"
-                            style={{ background: '#dc2626', color: '#fff', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                            Most Popular
-                          </span>
-                        )}
-                        <h4 className="text-sm font-bold mb-1 mt-1">{plan.name}</h4>
-                        <div className="text-2xl font-black mb-0.5" style={{ color: plan.isPopular ? '#ef4444' : '#f8f8f8' }}>{plan.price}</div>
-                        <p className="text-xs mb-3" style={{ color: '#52525b' }}>{plan.period}</p>
-                        <p className="text-xs mb-3" style={{ color: '#71717a' }}>{plan.description}</p>
-                        <ul className="text-left flex flex-col gap-1 mb-4">
-                          {plan.features.map((f, fi) => (
-                            <li key={fi} className="text-xs flex items-center gap-1.5" style={{ color: '#a1a1aa' }}>
-                              <Check size={10} style={{ color: '#22c55e', flexShrink: 0 }} /> {f}
-                            </li>
-                          ))}
-                        </ul>
-                        <span
-                          className="block text-xs font-bold py-2 rounded-lg"
-                          style={{
-                            background: plan.isPopular ? '#dc2626' : 'rgba(255,255,255,0.04)',
-                            color: plan.isPopular ? '#fff' : '#a1a1aa',
-                            border: plan.isPopular ? 'none' : '1px solid var(--color-border)',
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Compare-At Price</label>
+                      <input
+                        type="text"
+                        className="input-field w-full text-xs"
+                        value={result.ecommerce?.compareAtPrice || ''}
+                        onChange={(e) => {
+                          const nextResult = { ...result };
+                          if (nextResult.ecommerce) {
+                            nextResult.ecommerce.compareAtPrice = e.target.value;
+                            setResult(nextResult);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Shipping Description</label>
+                    <input
+                      type="text"
+                      className="input-field w-full text-xs"
+                      value={result.ecommerce?.shippingText || ''}
+                      onChange={(e) => {
+                        const nextResult = { ...result };
+                        if (nextResult.ecommerce) {
+                          nextResult.ecommerce.shippingText = e.target.value;
+                          setResult(nextResult);
+                        }
+                      }}
+                    />
+                  </div>
+                </SectionCard>
+
+                {/* Trust Badges & Policies */}
+                <SectionCard title="Trust Badges & Policies" icon={<Shield size={16} style={{ color: '#ef4444' }} />} color="#ef4444">
+                  <div className="flex flex-col gap-2">
+                    {result.ecommerce?.trustBadges?.map((badge, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="text"
+                          className="input-field flex-1 text-xs"
+                          value={badge}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.ecommerce?.trustBadges) {
+                              nextResult.ecommerce.trustBadges[idx] = e.target.value;
+                              setResult(nextResult);
+                            }
                           }}
-                        >
-                          {plan.cta}
-                        </span>
+                        />
                       </div>
                     ))}
                   </div>
                 </SectionCard>
 
                 {/* FAQ */}
-                <SectionCard title="FAQ" icon={<Hash size={16} style={{ color: '#eab308' }} />} color="#eab308">
-                  <div className="flex flex-col gap-0">
-                    {result.faq.items.map((item, i) => (
-                      <div key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                        <button
-                          className="w-full flex items-center justify-between py-3 text-left"
-                          onClick={() => {
-                            const next = new Set(openFaqs);
-                            if (next.has(i)) next.delete(i); else next.add(i);
-                            setOpenFaqs(next);
+                <SectionCard title="FAQ Editor" icon={<Hash size={16} style={{ color: '#eab308' }} />} color="#eab308">
+                  <div className="flex flex-col gap-3">
+                    {(result.ecommerce?.faq && result.ecommerce.faq.length > 0 ? result.ecommerce.faq : result.faq.items).map((item, i) => (
+                      <div key={i} className="p-3 rounded-xl flex flex-col gap-2" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+                        <input
+                          type="text"
+                          className="input-field w-full text-xs font-semibold"
+                          value={item.question}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.ecommerce?.faq?.[i]) {
+                              nextResult.ecommerce.faq[i].question = e.target.value;
+                            } else {
+                              nextResult.faq.items[i].question = e.target.value;
+                            }
+                            setResult(nextResult);
                           }}
-                        >
-                          <span className="text-sm font-semibold pr-4">{item.question}</span>
-                          {openFaqs.has(i) ? <ChevronDown size={14} style={{ color: '#eab308', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: '#52525b', flexShrink: 0 }} />}
-                        </button>
-                        {openFaqs.has(i) && (
-                          <p className="text-sm pb-3 leading-relaxed" style={{ color: '#a1a1aa' }}>{item.answer}</p>
-                        )}
+                        />
+                        <textarea
+                          className="input-field w-full text-xs min-h-[50px]"
+                          value={item.answer}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.ecommerce?.faq?.[i]) {
+                              nextResult.ecommerce.faq[i].answer = e.target.value;
+                            } else {
+                              nextResult.faq.items[i].answer = e.target.value;
+                            }
+                            setResult(nextResult);
+                          }}
+                        />
                       </div>
                     ))}
                   </div>
                 </SectionCard>
 
-                {/* Testimonials */}
-                <SectionCard title="Testimonials" icon={<Quote size={16} style={{ color: '#f97316' }} />} color="#f97316">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {result.testimonials.testimonials.map((t, i) => (
-                      <div key={i} className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                        <div className="flex items-center gap-0.5 mb-2">
-                          {Array.from({ length: 5 }).map((_, si) => (
-                            <Star key={si} size={14} style={{ color: si < t.rating ? '#f59e0b' : '#27272a' }} fill={si < t.rating ? '#f59e0b' : 'none'} />
-                          ))}
+                {/* Reviews Editor */}
+                <SectionCard title="Reviews & Testimonials" icon={<Quote size={16} style={{ color: '#f97316' }} />} color="#f97316">
+                  <div className="flex flex-col gap-3">
+                    {(result.ecommerce?.reviews && result.ecommerce.reviews.length > 0 ? result.ecommerce.reviews : result.testimonials.testimonials).map((t: any, i) => (
+                      <div key={i} className="p-3 rounded-xl flex flex-col gap-2" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            className="input-field flex-1 text-xs"
+                            placeholder="Author Name"
+                            value={t.author || t.name || ''}
+                            onChange={(e) => {
+                              const nextResult = { ...result };
+                              if (nextResult.ecommerce?.reviews?.[i]) {
+                                nextResult.ecommerce.reviews[i].author = e.target.value;
+                              } else {
+                                nextResult.testimonials.testimonials[i].name = e.target.value;
+                              }
+                              setResult(nextResult);
+                            }}
+                          />
+                          <input
+                            type="number"
+                            min="1"
+                            max="5"
+                            className="input-field w-16 text-xs"
+                            placeholder="Rating"
+                            value={t.rating || 5}
+                            onChange={(e) => {
+                              const nextResult = { ...result };
+                              const val = parseInt(e.target.value) || 5;
+                              if (nextResult.ecommerce?.reviews?.[i]) {
+                                nextResult.ecommerce.reviews[i].rating = val;
+                              } else {
+                                nextResult.testimonials.testimonials[i].rating = val;
+                              }
+                              setResult(nextResult);
+                            }}
+                          />
                         </div>
-                        <p className="text-sm italic leading-relaxed mb-3" style={{ color: '#a1a1aa' }}>
-                          &ldquo;{t.quote}&rdquo;
-                        </p>
-                        <div>
-                          <p className="text-sm font-bold">{t.name}</p>
-                          <p className="text-xs" style={{ color: '#52525b' }}>{t.role}, {t.company}</p>
-                        </div>
+                        <textarea
+                          className="input-field w-full text-xs min-h-[50px]"
+                          placeholder="Review Content"
+                          value={t.content || t.quote || ''}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            if (nextResult.ecommerce?.reviews?.[i]) {
+                              nextResult.ecommerce.reviews[i].content = e.target.value;
+                            } else {
+                              nextResult.testimonials.testimonials[i].quote = e.target.value;
+                            }
+                            setResult(nextResult);
+                          }}
+                        />
                       </div>
                     ))}
-                  </div>
-                </SectionCard>
-
-                {/* Contact */}
-                <SectionCard title="Contact" icon={<Mail size={16} style={{ color: '#06b6d4' }} />} color="#06b6d4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <Mail size={14} style={{ color: '#06b6d4' }} />
-                        <span className="text-sm" style={{ color: '#a1a1aa' }}>{result.contact.email}</span>
-                        <CopyBtn text={result.contact.email} id="contact-email" copiedId={copiedId} onCopy={copy} size="xs" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone size={14} style={{ color: '#06b6d4' }} />
-                        <span className="text-sm" style={{ color: '#a1a1aa' }}>{result.contact.phone}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin size={14} style={{ color: '#06b6d4' }} />
-                        <span className="text-sm" style={{ color: '#a1a1aa' }}>{result.contact.address}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#3f3f46' }}>Form Fields</p>
-                      {result.contact.formFields.map((f, i) => (
-                        <div key={i} className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', color: '#71717a' }}>
-                          <span className="font-semibold" style={{ color: '#a1a1aa' }}>{f.label}</span>
-                          <span style={{ color: '#3f3f46' }}> • {f.type}</span>
-                          {f.required && <span style={{ color: '#ef4444' }}> *</span>}
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </SectionCard>
 
@@ -3978,69 +4264,103 @@ export default function WebsiteBuilderDemo() {
             {activeTab === 'branding' && (
               <div className="flex flex-col gap-5">
                 {/* Color Palette */}
+                {/* Color Palette Editor */}
                 <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                   <div className="flex items-center gap-2.5 px-5 py-3.5" style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)' }}>
-                      <Palette size={14} style={{ color: '#a855f7' }} />
-                    </div>
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>Color Palette</span>
+                    <Palette size={14} style={{ color: '#a855f7' }} />
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a855f7' }}>Color Palette Editor</span>
                   </div>
-                  <div className="p-5">
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                      {result.branding.colorPalette.map((c, i) => (
-                        <div key={i} className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => copy(c.hex, `color-${i}`)}>
-                          <div
-                            className="w-14 h-14 rounded-full shadow-lg"
-                            style={{ background: c.hex, border: '3px solid var(--color-border)', boxShadow: `0 4px 16px ${c.hex}40` }}
+                  <div className="p-5 flex flex-col gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Primary Accent Color</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={input.primaryColor}
+                            onChange={(e) => {
+                              setInput({ ...input, primaryColor: e.target.value });
+                              if (result) {
+                                const nextResult = { ...result };
+                                const pri = nextResult.branding.colorPalette.find(c => c.name === 'Primary' || c.name === 'Primary Accent');
+                                if (pri) pri.hex = e.target.value;
+                                setResult(nextResult);
+                              }
+                            }}
+                            className="w-8 h-8 rounded-lg cursor-pointer"
+                            style={{ background: 'transparent', border: 'none' }}
                           />
-                          <div className="text-center">
-                            <p className="text-xs font-bold font-mono" style={{ color: copiedId === `color-${i}` ? '#22c55e' : '#a1a1aa' }}>
-                              {copiedId === `color-${i}` ? 'Copied!' : c.hex}
-                            </p>
-                            <p className="text-xs" style={{ color: '#3f3f46' }}>{c.name}</p>
-                            <p className="text-xs" style={{ color: '#27272a' }}>{c.usage}</p>
-                          </div>
+                          <span className="text-xs font-mono" style={{ color: '#a1a1aa' }}>{input.primaryColor}</span>
                         </div>
-                      ))}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Secondary Color</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={input.secondaryColor}
+                            onChange={(e) => {
+                              setInput({ ...input, secondaryColor: e.target.value });
+                              if (result) {
+                                const nextResult = { ...result };
+                                const sec = nextResult.branding.colorPalette.find(c => c.name === 'Secondary');
+                                if (sec) sec.hex = e.target.value;
+                                setResult(nextResult);
+                              }
+                            }}
+                            className="w-8 h-8 rounded-lg cursor-pointer"
+                            style={{ background: 'transparent', border: 'none' }}
+                          />
+                          <span className="text-xs font-mono" style={{ color: '#a1a1aa' }}>{input.secondaryColor}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Typography */}
+                {/* Typography Editor */}
                 <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                   <div className="flex items-center gap-2.5 px-5 py-3.5" style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)' }}>
-                      <Type size={14} style={{ color: '#60a5fa' }} />
-                    </div>
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>Typography</span>
+                    <Type size={14} style={{ color: '#60a5fa' }} />
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>Typography Editor</span>
                   </div>
-                  <div className="p-5">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {[
-                        { label: 'Heading Font', value: result.branding.typography.heading, icon: <Type size={16} /> },
-                        { label: 'Body Font', value: result.branding.typography.body, icon: <PenTool size={16} /> },
-                        { label: 'Accent Font', value: result.branding.typography.accent, icon: <Sparkles size={16} /> },
-                      ].map((t, i) => (
-                        <div key={i} className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span style={{ color: '#60a5fa' }}>{t.icon}</span>
-                            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#3f3f46' }}>{t.label}</span>
-                          </div>
-                          <p className="text-lg font-bold" style={{ fontFamily: `'${t.value}', sans-serif` }}>{t.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                    {result.branding.typography.googleFontsUrl && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <ExternalLink size={12} style={{ color: '#60a5fa' }} />
-                        <a
-                          href={result.branding.typography.googleFontsUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-xs" style={{ color: '#60a5fa' }}
+                  <div className="p-5 flex flex-col gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Heading Font</label>
+                        <select
+                          className="input-field w-full text-xs"
+                          value={result.branding.typography.heading}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            nextResult.branding.typography.heading = e.target.value;
+                            nextResult.branding.typography.googleFontsUrl = `https://fonts.googleapis.com/css2?family=${e.target.value.replace(/ /g, '+')}:wght@400;600;700;800&family=${result.branding.typography.body.replace(/ /g, '+')}:wght@300;400;500;600&display=swap`;
+                            setResult(nextResult);
+                          }}
                         >
-                          View on Google Fonts
-                        </a>
+                          {['Inter', 'Space Grotesk', 'Playfair Display', 'Oswald', 'Cinzel', 'Montserrat', 'Lora', 'Outfit', 'Roboto', 'Poppins'].map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
                       </div>
-                    )}
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: '#a1a1aa' }}>Body Font</label>
+                        <select
+                          className="input-field w-full text-xs"
+                          value={result.branding.typography.body}
+                          onChange={(e) => {
+                            const nextResult = { ...result };
+                            nextResult.branding.typography.body = e.target.value;
+                            nextResult.branding.typography.googleFontsUrl = `https://fonts.googleapis.com/css2?family=${result.branding.typography.heading.replace(/ /g, '+')}:wght@400;600;700;800&family=${e.target.value.replace(/ /g, '+')}:wght@300;400;500;600&display=swap`;
+                            setResult(nextResult);
+                          }}
+                        >
+                          {['Inter', 'Montserrat', 'Roboto', 'Lora', 'Poppins', 'Open Sans', 'Lato'].map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

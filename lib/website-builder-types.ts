@@ -10,7 +10,14 @@ export type PreferredStyle =
   | 'startup'
   | 'dark'
   | 'modern'
-  | 'corporate';
+  | 'corporate'
+  | 'auto_best'
+  | 'premium_minimal'
+  | 'modern_commerce'
+  | 'luxury_editorial'
+  | 'bold_conversion'
+  | 'tech_futuristic'
+  | 'soft_lifestyle';
 
 export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'auto';
 
@@ -218,6 +225,8 @@ export interface EcommerceData {
   faq: { question: string; answer: string }[];
   reviews: EcommerceReview[];
   stickyAddToCartText: string;
+  preferredStyle?: PreferredStyle;
+  sectionOrder?: string[];
 }
 
 // ── Full Generation Response ───────────────────────────────────
