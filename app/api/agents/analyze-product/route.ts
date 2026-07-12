@@ -14,6 +14,20 @@ import {
 export interface AnalyzeProductRequest {
   url: string;
   provider?: AIProvider;
+  productData?: {
+    title: string;
+    price: string;
+    originalPrice: string;
+    discount: string;
+    images: string[];
+    rating: number | null;
+    orders: number | null;
+    seller: string;
+    shipping: string;
+    url: string;
+    specifications: { label: string; value: string }[];
+    description: string;
+  };
 }
 
 // ── Structured data extraction ──────────────────────────────
@@ -487,23 +501,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch the product page
-    console.log(`${LOG} [${requestId}] Fetching URL: ${trimmedUrl}`);
+    let extractedText = '';
+    let title = '';
+    let extractedImages: string[] = [];
+    let structured: Partial<PreExtracted> = {};
 
-    let pageHtml: string;
-    try {
-      pageHtml = await fetchPageContent(trimmedUrl);
-    } catch (fetchErr) {
-      const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
-      console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
-      return NextResponse.json(
-        { success: false, error: `Could not fetch URL: ${reason}` },
-        { status: 422 }
-      );
+    if (body.productData) {
+      console.log(`${LOG} [${requestId}] Using pre-scraped Apify product data.`);
+      title = body.productData.title || 'Unknown Product';
+      extractedText = `Product Title: ${body.productData.title}\nProduct Price: ${body.productData.price}\nOriginal Price: ${body.productData.originalPrice}\nDiscount: ${body.productData.discount}\nRating: ${body.productData.rating || 'N/A'}\nOrders: ${body.productData.orders || 'N/A'}\nSeller: ${body.productData.seller || 'N/A'}\nShipping: ${body.productData.shipping || 'N/A'}\nDescription:\n${body.productData.description || 'No description'}`;
+      extractedImages = body.productData.images || [];
+      structured = {
+        title: body.productData.title,
+        description: body.productData.description || '',
+        images: body.productData.images || [],
+        price: body.productData.price,
+        rating: body.productData.rating,
+        reviewCount: body.productData.orders,
+        shippingInfo: body.productData.shipping,
+        specifications: body.productData.specifications || [],
+      };
+    } else {
+      // Fetch the product page
+      console.log(`${LOG} [${requestId}] Fetching URL: ${trimmedUrl}`);
+
+      let pageHtml: string;
+      try {
+        pageHtml = await fetchPageContent(trimmedUrl);
+      } catch (fetchErr) {
+        const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
+        console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
+        return NextResponse.json(
+          { success: false, error: `Could not fetch URL: ${reason}` },
+          { status: 422 }
+        );
+      }
+
+      // Extract text, images, and structured data
+      const extracted = extractFromHtml(pageHtml);
+      extractedText = extracted.text;
+      title = extracted.title;
+      extractedImages = extracted.images;
+      structured = extracted.structured;
     }
-
-    // Extract text, images, and structured data
-    const { text: extractedText, title, images: extractedImages, structured } = extractFromHtml(pageHtml);
     console.log(`${LOG} [${requestId}] Extracted ${extractedText.length} chars, ${extractedImages.length} images, title: "${title}"`);
     console.log(`${LOG} [${requestId}] Raw scraper output (first 200 chars): "${extractedText.slice(0, 200).replace(/\n/g, ' ')}..."`);
     console.log(`${LOG} [${requestId}] Extracted image URLs:`, JSON.stringify(extractedImages));

@@ -2232,6 +2232,11 @@ export default function WebsiteBuilderDemo() {
 
   // Manual import states
   const [isManualImport, setIsManualImport] = useState(false);
+  const [isApifySearch, setIsApifySearch] = useState(false);
+  const [apifyQuery, setApifyQuery] = useState('');
+  const [apifyLoading, setApifyLoading] = useState(false);
+  const [apifyResults, setApifyResults] = useState<any[]>([]);
+  const [apifySelectedProduct, setApifySelectedProduct] = useState<any | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [manualDescription, setManualDescription] = useState('');
@@ -2349,11 +2354,38 @@ export default function WebsiteBuilderDemo() {
     setProductAnalysis(null);
     setSelectedImages([]);
     try {
+      let productDataPayload: any = undefined;
+
+      // If it's an AliExpress URL, use Apify to scrape it first to bypass anti-bot blocks
+      if (submittedUrl.includes('aliexpress.com')) {
+        console.log('[Frontend] AliExpress URL detected. Sourcing data securely via Apify scraper...');
+        const apifyRes = await fetch('/api/apify/aliexpress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productUrl: submittedUrl }),
+        });
+        if (!apifyRes.ok) {
+          const errData = await apifyRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Apify scraper returned status ${apifyRes.status}`);
+        }
+        const apifyData = await apifyRes.json();
+        if (apifyData.success && apifyData.products && apifyData.products.length > 0) {
+          productDataPayload = apifyData.products[0];
+          console.log('[Frontend] Successfully scraped AliExpress product via Apify:', productDataPayload.title);
+        } else {
+          throw new Error(apifyData.error || 'Failed to scrape AliExpress product details.');
+        }
+      }
+
       const res = await fetch(`/api/agents/analyze-product?cb=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ url: submittedUrl, provider }),
+        body: JSON.stringify({
+          url: submittedUrl,
+          provider,
+          productData: productDataPayload
+        }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -2534,6 +2566,79 @@ export default function WebsiteBuilderDemo() {
     }
   }
 
+  async function handleApifySearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!apifyQuery.trim()) return;
+    setApifyLoading(true);
+    setErrorMsg('');
+    setApifyResults([]);
+    setApifySelectedProduct(null);
+    try {
+      const res = await fetch('/api/apify/aliexpress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchQuery: apifyQuery.trim() }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Apify search failed with status ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.success && data.products) {
+        setApifyResults(data.products);
+      } else {
+        throw new Error(data.error || 'No products found matching query.');
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Search failed.');
+    } finally {
+      setApifyLoading(false);
+    }
+  }
+
+  async function handleSelectApifyProduct(product: any) {
+    setApifySelectedProduct(product);
+    setDropStatus('analyzing');
+    setErrorMsg('');
+    setProductAnalysis(null);
+    setSelectedImages([]);
+    setProductUrl(product.url);
+
+    try {
+      console.log('[Frontend] Analyzing selected Apify product:', product.title);
+      const res = await fetch(`/api/agents/analyze-product?cb=${Date.now()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          url: product.url,
+          provider,
+          productData: product
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned status ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Analysis failed');
+
+      setProductAnalysis(data.analysis);
+      setSelectedImages(data.analysis.images || []);
+      setDropInput((prev) => ({
+        ...prev,
+        productUrl: product.url,
+        storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
+      }));
+      setDropStatus('analyzed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Product analysis failed');
+      setDropStatus('error');
+    }
+  }
+
   function handleDropReset() {
     setDropStatus('idle');
     setProductAnalysis(null);
@@ -2541,6 +2646,9 @@ export default function WebsiteBuilderDemo() {
     setResult(null);
     setStatus('idle');
     setErrorMsg('');
+    setApifyQuery('');
+    setApifyResults([]);
+    setApifySelectedProduct(null);
   }
 
   // ── Shopify deploy handlers ──────────────────────────────────
@@ -2847,9 +2955,10 @@ export default function WebsiteBuilderDemo() {
             <div className="flex gap-4 mb-4 border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               <button
                 type="button"
-                className={`pb-2 text-sm font-semibold transition-all ${!isManualImport ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
+                className={`pb-2 text-sm font-semibold transition-all ${!isManualImport && !isApifySearch ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
                 onClick={() => {
                   setIsManualImport(false);
+                  setIsApifySearch(false);
                   setErrorMsg('');
                 }}
               >
@@ -2857,10 +2966,22 @@ export default function WebsiteBuilderDemo() {
               </button>
               <button
                 type="button"
+                className={`pb-2 text-sm font-semibold transition-all ${isApifySearch ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
+                onClick={() => {
+                  setIsApifySearch(true);
+                  setIsManualImport(false);
+                  setErrorMsg('');
+                }}
+              >
+                Search AliExpress (Apify)
+              </button>
+              <button
+                type="button"
                 id="manual-import-tab"
                 className={`pb-2 text-sm font-semibold transition-all ${isManualImport ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
                 onClick={() => {
                   setIsManualImport(true);
+                  setIsApifySearch(false);
                   setErrorMsg('');
                 }}
               >
@@ -3009,6 +3130,112 @@ export default function WebsiteBuilderDemo() {
                 >
                   Save & Validate Product
                 </button>
+              </div>
+            ) : isApifySearch ? (
+              /* Apify Search Interface */
+              <div className="mb-6">
+                <form onSubmit={handleApifySearch} className="mb-6">
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                    <Search size={14} className="inline mr-1.5" style={{ verticalAlign: '-2px' }} />
+                    Search products on AliExpress <span style={{ color: '#818cf8' }}>*</span>
+                  </label>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      placeholder="e.g. smart watch, wireless earbuds, portable espresso machine..."
+                      value={apifyQuery}
+                      onChange={(e) => setApifyQuery(e.target.value)}
+                      className="input-field flex-1"
+                      disabled={apifyLoading || dropStatus === 'analyzing'}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!apifyQuery.trim() || apifyLoading || dropStatus === 'analyzing'}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex-shrink-0"
+                      style={{
+                        background: apifyQuery.trim() ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'rgba(99,102,241,0.06)',
+                        color: apifyQuery.trim() ? '#fff' : '#52525b',
+                        border: 'none',
+                        boxShadow: apifyQuery.trim() ? '0 4px 16px rgba(99,102,241,0.3)' : 'none',
+                        opacity: !apifyQuery.trim() || apifyLoading ? 0.5 : 1,
+                        cursor: !apifyQuery.trim() ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {apifyLoading
+                        ? <><Loader2 size={16} className="animate-spin" /> Searching...</>
+                        : <><Search size={16} /> Search via Apify</>
+                      }
+                    </button>
+                  </div>
+                </form>
+
+                {/* Scraped products selection grid */}
+                {apifyResults.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-sm font-bold mb-3" style={{ color: '#e4e4e7' }}>Select a product to import:</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {apifyResults.map((prod, idx) => {
+                        const isSelected = apifySelectedProduct?.url === prod.url;
+                        return (
+                          <div
+                            key={idx}
+                            className="rounded-xl p-4 flex gap-4 transition-all"
+                            style={{
+                              background: isSelected ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.02)',
+                              border: `1.5px solid ${isSelected ? '#6366f1' : 'var(--color-border)'}`,
+                            }}
+                          >
+                            {prod.images && prod.images.length > 0 && (
+                              <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 bg-white">
+                                <img src={prod.images[0]} alt="" className="w-full h-full object-contain" />
+                              </div>
+                            )}
+                            <div className="flex-1 flex flex-col justify-between min-w-0">
+                              <div>
+                                <h4 className="text-xs font-bold truncate" style={{ color: '#f4f4f5' }} title={prod.title}>
+                                  {prod.title}
+                                </h4>
+                                <div className="flex items-center gap-2 mt-1 text-[11px]" style={{ color: '#a1a1aa' }}>
+                                  <span className="font-bold text-indigo-400">${prod.price}</span>
+                                  {prod.originalPrice && (
+                                    <span className="line-through text-zinc-500">${prod.originalPrice}</span>
+                                  )}
+                                  {prod.discount && (
+                                    <span className="text-green-400 font-semibold">{prod.discount}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-1.5 text-[10px]" style={{ color: '#71717a' }}>
+                                  {prod.rating && (
+                                    <span className="text-amber-500 font-medium">★ {prod.rating}</span>
+                                  )}
+                                  {prod.orders && (
+                                    <span>{prod.orders} orders</span>
+                                  )}
+                                  {prod.seller && (
+                                    <span className="truncate max-w-[100px]">🏪 {prod.seller}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectApifyProduct(prod)}
+                                disabled={apifyLoading || dropStatus === 'analyzing'}
+                                className="mt-2.5 py-1 px-3 rounded-lg text-xs font-bold text-white transition-all w-full md:w-auto self-start"
+                                style={{
+                                  background: isSelected ? 'rgba(34,197,94,0.2)' : 'rgba(99,102,241,0.2)',
+                                  border: `1px solid ${isSelected ? '#22c55e' : '#6366f1'}`,
+                                  color: isSelected ? '#22c55e' : '#818cf8',
+                                }}
+                              >
+                                {isSelected ? 'Selected ✓' : 'Select Product'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               /* Step 1: Product URL */
