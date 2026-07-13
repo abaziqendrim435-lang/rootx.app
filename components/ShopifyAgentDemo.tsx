@@ -15,11 +15,28 @@ import type {
   UpdateResponse, VerificationResult,
 } from '@/lib/shopify-types';
 
+import { supabaseClient } from '@/lib/supabase-auth';
+
 // ════════════════════════════════════════════════════════════════
 // Helpers
 // ════════════════════════════════════════════════════════════════
 
 const STORAGE_KEY = 'rootx_shopify_creds_demo';
+
+// Authenticated fetch helper that injects Supabase JWT Bearer token
+async function authenticatedFetch(url: string, options: RequestInit = {}) {
+  let token = '';
+  if (supabaseClient) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    token = session?.access_token || '';
+  }
+  const headers = {
+    ...options.headers,
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+  return fetch(url, { ...options, headers });
+}
 
 function getStored(): ShopifyCredentials | null {
   if (typeof window === 'undefined') return null;
@@ -125,17 +142,12 @@ function ConnectStep({ onConnected, oauthError }: {
   onConnected: (c: ShopifyCredentials) => void;
   oauthError?: string;
 }) {
-  const [tab, setTab] = useState<'oauth' | 'token'>('oauth');
-
-  // OAuth state
   const [domain, setDomain] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [showSecret, setShowSecret] = useState(false);
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [oauthErr, setOauthErr] = useState(oauthError || '');
 
-  // Direct token state
+  // Toggle for manual token input (Developer fallback)
+  const [showManual, setShowManual] = useState(false);
   const [tokenDomain, setTokenDomain] = useState('');
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -146,23 +158,26 @@ function ConnectStep({ onConnected, oauthError }: {
     e.preventDefault();
     setOauthStatus('loading');
     setOauthErr('');
-    const d = domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const cid = clientId.trim();
-    const cs = clientSecret.trim();
-    if (!d || !cid || !cs) { setOauthErr('All fields are required'); setOauthStatus('error'); return; }
+    let d = domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!d) {
+      setOauthErr('Store URL is required');
+      setOauthStatus('error');
+      return;
+    }
+    if (!d.includes('.')) {
+      d = `${d}.myshopify.com`;
+    }
     try {
-      const res = await fetch('/api/shopify/oauth', {
+      const res = await authenticatedFetch('/api/shopify/oauth', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeDomain: d, clientId: cid, clientSecret: cs }),
+        body: JSON.stringify({ storeDomain: d, redirectPath: '/agents/shopify-ai-agent' }),
       });
-      const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
-      if (!res.ok || !data.success) throw new Error(data.error || 'OAuth failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to start OAuth session');
       if (data.redirectUrl) {
-        window.location.href = data.redirectUrl;
+        window.top!.location.href = data.redirectUrl;
       } else {
-        setOauthStatus('idle');
-        setOauthErr('No redirect URL returned');
+        throw new Error('No authorization URL returned from server');
       }
     } catch (err) {
       setOauthErr(err instanceof Error ? err.message : 'OAuth failed');
@@ -176,14 +191,17 @@ function ConnectStep({ onConnected, oauthError }: {
     setTokenErr('');
     const d = tokenDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
     const t = token.trim();
-    if (!d || !t) { setTokenErr('Both fields are required'); setTokenStatus('error'); return; }
+    if (!d || !t) {
+      setTokenErr('Both fields are required');
+      setTokenStatus('error');
+      return;
+    }
     try {
-      const res = await fetch('/api/shopify/connect', {
+      const res = await authenticatedFetch('/api/shopify/connect', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeDomain: d, accessToken: t }),
       });
-      const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.error || 'Connection failed');
       const creds: ShopifyCredentials = {
         storeDomain: data.storeDomain || d,
@@ -207,127 +225,69 @@ function ConnectStep({ onConnected, oauthError }: {
         </div>
         <h2 className="text-xl font-bold mb-2">Connect Your Shopify Store</h2>
         <p style={{ color: '#71717a', maxWidth: '440px', margin: '0 auto' }}>
-          Choose how you&apos;d like to connect — OAuth for full integration or a direct token for quick setup.
+          Connect your Shopify store in one click to manage products and themes.
         </p>
       </div>
 
-      <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-        <button onClick={() => setTab('oauth')} className="flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all"
-          style={{
-            background: tab === 'oauth' ? 'rgba(220,38,38,0.08)' : 'transparent',
-            color: tab === 'oauth' ? '#ef4444' : '#52525b',
-            border: tab === 'oauth' ? '1px solid rgba(220,38,38,0.2)' : '1px solid transparent',
-          }}>
-          <Plug size={15} /> OAuth
-          <span className="text-xs px-1.5 py-0.5 rounded-full uppercase tracking-wider"
-            style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', fontSize: '0.6rem', fontWeight: 800 }}>
-            Recommended
-          </span>
-        </button>
-        <button onClick={() => setTab('token')} className="flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all"
-          style={{
-            background: tab === 'token' ? 'rgba(255,255,255,0.04)' : 'transparent',
-            color: tab === 'token' ? '#a1a1aa' : '#3f3f46',
-            border: tab === 'token' ? '1px solid var(--color-border)' : '1px solid transparent',
-          }}>
-          <Key size={15} /> Direct Token
+      <form onSubmit={handleOAuth}>
+        <div className="rounded-2xl p-6"
+          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
+          <div className="flex flex-col gap-4">
+            <div>
+              <label htmlFor="oauth-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
+                Store URL <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input id="oauth-domain" type="text" placeholder="your-store.myshopify.com"
+                value={domain} onChange={(e) => setDomain(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
+                style={{ border: '1px solid var(--color-border)' }} />
+              <p className="text-xs mt-1.5" style={{ color: '#3f3f46' }}>
+                e.g. my-brand.myshopify.com or just your-store
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
+            style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.12)' }}>
+            <Shield size={16} style={{ color: '#60a5fa', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs leading-relaxed" style={{ color: '#93c5fd' }}>
+              We use official Shopify OAuth. Your credentials are encrypted and stored securely server-side.
+            </p>
+          </div>
+
+          {oauthErr && (
+            <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
+              style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
+              <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-sm" style={{ color: '#fca5a5' }}>{oauthErr}</p>
+            </div>
+          )}
+
+          <button type="submit" disabled={oauthStatus === 'loading'}
+            className="w-full mt-5 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+            style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
+            {oauthStatus === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Connecting…</> :
+              <><Plug size={16} /> Connect Shopify Store</>}
+          </button>
+        </div>
+      </form>
+
+      {/* Developer manual token fallback */}
+      <div className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={() => setShowManual(!showManual)}
+          className="text-xs font-semibold underline transition-all hover:text-white"
+          style={{ color: '#71717a' }}
+        >
+          {showManual ? 'Hide manual connection' : 'Or connect manually with API token (Developer fallback)'}
         </button>
       </div>
 
-      {tab === 'oauth' && (
-        <form onSubmit={handleOAuth}>
+      {showManual && (
+        <form onSubmit={handleTokenSubmit} className="mt-4 animate-fade-in">
           <div className="rounded-2xl p-6"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
-            <div className="flex flex-col gap-4">
-              <div>
-                <label htmlFor="oauth-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                  Store URL <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input id="oauth-domain" type="text" placeholder="your-store.myshopify.com"
-                  value={domain} onChange={(e) => setDomain(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
-                  style={{ border: '1px solid var(--color-border)' }} />
-                <p className="text-xs mt-1.5" style={{ color: '#3f3f46' }}>
-                  e.g. my-brand.myshopify.com
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="oauth-client-id" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                    Client ID <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input id="oauth-client-id" type="text" placeholder="Client ID"
-                    value={clientId} onChange={(e) => setClientId(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
-                    style={{ border: '1px solid var(--color-border)' }} />
-                </div>
-                <div>
-                  <label htmlFor="oauth-client-secret" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                    Client Secret <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <div className="relative">
-                    <input id="oauth-client-secret" type={showSecret ? 'text' : 'password'} placeholder="Client Secret"
-                      value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none pr-10"
-                      style={{ border: '1px solid var(--color-border)' }} />
-                    <button type="button" onClick={() => setShowSecret(!showSecret)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} tabIndex={-1}>
-                      {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
-              style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.12)' }}>
-              <Shield size={16} style={{ color: '#60a5fa', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-xs leading-relaxed" style={{ color: '#93c5fd' }}>
-                Your credentials are never stored on our servers. They are used only for this session and saved locally in your browser.
-              </p>
-            </div>
-
-            {oauthErr && (
-              <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
-                style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
-                <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
-                <p className="text-sm" style={{ color: '#fca5a5' }}>{oauthErr}</p>
-              </div>
-            )}
-
-            <button type="submit" disabled={oauthStatus === 'loading'}
-              className="w-full mt-5 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
-              {oauthStatus === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Connecting…</> :
-                <><Plug size={16} /> Start OAuth Flow</>}
-            </button>
-          </div>
-
-          <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--color-border)' }}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#3f3f46' }}>
-              How to get your OAuth credentials
-            </p>
-            <ol className="flex flex-col gap-2 text-xs leading-relaxed" style={{ color: '#71717a' }}>
-              {[
-                'Go to your Shopify Partners dashboard',
-                'Create or select your app',
-                'Copy the Client ID and Client Secret from the API credentials',
-                'Use your-store.myshopify.com as the store URL',
-              ].map((step, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="font-bold flex-shrink-0" style={{ color: '#ef4444' }}>{i + 1}.</span>
-                  {step}
-                </li>
-              ))}
-            </ol>
-          </div>
-        </form>
-      )}
-
-      {tab === 'token' && (
-        <form onSubmit={handleTokenSubmit}>
-          <div className="rounded-2xl p-6"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
             <div className="flex flex-col gap-4">
               <div>
                 <label htmlFor="token-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
@@ -364,30 +324,11 @@ function ConnectStep({ onConnected, oauthError }: {
             )}
 
             <button type="submit" disabled={tokenStatus === 'loading'}
-              className="w-full mt-5 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', color: '#ef4444' }}>
-              {tokenStatus === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Verifying…</> :
-                <><Key size={16} /> Connect with Token</>}
+              className="w-full mt-5 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#a1a1aa' }}>
+              {tokenStatus === 'loading' ? <><Loader2 size={14} className="animate-spin" /> Verifying…</> :
+                <><Key size={14} /> Connect with Token</>}
             </button>
-          </div>
-
-          <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--color-border)' }}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#3f3f46' }}>
-              How to get your Admin API token
-            </p>
-            <ol className="flex flex-col gap-2 text-xs leading-relaxed" style={{ color: '#71717a' }}>
-              {[
-                'In Shopify Admin → Settings → Apps → Develop apps',
-                'Create a custom app and configure API scopes (read/write products)',
-                'Install the app and copy the Admin API access token',
-                'The token starts with shpat_...',
-              ].map((step, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="font-bold flex-shrink-0" style={{ color: '#ef4444' }}>{i + 1}.</span>
-                  {step}
-                </li>
-              ))}
-            </ol>
           </div>
         </form>
       )}
@@ -625,9 +566,8 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
     setVerificationResults([]);
     setEditMode(false);
     try {
-      const res = await fetch('/api/shopify/generate', {
+      const res = await authenticatedFetch('/api/shopify/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: product.id,
           title: product.title,
@@ -679,9 +619,8 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
     setPushStatus('pushing');
     setError('');
     try {
-      const res = await fetch('/api/shopify/update', {
+      const res = await authenticatedFetch('/api/shopify/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: product.id,
           title: editMode ? editedTitle : result?.title,
@@ -1328,6 +1267,8 @@ export default function ShopifyAgentDemo() {
   const [productsError, setProductsError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
   const [oauthError, setOauthError] = useState('');
+  const [isServerConnected, setIsServerConnected] = useState(false);
+  const [checkingConnection, setCheckingConnection] = useState(true);
 
   const step: 1 | 2 | 3 = !credentials ? 1 : selectedProduct ? 3 : 2;
 
@@ -1340,7 +1281,7 @@ export default function ShopifyAgentDemo() {
         storeDomain: credentials.storeDomain,
         accessToken: credentials.accessToken,
       });
-      const res = await fetch(`/api/shopify/products?${params}`);
+      const res = await authenticatedFetch(`/api/shopify/products?${params}`);
       const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load products');
       setProducts(data.products || []);
@@ -1350,6 +1291,37 @@ export default function ShopifyAgentDemo() {
       setLoadingProducts(false);
     }
   }, [credentials]);
+
+  const checkConnection = useCallback(async () => {
+    try {
+      const res = await authenticatedFetch('/api/shopify/connect');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.connected) {
+        setIsServerConnected(true);
+        setCredentials({
+          storeDomain: data.storeDomain,
+          accessToken: 'oauth',
+          shopName: data.shopName,
+        });
+      } else {
+        setIsServerConnected(false);
+        const local = getStored();
+        if (local) {
+          setCredentials(local);
+        } else {
+          setCredentials(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check connection:', err);
+    } finally {
+      setCheckingConnection(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
 
   useEffect(() => {
     if (credentials) {
@@ -1363,34 +1335,45 @@ export default function ShopifyAgentDemo() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('shopify_error');
+    const success = params.get('oauth_success');
     const sd = params.get('shopify_domain');
     const st = params.get('shopify_token');
     const sn = params.get('shopify_name');
 
-    const t = setTimeout(() => {
-      if (err) {
-        setOauthError(err);
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-      if (sd && st) {
-        const creds: ShopifyCredentials = { storeDomain: sd, accessToken: st, shopName: sn || undefined };
-        setStored(creds);
-        setCredentials(creds);
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-    }, 0);
-    return () => clearTimeout(t);
-  }, []);
+    if (err) {
+      setOauthError(err);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (success) {
+      checkConnection();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (sd && st) {
+      const creds: ShopifyCredentials = { storeDomain: sd, accessToken: st, shopName: sn || undefined };
+      setStored(creds);
+      setCredentials(creds);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [checkConnection]);
 
   function handleConnected(creds: ShopifyCredentials) {
     setCredentials(creds);
     setProducts([]);
     setProductsError('');
+    checkConnection();
   }
 
-  function handleDisconnect() {
+  async function handleDisconnect() {
+    try {
+      if (isServerConnected) {
+        await authenticatedFetch('/api/shopify/connect', { method: 'DELETE' });
+      }
+    } catch (err) {
+      console.error('Failed to disconnect store server-side:', err);
+    }
     clearStored();
     setCredentials(null);
+    setIsServerConnected(false);
     setProducts([]);
     setProductsError('');
     setSelectedProduct(null);

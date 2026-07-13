@@ -22,6 +22,23 @@ import type {
   ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
 } from '@/lib/shopify-types';
 
+import { supabaseClient } from '@/lib/supabase-auth';
+
+// Authenticated fetch helper that injects Supabase JWT Bearer token
+async function authenticatedFetch(url: string, options: RequestInit = {}) {
+  let token = '';
+  if (supabaseClient) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    token = session?.access_token || '';
+  }
+  const headers = {
+    ...options.headers,
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+  return fetch(url, { ...options, headers });
+}
+
 // ════════════════════════════════════════════════════════════════
 // Helpers
 // ════════════════════════════════════════════════════════════════
@@ -1986,6 +2003,13 @@ function ShopifyDeployModal({
   const [storeDomain, setStoreDomain] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [shopName, setShopName] = useState('');
+  const [isServerConnected, setIsServerConnected] = useState(false);
+  const [checkingConnection, setCheckingConnection] = useState(true);
+
+  // Toggle for manual token input
+  const [showManual, setShowManual] = useState(false);
+  const [oauthStatus, setOauthStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [oauthErr, setOauthErr] = useState('');
 
   // Deploy state
   const [deployStatus, setDeployStatus] = useState<ThemeDeployStatus>('idle');
@@ -1996,18 +2020,83 @@ function ShopifyDeployModal({
   const [deployError, setDeployError] = useState('');
   const [fileErrors, setFileErrors] = useState<string[]>([]);
 
-  // Load saved credentials
-  useState(() => {
-    try {
-      const stored = localStorage.getItem(SHOPIFY_CREDS_KEY);
-      if (stored) {
-        const creds = JSON.parse(stored);
-        if (creds.storeDomain) setStoreDomain(creds.storeDomain);
-        if (creds.accessToken) setAccessToken(creds.accessToken);
-        if (creds.shopName) setShopName(creds.shopName);
+  // Check connection status
+  useEffect(() => {
+    if (!isOpen) return;
+    async function checkConnection() {
+      try {
+        const res = await authenticatedFetch('/api/shopify/connect');
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.connected) {
+          setIsServerConnected(true);
+          setStoreDomain(data.storeDomain);
+          setAccessToken('oauth');
+          setShopName(data.shopName || data.storeDomain);
+        } else {
+          setIsServerConnected(false);
+          // Try local storage fallback
+          const stored = localStorage.getItem(SHOPIFY_CREDS_KEY);
+          if (stored) {
+            const creds = JSON.parse(stored);
+            if (creds.storeDomain) setStoreDomain(creds.storeDomain);
+            if (creds.accessToken) setAccessToken(creds.accessToken);
+            if (creds.shopName) setShopName(creds.shopName);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check connection:', err);
+      } finally {
+        setCheckingConnection(false);
       }
-    } catch { /* ignore */ }
-  });
+    }
+    checkConnection();
+  }, [isOpen]);
+
+  async function handleOAuth(e: React.FormEvent) {
+    e.preventDefault();
+    setOauthStatus('loading');
+    setOauthErr('');
+    let d = storeDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!d) {
+      setOauthErr('Store URL is required');
+      setOauthStatus('error');
+      return;
+    }
+    if (!d.includes('.')) {
+      d = `${d}.myshopify.com`;
+    }
+    try {
+      const res = await authenticatedFetch('/api/shopify/oauth', {
+        method: 'POST',
+        body: JSON.stringify({ storeDomain: d, redirectPath: window.location.pathname }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to start OAuth session');
+      if (data.redirectUrl) {
+        window.top!.location.href = data.redirectUrl;
+      } else {
+        throw new Error('No authorization URL returned from server');
+      }
+    } catch (err) {
+      setOauthErr(err instanceof Error ? err.message : 'OAuth failed');
+      setOauthStatus('error');
+    }
+  }
+
+  async function handleDisconnect() {
+    try {
+      if (isServerConnected) {
+        await authenticatedFetch('/api/shopify/connect', { method: 'DELETE' });
+      }
+    } catch (err) {
+      console.error('Failed to disconnect store server-side:', err);
+    }
+    localStorage.removeItem(SHOPIFY_CREDS_KEY);
+    setStoreDomain('');
+    setAccessToken('');
+    setShopName('');
+    setIsServerConnected(false);
+  }
 
   async function handleDeploy() {
     if (!storeDomain.trim() || !accessToken.trim()) return;
@@ -2015,29 +2104,30 @@ function ShopifyDeployModal({
     setDeployError('');
     setFileErrors([]);
 
-    // Step 1: Test connection
-    setDeployStatus('connecting');
-    try {
-      const connectRes = await fetch('/api/shopify/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeDomain: storeDomain.trim(), accessToken: accessToken.trim() }),
-      });
-      const connectData = await connectRes.json();
-      if (!connectData.success) throw new Error(connectData.error || 'Connection failed');
-      setShopName(connectData.shopName || storeDomain);
-      // Save credentials
+    // Step 1: Test connection (only if manual dev mode, not for OAuth)
+    if (!isServerConnected) {
+      setDeployStatus('connecting');
       try {
-        localStorage.setItem(SHOPIFY_CREDS_KEY, JSON.stringify({
-          storeDomain: storeDomain.trim(),
-          accessToken: accessToken.trim(),
-          shopName: connectData.shopName,
-        }));
-      } catch { /* ignore */ }
-    } catch (err) {
-      setDeployError(err instanceof Error ? err.message : 'Connection failed');
-      setDeployStatus('error');
-      return;
+        const connectRes = await authenticatedFetch('/api/shopify/connect', {
+          method: 'POST',
+          body: JSON.stringify({ storeDomain: storeDomain.trim(), accessToken: accessToken.trim() }),
+        });
+        const connectData = await connectRes.json();
+        if (!connectData.success) throw new Error(connectData.error || 'Connection failed');
+        setShopName(connectData.shopName || storeDomain);
+        // Save credentials locally
+        try {
+          localStorage.setItem(SHOPIFY_CREDS_KEY, JSON.stringify({
+            storeDomain: storeDomain.trim(),
+            accessToken: accessToken.trim(),
+            shopName: connectData.shopName,
+          }));
+        } catch { /* ignore */ }
+      } catch (err) {
+        setDeployError(err instanceof Error ? err.message : 'Connection failed');
+        setDeployStatus('error');
+        return;
+      }
     }
 
     // Step 2: Generate theme files
@@ -2058,9 +2148,8 @@ function ShopifyDeployModal({
     setThemeName(name);
 
     try {
-      const res = await fetch('/api/shopify/theme', {
+      const res = await authenticatedFetch('/api/shopify/theme', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create',
           storeDomain: storeDomain.trim(),
@@ -2089,9 +2178,8 @@ function ShopifyDeployModal({
     if (!themeId) return;
     setDeployStatus('publishing');
     try {
-      const res = await fetch('/api/shopify/theme', {
+      const res = await authenticatedFetch('/api/shopify/theme', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'publish',
           storeDomain: storeDomain.trim(),
@@ -2128,7 +2216,7 @@ function ShopifyDeployModal({
       onClick={(e) => { if (e.target === e.currentTarget && !isWorking) onClose(); }}
     >
       <div
-        className="w-full max-w-lg rounded-2xl overflow-hidden"
+        className="w-full max-w-lg rounded-2xl overflow-hidden animate-fade-up"
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
@@ -2154,48 +2242,103 @@ function ShopifyDeployModal({
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 flex flex-col gap-4">
+        <div className="px-6 py-5 flex flex-col gap-4 max-h-[75vh] overflow-y-auto">
           {/* ── IDLE: Connection form ── */}
           {deployStatus === 'idle' && (
             <>
-              {shopName && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
-                  <CheckCircle2 size={14} style={{ color: '#22c55e' }} />
-                  <span className="text-xs" style={{ color: '#22c55e' }}>Connected to <strong>{shopName}</strong></span>
-                  <button onClick={() => { setShopName(''); setStoreDomain(''); setAccessToken(''); }} className="ml-auto text-xs" style={{ color: '#52525b' }}>Change</button>
+              {checkingConnection ? (
+                <div className="text-center py-6">
+                  <Loader2 size={24} className="animate-spin mx-auto mb-2" style={{ color: '#96bf47' }} />
+                  <p className="text-xs" style={{ color: '#71717a' }}>Checking connection status...</p>
                 </div>
+              ) : shopName ? (
+                // Connected store
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                    <CheckCircle2 size={16} style={{ color: '#22c55e' }} />
+                    <span className="text-xs" style={{ color: '#22c55e' }}>Connected to <strong>{shopName}</strong></span>
+                    <button onClick={handleDisconnect} className="ml-auto text-xs font-semibold underline" style={{ color: '#71717a' }}>Disconnect</button>
+                  </div>
+
+                  <p className="text-xs leading-relaxed" style={{ color: '#a1a1aa' }}>
+                    Your store is connected successfully! Click below to build and deploy your dropshipping store theme.
+                  </p>
+
+                  <button
+                    onClick={handleDeploy}
+                    className="btn-primary w-full py-3 font-bold flex items-center justify-center gap-2 transition-all"
+                    style={{ background: 'linear-gradient(135deg, #96bf47, #5c8a1f)', color: '#fff', border: 'none' }}
+                  >
+                    <Upload size={16} /> Build & Deploy Theme
+                  </button>
+                </div>
+              ) : (
+                // Not connected: show OAuth connection form
+                <form onSubmit={handleOAuth} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Store Domain *</label>
+                    <input
+                      type="text"
+                      placeholder="your-store.myshopify.com"
+                      value={storeDomain}
+                      onChange={(e) => setStoreDomain(e.target.value)}
+                      className="input-field w-full"
+                    />
+                  </div>
+
+                  {oauthErr && (
+                    <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg"
+                      style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
+                      <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+                      <p className="text-xs" style={{ color: '#fca5a5' }}>{oauthErr}</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={oauthStatus === 'loading'}
+                    className="btn-primary w-full flex items-center justify-center gap-2"
+                  >
+                    {oauthStatus === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Connecting…</> :
+                      <><Plug size={16} /> Connect Shopify Store</>}
+                  </button>
+
+                  <div className="text-center mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowManual(!showManual)}
+                      className="text-xs font-semibold underline"
+                      style={{ color: '#71717a' }}
+                    >
+                      {showManual ? 'Hide developer option' : 'Or connect manually with API token (Developer fallback)'}
+                    </button>
+                  </div>
+
+                  {showManual && (
+                    <div className="flex flex-col gap-4 mt-2 p-4 rounded-xl border border-dashed" style={{ borderColor: 'var(--color-border)' }}>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Admin API Access Token *</label>
+                        <input
+                          type="password"
+                          placeholder="shpat_xxxxxxxxxxxxx"
+                          value={accessToken}
+                          onChange={(e) => setAccessToken(e.target.value)}
+                          className="input-field w-full"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDeploy}
+                        disabled={!storeDomain.trim() || !accessToken.trim()}
+                        className="btn-primary w-full"
+                        style={{ justifyContent: 'center', opacity: (!storeDomain.trim() || !accessToken.trim()) ? 0.5 : 1 }}
+                      >
+                        <Upload size={16} /> Deploy manually with Token
+                      </button>
+                    </div>
+                  )}
+                </form>
               )}
-              <div>
-                <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Store Domain *</label>
-                <input
-                  type="text"
-                  placeholder="my-store.myshopify.com"
-                  value={storeDomain}
-                  onChange={(e) => setStoreDomain(e.target.value)}
-                  className="input-field w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Admin API Access Token *</label>
-                <input
-                  type="password"
-                  placeholder="shpat_xxxxxxxxxxxxx"
-                  value={accessToken}
-                  onChange={(e) => setAccessToken(e.target.value)}
-                  className="input-field w-full"
-                />
-              </div>
-              <p className="text-xs" style={{ color: '#52525b' }}>
-                Requires <strong>write_themes</strong> scope. Your token is stored locally and never shared.
-              </p>
-              <button
-                onClick={handleDeploy}
-                disabled={!storeDomain.trim() || !accessToken.trim()}
-                className="btn-primary w-full"
-                style={{ justifyContent: 'center', opacity: (!storeDomain.trim() || !accessToken.trim()) ? 0.5 : 1 }}
-              >
-                <Upload size={16} /> Deploy Theme to Shopify
-              </button>
             </>
           )}
 
@@ -2341,6 +2484,8 @@ function ShopifyDeployModal({
   );
 }
 
+
+
 // ════════════════════════════════════════════════════════════════
 // Main Component
 // ════════════════════════════════════════════════════════════════
@@ -2427,6 +2572,46 @@ export default function WebsiteBuilderDemo() {
       }
     } catch { /* ignore */ }
   }, []);
+
+  // Save/restore builder state to survive Shopify OAuth redirect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedInput = sessionStorage.getItem('rootx_builder_input');
+        const storedResult = sessionStorage.getItem('rootx_builder_result');
+        if (storedInput) setInput(JSON.parse(storedInput));
+        if (storedResult) {
+          const parsed = JSON.parse(storedResult);
+          setResult(parsed);
+          setStatus('done'); // satisfy status state
+        }
+        
+        // Auto-open modal if they returned from successful oauth
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('oauth_success') === 'true') {
+          setShowShopifyDeploy(true);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      } catch (e) {
+        console.error('Failed to restore builder state:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('rootx_builder_input', JSON.stringify(input));
+        if (result) {
+          sessionStorage.setItem('rootx_builder_result', JSON.stringify(result));
+        } else {
+          sessionStorage.removeItem('rootx_builder_result');
+        }
+      } catch (e) {
+        console.error('Failed to save builder state:', e);
+      }
+    }
+  }, [input, result]);
 
   // ── API call ──────────────────────────────────────────────────
   async function handleGenerate(e: React.FormEvent) {

@@ -1,30 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-
-// ============================================================
-// POST /api/shopify/oauth
-//
-// Starts the Shopify OAuth authorization-code flow.
-// The user provides their app Client ID, Client Secret, and
-// store domain. We store the secrets in an encrypted httpOnly
-// cookie, then return the Shopify OAuth authorization URL.
-//
-// The user's browser will redirect to Shopify for consent,
-// then Shopify redirects to /api/shopify/oauth/callback.
-// ============================================================
+import { verifyUser } from '@/lib/shopify-api';
 
 const SCOPES = 'read_products,write_products,read_themes,write_themes';
 const COOKIE_NAME = 'rootx_shopify_oauth';
-const COOKIE_MAX_AGE = 600; // 10 minutes — more than enough for the redirect
+const COOKIE_MAX_AGE = 600; // 10 minutes
 
-// AES-256-GCM encryption key derived from a secret.
-// In production set SHOPIFY_OAUTH_SECRET env var (32+ chars).
 function getEncryptionKey(): Buffer {
-  const secret = process.env.SHOPIFY_OAUTH_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
+  const secret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_OAUTH_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
   return crypto.createHash('sha256').update(secret).digest();
 }
 
-/** Encrypt an object into a base64 string (AES-256-GCM). */
+/** Encrypt session variables into a secure cookie value */
 function encrypt(data: Record<string, string>): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(12);
@@ -32,33 +19,44 @@ function encrypt(data: Record<string, string>): string {
   const plaintext = JSON.stringify(data);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  // Pack: iv (12) + tag (16) + ciphertext
   const packed = Buffer.concat([iv, tag, encrypted]);
   return packed.toString('base64url');
 }
 
-/** Loose domain validation */
 function isValidDomain(domain: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9\-.]+\.[a-zA-Z]{2,}$/.test(domain);
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as {
+    // 1. Verify caller is authenticated
+    const { userId, error: authErr } = await verifyUser(req);
+    if (authErr || !userId) {
+      return NextResponse.json(
+        { error: authErr || 'You must be logged in to connect a Shopify store.' },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json().catch(() => ({})) as {
       storeDomain?: string;
-      clientId?: string;
-      clientSecret?: string;
+      redirectPath?: string;
     };
 
-    const storeDomain = body.storeDomain?.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const clientId = body.clientId?.trim();
-    const clientSecret = body.clientSecret?.trim();
-
-    if (!storeDomain || !clientId || !clientSecret) {
+    let storeDomain = body.storeDomain?.trim();
+    if (!storeDomain) {
       return NextResponse.json(
-        { error: 'storeDomain, clientId, and clientSecret are required.' },
+        { error: 'storeDomain is required.' },
         { status: 400 }
       );
+    }
+
+    // Clean domain
+    storeDomain = storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+    // Allow user to enter "my-store" instead of "my-store.myshopify.com"
+    if (!storeDomain.includes('.')) {
+      storeDomain = `${storeDomain}.myshopify.com`;
     }
 
     if (!isValidDomain(storeDomain)) {
@@ -68,33 +66,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Generate CSRF state nonce ─────────────────────────────
-    const state = crypto.randomBytes(16).toString('hex');
+    const shopifyApiKey = process.env.SHOPIFY_API_KEY;
+    if (!shopifyApiKey) {
+      return NextResponse.json(
+        { error: 'Shopify API Key is not configured on the server.' },
+        { status: 500 }
+      );
+    }
 
-    // ── Encrypt credentials + state into a cookie ─────────────
+    const state = crypto.randomBytes(16).toString('hex');
+    const redirectPath = body.redirectPath || '/agents/shopify-ai-agent';
+
+    // Encrypt oauth parameters in the cookie
     const cookieValue = encrypt({
       storeDomain,
-      clientId,
-      clientSecret,
       state,
+      userId,
+      redirectPath,
     });
 
-    // ── Build the Shopify OAuth authorization URL ─────────────
-    // The redirect_uri MUST match the "Allowed redirection URL" in the
-    // Shopify app settings exactly — including protocol and host.
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
     const redirectUri = `${appUrl}/api/shopify/oauth/callback`;
 
     const authUrl = new URL(`https://${storeDomain}/admin/oauth/authorize`);
-    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('client_id', shopifyApiKey);
     authUrl.searchParams.set('scope', SCOPES);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('state', state);
 
-    // ── Set the encrypted cookie and return the URL ───────────
     const response = NextResponse.json({
-      authUrl: authUrl.toString(),
-      redirectUri,
+      success: true,
+      redirectUrl: authUrl.toString(),
     });
 
     response.cookies.set(COOKIE_NAME, cookieValue, {
@@ -113,7 +115,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Only POST is allowed
 export async function GET() {
   return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
 }

@@ -7,9 +7,50 @@
 //   • Typed Shopify Admin API fetch wrapper
 // ============================================================
 
+import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { ShopifyCredentials } from './shopify-types';
+
+function getEncryptionKey(): Buffer {
+  const secret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_OAUTH_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+/** Encrypt a Shopify access token (AES-256-GCM) */
+export function encryptToken(plainText: string): string {
+  if (!plainText) return '';
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // Pack: iv (12) + tag (16) + ciphertext
+  const packed = Buffer.concat([iv, tag, encrypted]);
+  return packed.toString('base64url');
+}
+
+/** Decrypt a Shopify access token (AES-256-GCM) with fallback for plain text */
+export function decryptToken(encryptedText: string): string {
+  if (!encryptedText) return '';
+  if (encryptedText.startsWith('shpat_')) {
+    return encryptedText;
+  }
+  try {
+    const key = getEncryptionKey();
+    const packed = Buffer.from(encryptedText, 'base64url');
+    if (packed.length < 28) return encryptedText;
+    const iv = packed.subarray(0, 12);
+    const tag = packed.subarray(12, 28);
+    const ciphertext = packed.subarray(28);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch (err) {
+    return encryptedText;
+  }
+}
 
 // ── Supabase bootstrap ────────────────────────────────────────
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -95,7 +136,7 @@ export async function getCredentials(
     if (!error && data) {
       return {
         storeDomain: data.store_domain as string,
-        accessToken: data.access_token as string,
+        accessToken: decryptToken(data.access_token as string),
         shopName: (data.shop_name as string) ?? undefined,
       };
     }
@@ -106,7 +147,7 @@ export async function getCredentials(
   const storeDomain = url.searchParams.get('storeDomain');
   const accessToken = url.searchParams.get('accessToken');
 
-  if (storeDomain && accessToken) {
+  if (storeDomain && accessToken && accessToken !== 'oauth') {
     return { storeDomain, accessToken };
   }
 
@@ -127,15 +168,34 @@ export async function upsertCredentials(
   const sb = getSupabase();
   if (!sb) return { error: null }; // nothing to persist — that's fine
 
+  const encryptedToken = encryptToken(accessToken);
+
   const { error } = await sb.from('shopify_stores').upsert(
     {
       user_id: userId,
       store_domain: storeDomain,
-      access_token: accessToken,
+      access_token: encryptedToken,
       shop_name: shopName,
     },
     { onConflict: 'user_id' }
   );
+
+  return { error: error?.message ?? null };
+}
+
+/**
+ * Delete Shopify credentials from the `shopify_stores` table.
+ */
+export async function deleteCredentials(
+  userId: string
+): Promise<{ error: string | null }> {
+  const sb = getSupabase();
+  if (!sb) return { error: null };
+
+  const { error } = await sb
+    .from('shopify_stores')
+    .delete()
+    .eq('user_id', userId);
 
   return { error: error?.message ?? null };
 }

@@ -370,7 +370,7 @@ export async function POST(req: NextRequest) {
     const creds = await getCredentials(req, userId);
 
     const storeDomain = bodyDomain ?? creds?.storeDomain;
-    const accessToken = bodyToken ?? creds?.accessToken;
+    const accessToken = bodyToken && bodyToken !== 'oauth' ? bodyToken : creds?.accessToken;
 
     if (!storeDomain || !accessToken) {
       return NextResponse.json(

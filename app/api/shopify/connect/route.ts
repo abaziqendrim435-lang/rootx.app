@@ -1,42 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   verifyUser,
+  getCredentials,
   upsertCredentials,
+  deleteCredentials,
   shopifyFetch,
 } from '@/lib/shopify-api';
 import type { ConnectResponse } from '@/lib/shopify-types';
 
-// ============================================================
-// POST /api/shopify/connect
-//
-// Tests a Shopify store connection by verifying the provided
-// credentials against the Shopify Admin API.  On success the
-// credentials are persisted to the `shopify_stores` table when
-// Supabase is configured and the caller is authenticated.
-// ============================================================
-
 /** Loose domain validation — myshopify or custom domains */
 function isValidDomain(domain: string): boolean {
-  // Must look like a hostname (no protocol, no path)
   return /^[a-zA-Z0-9][a-zA-Z0-9\-.]+\.[a-zA-Z]{2,}$/.test(domain);
 }
 
 /**
- * @description Connect and verify Shopify store credentials.
- *
- * **Request body**
- * ```json
- * { "storeDomain": "my-store.myshopify.com", "accessToken": "shpat_..." }
- * ```
- *
- * **Response**
- * ```json
- * { "success": true, "shopName": "My Store" }
- * ```
+ * GET /api/shopify/connect
+ * Retrieves connection details (storeDomain, shopName) for the authenticated user.
+ * Access token is never exposed to the client.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const { userId, error: authErr } = await verifyUser(req);
+    if (authErr) {
+      return NextResponse.json({ success: false, error: authErr }, { status: 401 });
+    }
+
+    if (!userId) {
+      return NextResponse.json({ connected: false }); // demo mode
+    }
+
+    const creds = await getCredentials(req, userId);
+    if (!creds) {
+      return NextResponse.json({ connected: false });
+    }
+
+    return NextResponse.json({
+      connected: true,
+      storeDomain: creds.storeDomain,
+      shopName: creds.shopName || creds.storeDomain,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[/api/shopify/connect] GET error:', message);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/shopify/connect
+ * Tests a manual Shopify store connection (fallback for developer/admin use).
+ * On success, persists credentials encrypted to Supabase.
  */
 export async function POST(req: NextRequest) {
   try {
-    // ── Parse body ──────────────────────────────────────────
     const body = (await req.json()) as {
       storeDomain?: string;
       accessToken?: string;
@@ -56,16 +72,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json<ConnectResponse>(
         {
           success: false,
-          error:
-            'Invalid store domain. Use your *.myshopify.com domain or a valid custom domain.',
+          error: 'Invalid store domain. Use your *.myshopify.com domain or a valid custom domain.',
         },
         { status: 400 }
       );
     }
 
-    // ── Test credentials against Shopify ────────────────────
     let shopName: string;
-
     try {
       const data = await shopifyFetch<{ shop: { name: string } }>({
         storeDomain,
@@ -79,16 +92,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json<ConnectResponse>(
         {
           success: false,
-          error:
-            'Could not connect to Shopify. Please double-check your store domain and access token.',
+          error: 'Could not connect to Shopify. Please double-check your store domain and access token.',
         },
         { status: 502 }
       );
     }
 
-    // ── Persist credentials (if Supabase + auth available) ──
     const { userId } = await verifyUser(req);
-
     if (userId) {
       const { error: upsertErr } = await upsertCredentials(
         userId,
@@ -98,7 +108,6 @@ export async function POST(req: NextRequest) {
       );
       if (upsertErr) {
         console.error('[/api/shopify/connect] DB upsert error:', upsertErr);
-        // Non-fatal — the connection itself succeeded
       }
     }
 
@@ -108,10 +117,38 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[/api/shopify/connect]', message);
+    console.error('[/api/shopify/connect] POST error:', message);
     return NextResponse.json<ConnectResponse>(
       { success: false, error: message },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * DELETE /api/shopify/connect
+ * Disconnects the user's Shopify store by deleting credentials row in Supabase.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { userId, error: authErr } = await verifyUser(req);
+    if (authErr || !userId) {
+      return NextResponse.json(
+        { success: false, error: authErr || 'Authentication required to disconnect.' },
+        { status: 401 }
+      );
+    }
+
+    const { error: deleteErr } = await deleteCredentials(userId);
+    if (deleteErr) {
+      console.error('[/api/shopify/connect] DELETE DB error:', deleteErr);
+      return NextResponse.json({ success: false, error: deleteErr }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[/api/shopify/connect] DELETE error:', message);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
