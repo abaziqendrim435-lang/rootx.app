@@ -2557,20 +2557,31 @@ export default function WebsiteBuilderDemo() {
   const [deployError, setDeployError] = useState('');
   const [deployFileErrors, setDeployFileErrors] = useState<string[]>([]);
 
-  // Load Shopify creds from localStorage on mount
+  // Load Shopify credentials on mount
   useEffect(() => {
-    try {
-      const stored = typeof window !== 'undefined' ? localStorage.getItem(SHOPIFY_CREDS_KEY) : null;
-      if (stored) {
-        const c = JSON.parse(stored);
-        const t = setTimeout(() => {
-          if (c.storeDomain) setShopifyDomain(c.storeDomain);
-          if (c.accessToken) setShopifyToken(c.accessToken);
-          if (c.shopName) setShopifyShopName(c.shopName);
-        }, 0);
-        return () => clearTimeout(t);
+    async function checkServerConnection() {
+      try {
+        const res = await authenticatedFetch('/api/shopify/connect');
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.connected) {
+          setShopifyDomain(data.storeDomain);
+          setShopifyToken('oauth');
+          setShopifyShopName(data.shopName || data.storeDomain);
+        } else {
+          // Local storage fallback
+          const stored = localStorage.getItem(SHOPIFY_CREDS_KEY);
+          if (stored) {
+            const c = JSON.parse(stored);
+            if (c.storeDomain) setShopifyDomain(c.storeDomain);
+            if (c.accessToken) setShopifyToken(c.accessToken);
+            if (c.shopName) setShopifyShopName(c.shopName);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check server Shopify connection:', err);
       }
-    } catch { /* ignore */ }
+    }
+    checkServerConnection();
   }, []);
 
   // Save/restore builder state to survive Shopify OAuth redirect
@@ -2985,27 +2996,39 @@ export default function WebsiteBuilderDemo() {
   }
 
   async function handleShopifyConnect() {
-    if (!shopifyDomain.trim() || !shopifyToken.trim()) return;
+    let d = shopifyDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!d) return;
+    if (!d.includes('.')) {
+      d = `${d}.myshopify.com`;
+    }
     setDeployStatus('connecting');
     setDeployError('');
     try {
-      const res = await fetch('/api/shopify/connect', {
+      const res = await authenticatedFetch('/api/shopify/oauth', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeDomain: shopifyDomain.trim(), accessToken: shopifyToken.trim() }),
+        body: JSON.stringify({ storeDomain: d, redirectPath: window.location.pathname }),
       });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Connection failed');
-      setShopifyShopName(data.shopName || shopifyDomain);
-      saveShopifyCreds(shopifyDomain.trim(), shopifyToken.trim(), data.shopName || '');
-      setDeployStatus('idle');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to start OAuth session');
+      if (data.redirectUrl) {
+        window.top!.location.href = data.redirectUrl;
+      } else {
+        throw new Error('No authorization URL returned from server');
+      }
     } catch (err) {
       setDeployError(err instanceof Error ? err.message : 'Connection failed');
       setDeployStatus('error');
     }
   }
 
-  function handleShopifyDisconnect() {
+  async function handleShopifyDisconnect() {
+    try {
+      if (shopifyToken === 'oauth') {
+        await authenticatedFetch('/api/shopify/connect', { method: 'DELETE' });
+      }
+    } catch (err) {
+      console.error('Failed to disconnect store server-side:', err);
+    }
     setShopifyDomain('');
     setShopifyToken('');
     setShopifyShopName('');
@@ -3040,9 +3063,8 @@ export default function WebsiteBuilderDemo() {
     setDeployThemeName(name);
 
     try {
-      const res = await fetch('/api/shopify/theme', {
+      const res = await authenticatedFetch('/api/shopify/theme', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create',
           storeDomain: shopifyDomain.trim(),
@@ -3071,9 +3093,8 @@ export default function WebsiteBuilderDemo() {
     setDeployStatus('publishing');
     setDeployError('');
     try {
-      const res = await fetch('/api/shopify/theme', {
+      const res = await authenticatedFetch('/api/shopify/theme', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'publish',
           storeDomain: shopifyDomain.trim(),
@@ -5040,7 +5061,7 @@ export default function WebsiteBuilderDemo() {
                         {isShopifyConnected ? 'Store Connected' : 'Connect Shopify Store'}
                       </h4>
                       <p className="text-xs" style={{ color: isShopifyConnected ? '#22c55e' : '#71717a' }}>
-                        {isShopifyConnected ? shopifyShopName : 'Enter your Shopify Admin API credentials'}
+                        {isShopifyConnected ? shopifyShopName : 'Enter your Shopify store URL to connect'}
                       </p>
                     </div>
                     {isShopifyConnected && (
@@ -5056,49 +5077,48 @@ export default function WebsiteBuilderDemo() {
 
                   {!isShopifyConnected && (
                     <div className="px-5 py-4 flex flex-col gap-3">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Store Domain *</label>
-                          <input
-                            type="text"
-                            placeholder="my-store.myshopify.com"
-                            value={shopifyDomain}
-                            onChange={(e) => setShopifyDomain(e.target.value)}
-                            className="input-field w-full"
-                            disabled={deployStatus === 'connecting'}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Admin API Access Token *</label>
-                          <input
-                            type="password"
-                            placeholder="shpat_xxxxxxxxxxxxx"
-                            value={shopifyToken}
-                            onChange={(e) => setShopifyToken(e.target.value)}
-                            className="input-field w-full"
-                            disabled={deployStatus === 'connecting'}
-                          />
-                        </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Store Domain *</label>
+                        <input
+                          type="text"
+                          placeholder="your-store.myshopify.com"
+                          value={shopifyDomain}
+                          onChange={(e) => setShopifyDomain(e.target.value)}
+                          className="input-field w-full"
+                          disabled={deployStatus === 'connecting'}
+                        />
+                        <p className="text-[10px] mt-1" style={{ color: '#52525b' }}>
+                          e.g. my-brand.myshopify.com or just your-store
+                        </p>
                       </div>
+
+                      {deployError && (
+                        <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg"
+                          style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
+                          <AlertTriangle size={14} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+                          <p className="text-xs" style={{ color: '#fca5a5' }}>{deployError}</p>
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-3">
                         <button
                           onClick={handleShopifyConnect}
-                          disabled={!shopifyDomain.trim() || !shopifyToken.trim() || deployStatus === 'connecting'}
+                          disabled={!shopifyDomain.trim() || deployStatus === 'connecting'}
                           className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all"
                           style={{
-                            background: (!shopifyDomain.trim() || !shopifyToken.trim()) ? 'rgba(150,191,71,0.06)' : 'rgba(150,191,71,0.15)',
+                            background: !shopifyDomain.trim() ? 'rgba(150,191,71,0.06)' : 'rgba(150,191,71,0.15)',
                             border: '1px solid rgba(150,191,71,0.25)',
                             color: '#96bf47',
-                            opacity: (!shopifyDomain.trim() || !shopifyToken.trim()) ? 0.5 : 1,
+                            opacity: !shopifyDomain.trim() ? 0.5 : 1,
                           }}
                         >
                           {deployStatus === 'connecting'
                             ? <><Loader2 size={14} className="animate-spin" /> Connecting...</>
-                            : <><Plug size={14} /> Connect Store</>
+                            : <><Plug size={14} /> Connect Shopify Store</>
                           }
                         </button>
                         <p className="text-xs" style={{ color: '#52525b' }}>
-                          Requires <strong>write_themes</strong> scope
+                          Uses official secure Shopify OAuth
                         </p>
                       </div>
                     </div>
