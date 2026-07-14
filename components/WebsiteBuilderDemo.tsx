@@ -2001,13 +2001,10 @@ function ShopifyDeployModal({
 }) {
   // Connection
   const [storeDomain, setStoreDomain] = useState('');
-  const [accessToken, setAccessToken] = useState('');
   const [shopName, setShopName] = useState('');
   const [isServerConnected, setIsServerConnected] = useState(false);
   const [checkingConnection, setCheckingConnection] = useState(true);
 
-  // Toggle for manual token input
-  const [showManual, setShowManual] = useState(false);
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [oauthErr, setOauthErr] = useState('');
 
@@ -2030,18 +2027,9 @@ function ShopifyDeployModal({
         if (res.ok && data.connected) {
           setIsServerConnected(true);
           setStoreDomain(data.storeDomain);
-          setAccessToken('oauth');
           setShopName(data.shopName || data.storeDomain);
         } else {
           setIsServerConnected(false);
-          // Try local storage fallback
-          const stored = localStorage.getItem(SHOPIFY_CREDS_KEY);
-          if (stored) {
-            const creds = JSON.parse(stored);
-            if (creds.storeDomain) setStoreDomain(creds.storeDomain);
-            if (creds.accessToken) setAccessToken(creds.accessToken);
-            if (creds.shopName) setShopName(creds.shopName);
-          }
         }
       } catch (err) {
         console.error('Failed to check connection:', err);
@@ -2091,46 +2079,18 @@ function ShopifyDeployModal({
     } catch (err) {
       console.error('Failed to disconnect store server-side:', err);
     }
-    localStorage.removeItem(SHOPIFY_CREDS_KEY);
     setStoreDomain('');
-    setAccessToken('');
     setShopName('');
     setIsServerConnected(false);
   }
 
   async function handleDeploy() {
-    if (!storeDomain.trim() || !accessToken.trim()) return;
+    if (!storeDomain.trim() || !isServerConnected) return;
 
     setDeployError('');
     setFileErrors([]);
 
-    // Step 1: Test connection (only if manual dev mode, not for OAuth)
-    if (!isServerConnected) {
-      setDeployStatus('connecting');
-      try {
-        const connectRes = await authenticatedFetch('/api/shopify/connect', {
-          method: 'POST',
-          body: JSON.stringify({ storeDomain: storeDomain.trim(), accessToken: accessToken.trim() }),
-        });
-        const connectData = await connectRes.json();
-        if (!connectData.success) throw new Error(connectData.error || 'Connection failed');
-        setShopName(connectData.shopName || storeDomain);
-        // Save credentials locally
-        try {
-          localStorage.setItem(SHOPIFY_CREDS_KEY, JSON.stringify({
-            storeDomain: storeDomain.trim(),
-            accessToken: accessToken.trim(),
-            shopName: connectData.shopName,
-          }));
-        } catch { /* ignore */ }
-      } catch (err) {
-        setDeployError(err instanceof Error ? err.message : 'Connection failed');
-        setDeployStatus('error');
-        return;
-      }
-    }
-
-    // Step 2: Generate theme files
+    // Step 1: Generate theme files
     setDeployStatus('generating-files');
     let files: ShopifyThemeFile[];
     try {
@@ -2142,7 +2102,7 @@ function ShopifyDeployModal({
       return;
     }
 
-    // Step 3: Create theme + upload to Shopify
+    // Step 2: Create theme + upload to Shopify
     setDeployStatus('creating');
     const name = `${input.businessName || 'RootX'} Theme — ${new Date().toLocaleDateString()}`;
     setThemeName(name);
@@ -2153,7 +2113,7 @@ function ShopifyDeployModal({
         body: JSON.stringify({
           action: 'create',
           storeDomain: storeDomain.trim(),
-          accessToken: accessToken.trim(),
+          accessToken: 'oauth',
           themeName: name,
           files,
         }),
@@ -2183,7 +2143,7 @@ function ShopifyDeployModal({
         body: JSON.stringify({
           action: 'publish',
           storeDomain: storeDomain.trim(),
-          accessToken: accessToken.trim(),
+          accessToken: 'oauth',
           themeId,
         }),
       });
@@ -2303,40 +2263,6 @@ function ShopifyDeployModal({
                       <><Plug size={16} /> Connect Shopify Store</>}
                   </button>
 
-                  <div className="text-center mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowManual(!showManual)}
-                      className="text-xs font-semibold underline"
-                      style={{ color: '#71717a' }}
-                    >
-                      {showManual ? 'Hide developer option' : 'Or connect manually with API token (Developer fallback)'}
-                    </button>
-                  </div>
-
-                  {showManual && (
-                    <div className="flex flex-col gap-4 mt-2 p-4 rounded-xl border border-dashed" style={{ borderColor: 'var(--color-border)' }}>
-                      <div>
-                        <label className="block text-xs font-medium mb-1.5" style={{ color: '#a1a1aa' }}>Admin API Access Token *</label>
-                        <input
-                          type="password"
-                          placeholder="shpat_xxxxxxxxxxxxx"
-                          value={accessToken}
-                          onChange={(e) => setAccessToken(e.target.value)}
-                          className="input-field w-full"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleDeploy}
-                        disabled={!storeDomain.trim() || !accessToken.trim()}
-                        className="btn-primary w-full"
-                        style={{ justifyContent: 'center', opacity: (!storeDomain.trim() || !accessToken.trim()) ? 0.5 : 1 }}
-                      >
-                        <Upload size={16} /> Deploy manually with Token
-                      </button>
-                    </div>
-                  )}
                 </form>
               )}
             </>

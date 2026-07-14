@@ -38,13 +38,9 @@ async function authenticatedFetch(url: string, options: RequestInit = {}) {
   return fetch(url, { ...options, headers });
 }
 
-function getStored(): ShopifyCredentials | null {
-  if (typeof window === 'undefined') return null;
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'); }
-  catch { return null; }
-}
-function setStored(c: ShopifyCredentials) { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); }
-function clearStored() { localStorage.removeItem(STORAGE_KEY); }
+function getStored(): ShopifyCredentials | null { return null; }
+function setStored(c: ShopifyCredentials) {}
+function clearStored() {}
 
 function useCopy() {
   const [id, setId] = useState<string | null>(null);
@@ -146,14 +142,6 @@ function ConnectStep({ onConnected, oauthError }: {
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [oauthErr, setOauthErr] = useState(oauthError || '');
 
-  // Toggle for manual token input (Developer fallback)
-  const [showManual, setShowManual] = useState(false);
-  const [tokenDomain, setTokenDomain] = useState('');
-  const [token, setToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  const [tokenStatus, setTokenStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-  const [tokenErr, setTokenErr] = useState('');
-
   async function handleOAuth(e: React.FormEvent) {
     e.preventDefault();
     setOauthStatus('loading');
@@ -182,37 +170,6 @@ function ConnectStep({ onConnected, oauthError }: {
     } catch (err) {
       setOauthErr(err instanceof Error ? err.message : 'OAuth failed');
       setOauthStatus('error');
-    }
-  }
-
-  async function handleTokenSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setTokenStatus('loading');
-    setTokenErr('');
-    const d = tokenDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const t = token.trim();
-    if (!d || !t) {
-      setTokenErr('Both fields are required');
-      setTokenStatus('error');
-      return;
-    }
-    try {
-      const res = await authenticatedFetch('/api/shopify/connect', {
-        method: 'POST',
-        body: JSON.stringify({ storeDomain: d, accessToken: t }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || 'Connection failed');
-      const creds: ShopifyCredentials = {
-        storeDomain: data.storeDomain || d,
-        accessToken: t,
-        shopName: data.shopName,
-      };
-      setStored(creds);
-      onConnected(creds);
-    } catch (err) {
-      setTokenErr(err instanceof Error ? err.message : 'Connection failed');
-      setTokenStatus('error');
     }
   }
 
@@ -271,67 +228,6 @@ function ConnectStep({ onConnected, oauthError }: {
           </button>
         </div>
       </form>
-
-      {/* Developer manual token fallback */}
-      <div className="mt-6 text-center">
-        <button
-          type="button"
-          onClick={() => setShowManual(!showManual)}
-          className="text-xs font-semibold underline transition-all hover:text-white"
-          style={{ color: '#71717a' }}
-        >
-          {showManual ? 'Hide manual connection' : 'Or connect manually with API token (Developer fallback)'}
-        </button>
-      </div>
-
-      {showManual && (
-        <form onSubmit={handleTokenSubmit} className="mt-4 animate-fade-in">
-          <div className="rounded-2xl p-6"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-            <div className="flex flex-col gap-4">
-              <div>
-                <label htmlFor="token-domain" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                  Store URL <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input id="token-domain" type="text" placeholder="your-store.myshopify.com"
-                  value={tokenDomain} onChange={(e) => setTokenDomain(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none"
-                  style={{ border: '1px solid var(--color-border)' }} />
-              </div>
-              <div>
-                <label htmlFor="direct-token" className="block text-sm font-semibold mb-2" style={{ color: '#a1a1aa' }}>
-                  Admin API Access Token <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <div className="relative">
-                  <input id="direct-token" type={showToken ? 'text' : 'password'} placeholder="shpat_..."
-                    value={token} onChange={(e) => setToken(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl text-sm bg-transparent outline-none pr-10"
-                    style={{ border: '1px solid var(--color-border)' }} />
-                  <button type="button" onClick={() => setShowToken(!showToken)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} tabIndex={-1}>
-                    {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {tokenErr && (
-              <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
-                style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
-                <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
-                <p className="text-sm" style={{ color: '#fca5a5' }}>{tokenErr}</p>
-              </div>
-            )}
-
-            <button type="submit" disabled={tokenStatus === 'loading'}
-              className="w-full mt-5 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: '#a1a1aa' }}>
-              {tokenStatus === 'loading' ? <><Loader2 size={14} className="animate-spin" /> Verifying…</> :
-                <><Key size={14} /> Connect with Token</>}
-            </button>
-          </div>
-        </form>
-      )}
     </div>
   );
 }
@@ -628,7 +524,7 @@ function GenerationModal({ product, credentials, onClose, onPushed }: {
           tags: editMode ? editedTags : result?.tags.join(', '),
           product_type: result?.categorySuggestion?.primary || '',
           storeDomain: credentials.storeDomain,
-          accessToken: credentials.accessToken,
+          accessToken: 'oauth',
         }),
       });
       const data: UpdateResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
@@ -1277,11 +1173,7 @@ export default function ShopifyAgentDemo() {
     setLoadingProducts(true);
     setProductsError('');
     try {
-      const params = new URLSearchParams({
-        storeDomain: credentials.storeDomain,
-        accessToken: credentials.accessToken,
-      });
-      const res = await authenticatedFetch(`/api/shopify/products?${params}`);
+      const res = await authenticatedFetch('/api/shopify/products');
       const data = await res.json().catch(() => ({ success: false, error: 'Invalid response' }));
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load products');
       setProducts(data.products || []);
@@ -1305,12 +1197,7 @@ export default function ShopifyAgentDemo() {
         });
       } else {
         setIsServerConnected(false);
-        const local = getStored();
-        if (local) {
-          setCredentials(local);
-        } else {
-          setCredentials(null);
-        }
+        setCredentials(null);
       }
     } catch (err) {
       console.error('Failed to check connection:', err);
@@ -1336,9 +1223,6 @@ export default function ShopifyAgentDemo() {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('shopify_error');
     const success = params.get('oauth_success');
-    const sd = params.get('shopify_domain');
-    const st = params.get('shopify_token');
-    const sn = params.get('shopify_name');
 
     if (err) {
       setOauthError(err);
@@ -1346,12 +1230,6 @@ export default function ShopifyAgentDemo() {
     }
     if (success) {
       checkConnection();
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-    if (sd && st) {
-      const creds: ShopifyCredentials = { storeDomain: sd, accessToken: st, shopName: sn || undefined };
-      setStored(creds);
-      setCredentials(creds);
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [checkConnection]);

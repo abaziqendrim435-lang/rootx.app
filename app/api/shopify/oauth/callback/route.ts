@@ -5,8 +5,12 @@ import { upsertCredentials } from '@/lib/shopify-api';
 const COOKIE_NAME = 'rootx_shopify_oauth';
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_OAUTH_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
+  const secret = process.env.SHOPIFY_CLIENT_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
   return crypto.createHash('sha256').update(secret).digest();
+}
+
+function isValidShopifyDomain(domain: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/.test(domain);
 }
 
 /** Decrypt base64url cookie data */
@@ -55,7 +59,7 @@ export async function GET(req: NextRequest) {
   const state = url.searchParams.get('state');
   const hmac = url.searchParams.get('hmac');
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
+  const appUrl = (process.env.SHOPIFY_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
 
   // Default path if session decryption fails
   let redirectPath = '/agents/shopify-ai-agent';
@@ -66,6 +70,11 @@ export async function GET(req: NextRequest) {
   // 1. Verify basic callback query params
   if (!code || !shop || !state) {
     return getErrorRedirect('Missing required OAuth parameters from Shopify.');
+  }
+
+  // Validate shopify domain format
+  if (!isValidShopifyDomain(shop)) {
+    return getErrorRedirect('Invalid Shopify shop domain received.');
   }
 
   // 2. Read and decrypt session cookie
@@ -87,13 +96,17 @@ export async function GET(req: NextRequest) {
     redirectPath = storedRedirect;
   }
 
-  // 3. Validate CSRF state nonce
+  // 3. Validate CSRF state nonce and domain match
   if (state !== storedState) {
     return getErrorRedirect('Invalid OAuth state. Possible CSRF attack detected.');
   }
 
-  const shopifyApiKey = process.env.SHOPIFY_API_KEY;
-  const shopifyApiSecret = process.env.SHOPIFY_API_SECRET;
+  if (shop !== storeDomain) {
+    return getErrorRedirect('Callback shop domain does not match session store domain.');
+  }
+
+  const shopifyApiKey = process.env.SHOPIFY_CLIENT_ID;
+  const shopifyApiSecret = process.env.SHOPIFY_CLIENT_SECRET;
 
   if (!shopifyApiKey || !shopifyApiSecret) {
     return getErrorRedirect('Shopify credentials not configured on the server.');
@@ -159,7 +172,8 @@ export async function GET(req: NextRequest) {
       userId,
       storeDomain || shop,
       accessToken,
-      shopName
+      shopName,
+      ['read_products', 'write_products', 'read_themes', 'write_themes']
     );
 
     if (dbErr) {

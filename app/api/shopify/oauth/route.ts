@@ -7,7 +7,7 @@ const COOKIE_NAME = 'rootx_shopify_oauth';
 const COOKIE_MAX_AGE = 600; // 10 minutes
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_OAUTH_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
+  const secret = process.env.SHOPIFY_CLIENT_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
   return crypto.createHash('sha256').update(secret).digest();
 }
 
@@ -23,8 +23,8 @@ function encrypt(data: Record<string, string>): string {
   return packed.toString('base64url');
 }
 
-function isValidDomain(domain: string): boolean {
-  return /^[a-zA-Z0-9][a-zA-Z0-9\-.]+\.[a-zA-Z]{2,}$/.test(domain);
+function isValidShopifyDomain(domain: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/.test(domain);
 }
 
 export async function POST(req: NextRequest) {
@@ -59,17 +59,17 @@ export async function POST(req: NextRequest) {
       storeDomain = `${storeDomain}.myshopify.com`;
     }
 
-    if (!isValidDomain(storeDomain)) {
+    if (!isValidShopifyDomain(storeDomain)) {
       return NextResponse.json(
         { error: 'Invalid store domain. Use your *.myshopify.com domain.' },
         { status: 400 }
       );
     }
 
-    const shopifyApiKey = process.env.SHOPIFY_API_KEY;
+    const shopifyApiKey = process.env.SHOPIFY_CLIENT_ID;
     if (!shopifyApiKey) {
       return NextResponse.json(
-        { error: 'Shopify API Key is not configured on the server.' },
+        { error: 'Shopify Client ID (API Key) is not configured on the server.' },
         { status: 500 }
       );
     }
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       redirectPath,
     });
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
+    const appUrl = (process.env.SHOPIFY_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://rootxai.dev').replace(/\/$/, '');
     const redirectUri = `${appUrl}/api/shopify/oauth/callback`;
 
     const authUrl = new URL(`https://${storeDomain}/admin/oauth/authorize`);

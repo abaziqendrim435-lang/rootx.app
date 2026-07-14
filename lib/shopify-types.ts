@@ -13,6 +13,10 @@ export interface ShopifyCredentials {
   accessToken: string;
   /** Resolved shop name after a successful connection test */
   shopName?: string;
+  /** Granted OAuth scopes */
+  scopes?: string[];
+  /** Connection status */
+  status?: string;
 }
 
 /** Shopify product from the Admin API (REST) */

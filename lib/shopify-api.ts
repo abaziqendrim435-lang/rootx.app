@@ -13,7 +13,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { ShopifyCredentials } from './shopify-types';
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_OAUTH_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
+  const secret = process.env.SHOPIFY_CLIENT_SECRET || 'rootx-default-shopify-oauth-secret-key-32';
   return crypto.createHash('sha256').update(secret).digest();
 }
 
@@ -129,7 +129,7 @@ export async function getCredentials(
   if (sb && userId) {
     const { data, error } = await sb
       .from('shopify_stores')
-      .select('store_domain, access_token, shop_name')
+      .select('store_domain, access_token, shop_name, scopes, status')
       .eq('user_id', userId)
       .single();
 
@@ -138,6 +138,8 @@ export async function getCredentials(
         storeDomain: data.store_domain as string,
         accessToken: decryptToken(data.access_token as string),
         shopName: (data.shop_name as string) ?? undefined,
+        scopes: data.scopes as string[],
+        status: data.status as string,
       };
     }
   }
@@ -163,7 +165,8 @@ export async function upsertCredentials(
   userId: string,
   storeDomain: string,
   accessToken: string,
-  shopName: string
+  shopName: string,
+  scopes: string[] = ['read_products', 'write_products', 'read_themes', 'write_themes']
 ): Promise<{ error: string | null }> {
   const sb = getSupabase();
   if (!sb) return { error: null }; // nothing to persist — that's fine
@@ -176,6 +179,9 @@ export async function upsertCredentials(
       store_domain: storeDomain,
       access_token: encryptedToken,
       shop_name: shopName,
+      scopes,
+      status: 'connected',
+      updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id' }
   );
