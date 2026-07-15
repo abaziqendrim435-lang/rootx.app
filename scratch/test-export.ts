@@ -232,7 +232,14 @@ function validateTheme(files: any[], productName: string): string[] {
     }
   }
 
-  // 2. JSON files validation
+  // 2. Reject empty files
+  for (const [key, val] of fileMap.entries()) {
+    if (!val || val.trim() === '') {
+      errors.push(`File ${key} is empty.`);
+    }
+  }
+
+  // 3. JSON files validation
   for (const [key, val] of fileMap.entries()) {
     if (key.endsWith('.json')) {
       try {
@@ -243,7 +250,7 @@ function validateTheme(files: any[], productName: string): string[] {
     }
   }
 
-  // 3. Liquid syntax checks
+  // 4. Liquid syntax checks & Schema validation
   for (const [key, val] of fileMap.entries()) {
     if (key.endsWith('.liquid')) {
       const openTags = (val.match(/{%/g) || []).length;
@@ -258,12 +265,19 @@ function validateTheme(files: any[], productName: string): string[] {
         errors.push(`Mismatched Liquid output delimiters {{ and }} in ${key} (${openOutputs} open vs ${closeOutputs} close)`);
       }
 
-      // Check schema block JSON
-      const schemaMatch = val.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);
-      if (schemaMatch) {
+      // Check schema block JSON & name property
+      if (key.startsWith('sections/')) {
+        const schemaMatch = val.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);
+        if (!schemaMatch) {
+          errors.push(`Section file ${key} is missing a {% schema %} block.`);
+          continue;
+        }
         const schemaText = schemaMatch[1].trim();
         try {
-          JSON.parse(schemaText);
+          const schemaObj = JSON.parse(schemaText);
+          if (!schemaObj.name || schemaObj.name.trim() === '') {
+            errors.push(`Schema inside ${key} is missing the required "name" property.`);
+          }
         } catch (err) {
           errors.push(`Invalid JSON inside {% schema %} block of ${key}: ${err instanceof Error ? err.message : 'Syntax Error'}`);
         }
@@ -271,7 +285,31 @@ function validateTheme(files: any[], productName: string): string[] {
     }
   }
 
-  // 4. Verify settings and image URLs are present in index.json
+  // 5. Cross-reference JSON templates and section files
+  for (const [key, val] of fileMap.entries()) {
+    if (key.startsWith('templates/') && key.endsWith('.json')) {
+      let templateJson;
+      try {
+        templateJson = JSON.parse(val);
+      } catch {
+        continue;
+      }
+
+      if (templateJson.sections) {
+        for (const sectionId of Object.keys(templateJson.sections)) {
+          const section = templateJson.sections[sectionId];
+          if (section && section.type) {
+            const sectionFileName = `sections/${section.type}.liquid`;
+            if (!fileMap.has(sectionFileName)) {
+              errors.push(`JSON template '${key}' references section type '${section.type}', but section file '${sectionFileName}' does not exist.`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 6. Verify settings and image URLs are present in index.json
   const indexJsonStr = fileMap.get('templates/index.json');
   if (indexJsonStr) {
     const indexJson = JSON.parse(indexJsonStr);

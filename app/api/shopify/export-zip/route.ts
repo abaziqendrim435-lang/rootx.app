@@ -130,12 +130,24 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Validate Schema block is valid JSON
-        const schemaMatch = val.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);
-        if (schemaMatch) {
+        // Validate Schema block is valid JSON and contains required properties
+        if (key.startsWith('sections/')) {
+          const schemaMatch = val.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);
+          if (!schemaMatch) {
+            return NextResponse.json(
+              { error: `Validation Failed: Section file ${key} is missing a {% schema %} block.` },
+              { status: 400 }
+            );
+          }
           const schemaText = schemaMatch[1].trim();
           try {
-            JSON.parse(schemaText);
+            const schemaObj = JSON.parse(schemaText);
+            if (!schemaObj.name || schemaObj.name.trim() === '') {
+              return NextResponse.json(
+                { error: `Validation Failed: Schema inside ${key} is missing the required "name" property.` },
+                { status: 400 }
+              );
+            }
           } catch (err) {
             return NextResponse.json(
               { error: `Validation Failed: Invalid JSON inside {% schema %} block of ${key}. Details: ${err instanceof Error ? err.message : 'Syntax Error'}` },
@@ -146,7 +158,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Validate image URLs and settings are present in sections
+    // 5. Validate JSON templates and check that all referenced sections exist
+    for (const [key, val] of fileMap.entries()) {
+      if (key.startsWith('templates/') && key.endsWith('.json')) {
+        let templateJson;
+        try {
+          templateJson = JSON.parse(val);
+        } catch {
+          continue; // Handled by standard JSON parser check in step 3
+        }
+
+        if (templateJson.sections) {
+          for (const sectionId of Object.keys(templateJson.sections)) {
+            const section = templateJson.sections[sectionId];
+            if (section && section.type) {
+              const sectionFileName = `sections/${section.type}.liquid`;
+              if (!fileMap.has(sectionFileName)) {
+                return NextResponse.json(
+                  { error: `Validation Failed: JSON template '${key}' references section type '${section.type}', but section file '${sectionFileName}' does not exist in the theme.` },
+                  { status: 400 }
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 5.5 Validate image URLs and settings are present in sections
     const indexJsonStr = fileMap.get('templates/index.json');
     if (indexJsonStr) {
       const indexJson = JSON.parse(indexJsonStr);

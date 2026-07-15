@@ -426,7 +426,7 @@ ${columnsHtml}
       "default": "${escJson(footer.copyright)}"
     }${footer.socialLinks.map((link, i) => `,
     {
-      "type": "url",
+      "type": "text",
       "id": "social_${link.platform.toLowerCase()}",
       "label": "${link.platform} URL",
       "default": "${escJson(link.url)}"
