@@ -89,8 +89,7 @@ function generateLayout(
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="${typography.googleFontsUrl}" rel="stylesheet">
 
-  {{ 'base.css' | asset_url | stylesheet_tag }}
-  {{ 'sections.css' | asset_url | stylesheet_tag }}
+  {{ 'theme.css' | asset_url | stylesheet_tag }}
 
   <style>
     :root {
@@ -113,7 +112,7 @@ function generateLayout(
 
   {% section 'footer' %}
 
-  {{ 'global.js' | asset_url | script_tag }}
+  {{ 'theme.js' | asset_url | script_tag }}
 </body>
 </html>`;
 
@@ -128,7 +127,17 @@ function generateTemplates(
 ): ShopifyThemeFile[] {
   const t = (key: string, value: object) => file(key, JSON.stringify(value, null, 2));
 
-  const indexTemplate = {
+  // Determine index page templates based on store type
+  const indexTemplate = gen.ecommerce ? {
+    sections: {
+      'hero-product': { type: 'hero-product', settings: {} },
+      'product-benefits': { type: 'product-benefits', settings: {} },
+      'image-with-text': { type: 'image-with-text', settings: {} },
+      'featured-product': { type: 'featured-product', settings: {} },
+      faq: { type: 'faq', settings: {} },
+    },
+    order: ['hero-product', 'product-benefits', 'image-with-text', 'featured-product', 'faq'],
+  } : {
     sections: {
       hero: { type: 'hero', settings: {} },
       'featured-collection': {
@@ -150,9 +159,12 @@ function generateTemplates(
 
   const productTemplate = {
     sections: {
-      'main-product': { type: 'main-product', settings: {} },
+      'hero-product': { type: 'hero-product', settings: {} },
+      'product-gallery': { type: 'product-gallery', settings: {} },
+      'product-specifications': { type: 'product-specifications', settings: {} },
+      faq: { type: 'faq', settings: {} },
     },
-    order: ['main-product'],
+    order: ['hero-product', 'product-gallery', 'product-specifications', 'faq'],
   };
 
   const collectionTemplate = {
@@ -274,6 +286,12 @@ function generateSections(
     file('sections/main-cart.liquid', generateMainCartSection()),
     file('sections/404.liquid', generate404Section()),
     file('sections/search.liquid', generateSearchSection()),
+    file('sections/hero-product.liquid', generateHeroProductSection(gen, input)),
+    file('sections/product-gallery.liquid', generateProductGallerySection(gen)),
+    file('sections/product-benefits.liquid', generateProductBenefitsSection(gen)),
+    file('sections/product-specifications.liquid', generateProductSpecificationsSection(gen)),
+    file('sections/image-with-text.liquid', generateImageWithTextSection(gen)),
+    file('sections/featured-product.liquid', generateFeaturedProductSection(gen, input)),
   ];
 }
 
@@ -1685,10 +1703,10 @@ function generateAssets(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): ShopifyThemeFile[] {
+  const combinedCSS = `${generateBaseCSS(input)}\n${generateSectionsCSS(input)}\n${generateEcommerceCSS()}`;
   return [
-    file('assets/base.css', generateBaseCSS(input)),
-    file('assets/sections.css', generateSectionsCSS(input)),
-    file('assets/global.js', generateGlobalJS()),
+    file('assets/theme.css', combinedCSS),
+    file('assets/theme.js', generateGlobalJS()),
   ];
 }
 
@@ -4143,3 +4161,653 @@ function generateLocales(
 
   return [file('locales/en.default.json', JSON.stringify(locale, null, 2))];
 }
+
+// ── New Ecommerce / Dropshipping Sections ──────────────────────
+
+function generateHeroProductSection(
+  gen: WebsiteGeneration,
+  input: WebsiteBuilderInput
+): string {
+  const productTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
+  const productDescription = gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate performance and comfort.';
+  const price = gen.ecommerce?.price || '29.99';
+  const compareAtPrice = gen.ecommerce?.compareAtPrice || '49.99';
+  const images = gen.ecommerce?.images || [];
+
+  return `<section class="hero-product section" data-section-id="{{ section.id }}">
+  <div class="container hero-product-inner">
+    <div class="hero-product-grid">
+      <!-- Media Gallery -->
+      <div class="hero-product-media">
+        <div class="main-image-container">
+          {% if section.settings.image_1 != blank %}
+            <img id="HeroProductMainImage" src="{{ section.settings.image_1 }}" alt="{{ section.settings.title }}" class="main-product-image" />
+          {% else %}
+            {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
+          {% endif %}
+        </div>
+        <div class="thumbnail-images">
+          {% if section.settings.image_1 != blank %}
+            <div class="thumbnail-item active" onclick="document.getElementById('HeroProductMainImage').src='{{ section.settings.image_1 }}'; document.querySelectorAll('.thumbnail-item').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+              <img src="{{ section.settings.image_1 }}" alt="Thumbnail 1" />
+            </div>
+          {% endif %}
+          {% if section.settings.image_2 != blank %}
+            <div class="thumbnail-item" onclick="document.getElementById('HeroProductMainImage').src='{{ section.settings.image_2 }}'; document.querySelectorAll('.thumbnail-item').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+              <img src="{{ section.settings.image_2 }}" alt="Thumbnail 2" />
+            </div>
+          {% endif %}
+          {% if section.settings.image_3 != blank %}
+            <div class="thumbnail-item" onclick="document.getElementById('HeroProductMainImage').src='{{ section.settings.image_3 }}'; document.querySelectorAll('.thumbnail-item').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+              <img src="{{ section.settings.image_3 }}" alt="Thumbnail 3" />
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Product Details / Buying form -->
+      <div class="hero-product-info">
+        <h1 class="product-title">{{ section.settings.title }}</h1>
+        
+        <div class="product-price-wrapper">
+          <span class="price-current">$ {{ section.settings.price }}</span>
+          {% if section.settings.compare_at_price != blank %}
+            <span class="price-compare">$ {{ section.settings.compare_at_price }}</span>
+            <span class="badge badge-sale">Save</span>
+          {% endif %}
+        </div>
+
+        <div class="product-description rte">
+          {{ section.settings.description }}
+        </div>
+
+        <!-- Add to cart form -->
+        {% form 'product', product %}
+          <div class="product-form-options">
+            <!-- Dynamic variants if any -->
+            {% if section.settings.variant_1_name != blank %}
+              <div class="option-select-wrapper">
+                <label class="option-label">{{ section.settings.variant_1_name }}</label>
+                <select name="id" class="option-select">
+                  {% assign vals = section.settings.variant_1_values | split: ',' %}
+                  {% for val in vals %}
+                    <option value="{{ val | strip }}">{{ val | strip }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="product-form-quantity">
+            <label for="Quantity-{{ section.id }}" class="quantity-label">Quantity</label>
+            <div class="quantity-input-wrapper">
+              <button type="button" class="qty-btn qty-minus" onclick="const input = document.getElementById('Quantity-{{ section.id }}'); if (parseInt(input.value) > 1) input.value = parseInt(input.value) - 1;">-</button>
+              <input type="number" id="Quantity-{{ section.id }}" name="quantity" value="1" min="1" class="qty-input">
+              <button type="button" class="qty-btn qty-plus" onclick="const input = document.getElementById('Quantity-{{ section.id }}'); input.value = parseInt(input.value) + 1;">+</button>
+            </div>
+          </div>
+
+          <div class="product-form-buttons">
+            <button type="submit" name="add" class="btn btn-primary btn-add-to-cart w-full">
+              Add to Cart
+            </button>
+          </div>
+        {% endform %}
+
+        <div class="trust-badges-wrapper">
+          <p class="trust-title">{{ section.settings.trust_title }}</p>
+          <div class="trust-badges-grid">
+            {% if section.settings.badge_1 != blank %}
+              <div class="trust-badge-item">✓ {{ section.settings.badge_1 }}</div>
+            {% endif %}
+            {% if section.settings.badge_2 != blank %}
+              <div class="trust-badge-item">✓ {{ section.settings.badge_2 }}</div>
+            {% endif %}
+            {% if section.settings.badge_3 != blank %}
+              <div class="trust-badge-item">✓ {{ section.settings.badge_3 }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if section.settings.shipping_text != blank %}
+          <p class="shipping-text">🚚 {{ section.settings.shipping_text }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Hero Product",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Product Title", "default": "${escJson(productTitle)}" },
+    { "type": "text", "id": "price", "label": "Price", "default": "${escJson(price)}" },
+    { "type": "text", "id": "compare_at_price", "label": "Compare at Price", "default": "${escJson(compareAtPrice)}" },
+    { "type": "richtext", "id": "description", "label": "Product Description", "default": "<p>${escJson(productDescription)}</p>" },
+    { "type": "text", "id": "image_1", "label": "Product Image 1 (URL)", "default": "${escJson(images[0] ?? '')}" },
+    { "type": "text", "id": "image_2", "label": "Product Image 2 (URL)", "default": "${escJson(images[1] ?? '')}" },
+    { "type": "text", "id": "image_3", "label": "Product Image 3 (URL)", "default": "${escJson(images[2] ?? '')}" },
+    { "type": "text", "id": "variant_1_name", "label": "Variant 1 Name", "default": "${escJson(gen.ecommerce?.variants?.[0]?.name ?? '')}" },
+    { "type": "text", "id": "variant_1_values", "label": "Variant 1 Values (comma separated)", "default": "${escJson(gen.ecommerce?.variants?.[0]?.values?.join(', ') ?? '')}" },
+    { "type": "text", "id": "trust_title", "label": "Trust Title", "default": "Guaranteed Safe Checkout" },
+    { "type": "text", "id": "badge_1", "label": "Trust Badge 1", "default": "${escJson(gen.ecommerce?.trustBadges?.[0] ?? '30-Day Money Back Guarantee')}" },
+    { "type": "text", "id": "badge_2", "label": "Trust Badge 2", "default": "${escJson(gen.ecommerce?.trustBadges?.[1] ?? 'Free Worldwide Shipping')}" },
+    { "type": "text", "id": "badge_3", "label": "Trust Badge 3", "default": "${escJson(gen.ecommerce?.trustBadges?.[2] ?? 'Secure SSL Encrypted Checkout')}" },
+    { "type": "text", "id": "shipping_text", "label": "Shipping Info Text", "default": "${escJson(gen.ecommerce?.shippingText ?? 'Free shipping on all orders this week!')}" }
+  ],
+  "presets": [
+    {
+      "name": "Hero Product Showcase"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
+function generateProductGallerySection(gen: WebsiteGeneration): string {
+  const images = gen.ecommerce?.images || [];
+
+  return `<section class="product-gallery section" data-section-id="{{ section.id }}">
+  <div class="container">
+    <h2 class="section-title text-center">{{ section.settings.heading }}</h2>
+    <div class="product-gallery-grid">
+      {% if section.settings.image_1 != blank %}
+        <div class="gallery-item">
+          <img src="{{ section.settings.image_1 }}" alt="Gallery Image 1" class="gallery-image" />
+        </div>
+      {% endif %}
+      {% if section.settings.image_2 != blank %}
+        <div class="gallery-item">
+          <img src="{{ section.settings.image_2 }}" alt="Gallery Image 2" class="gallery-image" />
+        </div>
+      {% endif %}
+      {% if section.settings.image_3 != blank %}
+        <div class="gallery-item">
+          <img src="{{ section.settings.image_3 }}" alt="Gallery Image 3" class="gallery-image" />
+        </div>
+      {% endif %}
+      {% if section.settings.image_4 != blank %}
+        <div class="gallery-item">
+          <img src="{{ section.settings.image_4 }}" alt="Gallery Image 4" class="gallery-image" />
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Product Gallery",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Gallery Heading", "default": "Product Gallery" },
+    { "type": "text", "id": "image_1", "label": "Gallery Image 1 (URL)", "default": "${escJson(images[0] ?? '')}" },
+    { "type": "text", "id": "image_2", "label": "Gallery Image 2 (URL)", "default": "${escJson(images[1] ?? '')}" },
+    { "type": "text", "id": "image_3", "label": "Gallery Image 3 (URL)", "default": "${escJson(images[2] ?? '')}" },
+    { "type": "text", "id": "image_4", "label": "Gallery Image 4 (URL)", "default": "${escJson(images[3] ?? '')}" }
+  ],
+  "presets": [
+    {
+      "name": "Product Gallery"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
+function generateProductBenefitsSection(gen: WebsiteGeneration): string {
+  return `<section class="product-benefits section" data-section-id="{{ section.id }}">
+  <div class="container">
+    <h2 class="section-title text-center">{{ section.settings.heading }}</h2>
+    <div class="benefits-grid">
+      {% if section.settings.benefit_1_title != blank %}
+        <div class="benefit-card">
+          <div class="benefit-icon">{{ section.settings.benefit_1_icon }}</div>
+          <h3 class="benefit-title">{{ section.settings.benefit_1_title }}</h3>
+          <p class="benefit-desc">{{ section.settings.benefit_1_desc }}</p>
+        </div>
+      {% endif %}
+      {% if section.settings.benefit_2_title != blank %}
+        <div class="benefit-card">
+          <div class="benefit-icon">{{ section.settings.benefit_2_icon }}</div>
+          <h3 class="benefit-title">{{ section.settings.benefit_2_title }}</h3>
+          <p class="benefit-desc">{{ section.settings.benefit_2_desc }}</p>
+        </div>
+      {% endif %}
+      {% if section.settings.benefit_3_title != blank %}
+        <div class="benefit-card">
+          <div class="benefit-icon">{{ section.settings.benefit_3_icon }}</div>
+          <h3 class="benefit-title">{{ section.settings.benefit_3_title }}</h3>
+          <p class="benefit-desc">{{ section.settings.benefit_3_desc }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Product Benefits",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Why Choose Us" },
+    { "type": "text", "id": "benefit_1_icon", "label": "Benefit 1 Icon (Emoji)", "default": "✨" },
+    { "type": "text", "id": "benefit_1_title", "label": "Benefit 1 Title", "default": "${escJson(gen.homepage.features?.[0]?.title ?? 'Premium Quality')}" },
+    { "type": "text", "id": "benefit_1_desc", "label": "Benefit 1 Description", "default": "${escJson(gen.homepage.features?.[0]?.description ?? 'Crafted with the finest materials for unparalleled durability and performance.')}" },
+    { "type": "text", "id": "benefit_2_icon", "label": "Benefit 2 Icon (Emoji)", "default": "⚡" },
+    { "type": "text", "id": "benefit_2_title", "label": "Benefit 2 Title", "default": "${escJson(gen.homepage.features?.[1]?.title ?? 'Ergonomic Design')}" },
+    { "type": "text", "id": "benefit_2_desc", "label": "Benefit 2 Description", "default": "${escJson(gen.homepage.features?.[1]?.description ?? 'Engineered specifically for daily comfort and high performance usage.')}" },
+    { "type": "text", "id": "benefit_3_icon", "label": "Benefit 3 Icon (Emoji)", "default": "🛡️" },
+    { "type": "text", "id": "benefit_3_title", "label": "Benefit 3 Title", "default": "${escJson(gen.homepage.features?.[2]?.title ?? '30-Day Guarantee')}" },
+    { "type": "text", "id": "benefit_3_desc", "label": "Benefit 3 Description", "default": "${escJson(gen.homepage.features?.[2]?.description ?? 'Shop with complete peace of mind. We stand behind our quality fully.')}" }
+  ],
+  "presets": [
+    {
+      "name": "Product Benefits Grid"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
+function generateProductSpecificationsSection(gen: WebsiteGeneration): string {
+  const specifications = gen.ecommerce?.specifications || [];
+
+  return `<section class="product-specifications section" data-section-id="{{ section.id }}">
+  <div class="container">
+    <h2 class="section-title text-center">{{ section.settings.heading }}</h2>
+    <div class="specifications-table-wrapper">
+      <table class="specifications-table">
+        <tbody>
+          {% if section.settings.spec_1_label != blank %}
+            <tr>
+              <td class="spec-label">{{ section.settings.spec_1_label }}</td>
+              <td class="spec-value">{{ section.settings.spec_1_value }}</td>
+            </tr>
+          {% endif %}
+          {% if section.settings.spec_2_label != blank %}
+            <tr>
+              <td class="spec-label">{{ section.settings.spec_2_label }}</td>
+              <td class="spec-value">{{ section.settings.spec_2_value }}</td>
+            </tr>
+          {% endif %}
+          {% if section.settings.spec_3_label != blank %}
+            <tr>
+              <td class="spec-label">{{ section.settings.spec_3_label }}</td>
+              <td class="spec-value">{{ section.settings.spec_3_value }}</td>
+            </tr>
+          {% endif %}
+          {% if section.settings.spec_4_label != blank %}
+            <tr>
+              <td class="spec-label">{{ section.settings.spec_4_label }}</td>
+              <td class="spec-value">{{ section.settings.spec_4_value }}</td>
+            </tr>
+          {% endif %}
+          {% if section.settings.spec_5_label != blank %}
+            <tr>
+              <td class="spec-label">{{ section.settings.spec_5_label }}</td>
+              <td class="spec-value">{{ section.settings.spec_5_value }}</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Product Specifications",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Technical Specifications" },
+    { "type": "text", "id": "spec_1_label", "label": "Specification 1 Label", "default": "${escJson(specifications[0]?.label ?? '')}" },
+    { "type": "text", "id": "spec_1_value", "label": "Specification 1 Value", "default": "${escJson(specifications[0]?.value ?? '')}" },
+    { "type": "text", "id": "spec_2_label", "label": "Specification 2 Label", "default": "${escJson(specifications[1]?.label ?? '')}" },
+    { "type": "text", "id": "spec_2_value", "label": "Specification 2 Value", "default": "${escJson(specifications[1]?.value ?? '')}" },
+    { "type": "text", "id": "spec_3_label", "label": "Specification 3 Label", "default": "${escJson(specifications[2]?.label ?? '')}" },
+    { "type": "text", "id": "spec_3_value", "label": "Specification 3 Value", "default": "${escJson(specifications[2]?.value ?? '')}" },
+    { "type": "text", "id": "spec_4_label", "label": "Specification 4 Label", "default": "${escJson(specifications[3]?.label ?? '')}" },
+    { "type": "text", "id": "spec_4_value", "label": "Specification 4 Value", "default": "${escJson(specifications[3]?.value ?? '')}" },
+    { "type": "text", "id": "spec_5_label", "label": "Specification 5 Label", "default": "${escJson(specifications[4]?.label ?? '')}" },
+    { "type": "text", "id": "spec_5_value", "label": "Specification 5 Value", "default": "${escJson(specifications[4]?.value ?? '')}" }
+  ],
+  "presets": [
+    {
+      "name": "Product Specifications"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
+function generateImageWithTextSection(gen: WebsiteGeneration): string {
+  const featureSections = gen.ecommerce?.featureSections || [];
+  const images = gen.ecommerce?.images || [];
+
+  return `<section class="image-with-text section" data-section-id="{{ section.id }}">
+  <div class="container">
+    <div class="image-with-text-grid {% if section.settings.layout == 'right' %}grid-reverse{% endif %}">
+      <div class="image-with-text-media">
+        {% if section.settings.image_url != blank %}
+          <img src="{{ section.settings.image_url }}" alt="{{ section.settings.heading | escape }}" class="feature-image" />
+        {% else %}
+          {{ 'image' | placeholder_svg_tag: 'placeholder-svg' }}
+        {% endif %}
+      </div>
+      <div class="image-with-text-content">
+        <h2 class="feature-heading">{{ section.settings.heading }}</h2>
+        <div class="feature-desc rte">
+          {{ section.settings.text }}
+        </div>
+        {% if section.settings.button_label != blank %}
+          <a href="{{ section.settings.button_link }}" class="btn btn-primary">{{ section.settings.button_label }}</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Image with Text",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "${escJson(featureSections[0]?.title ?? 'Designed to Perfection')}" },
+    { "type": "richtext", "id": "text", "label": "Text", "default": "<p>${escJson(featureSections[0]?.description ?? 'Experience the difference with our meticulously engineered product, built to fulfill all your expectations and more.')}</p>" },
+    { "type": "text", "id": "image_url", "label": "Image URL", "default": "${escJson(featureSections[0]?.imageUrl ?? images[0] ?? '')}" },
+    { "type": "select", "id": "layout", "label": "Image alignment", "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "right", "label": "Right" }
+      ], "default": "left" },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Learn More" },
+    { "type": "url", "id": "button_link", "label": "Button link", "default": "/collections/all" }
+  ],
+  "presets": [
+    {
+      "name": "Image with Text"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
+function generateFeaturedProductSection(
+  gen: WebsiteGeneration,
+  input: WebsiteBuilderInput
+): string {
+  const productTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
+  const productDescription = gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate performance and comfort.';
+  const price = gen.ecommerce?.price || '29.99';
+  const compareAtPrice = gen.ecommerce?.compareAtPrice || '49.99';
+  const images = gen.ecommerce?.images || [];
+
+  return `<section class="featured-product section" data-section-id="{{ section.id }}">
+  <div class="container">
+    <div class="featured-product-grid">
+      <div class="featured-product-media">
+        {% if section.settings.image_url != blank %}
+          <img src="{{ section.settings.image_url }}" alt="{{ section.settings.heading | escape }}" class="featured-product-image" />
+        {% else %}
+          {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
+        {% endif %}
+      </div>
+      <div class="featured-product-info">
+        <span class="featured-badge">Featured Product</span>
+        <h2 class="product-title">{{ section.settings.heading }}</h2>
+        <div class="product-price-wrapper">
+          <span class="price-current">$ {{ section.settings.price }}</span>
+          {% if section.settings.compare_at_price != blank %}
+            <span class="price-compare">$ {{ section.settings.compare_at_price }}</span>
+          {% endif %}
+        </div>
+        <p class="product-desc">{{ section.settings.description }}</p>
+        <a href="/products/{{ section.settings.product_handle }}" class="btn btn-primary w-full text-center">View Details</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Featured Product",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Product Title", "default": "${escJson(productTitle)}" },
+    { "type": "text", "id": "price", "label": "Price", "default": "${escJson(price)}" },
+    { "type": "text", "id": "compare_at_price", "label": "Compare at Price", "default": "${escJson(compareAtPrice)}" },
+    { "type": "textarea", "id": "description", "label": "Short Description", "default": "${escJson(productDescription.slice(0, 160) + '...')}" },
+    { "type": "text", "id": "image_url", "label": "Product Image URL", "default": "${escJson(images[0] ?? '')}" },
+    { "type": "text", "id": "product_handle", "label": "Product Handle", "default": "main-product" }
+  ],
+  "presets": [
+    {
+      "name": "Featured Product Spotlight"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
+function generateEcommerceCSS(): string {
+  return `/* ============================================================
+   RootX Theme — Ecommerce & New Sections Stylesheet
+   ============================================================ */
+
+/* ── Hero Product Section ── */
+.hero-product {
+  padding: 60px 0;
+  background: var(--color-bg, #ffffff);
+}
+.hero-product-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+.hero-product-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+@media (max-width: 768px) {
+  .hero-product-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.main-image-container {
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 15px;
+  background: #fff;
+}
+.main-product-image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.thumbnail-images {
+  display: flex;
+  gap: 10px;
+}
+.thumbnail-item {
+  width: 80px;
+  height: 80px;
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #fff;
+}
+.thumbnail-item.active {
+  border-color: var(--primary, #000);
+  box-shadow: 0 0 0 1px var(--primary, #000);
+}
+.thumbnail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.product-price-wrapper {
+  margin: 15px 0;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.price-current {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--primary, #000);
+}
+.price-compare {
+  font-size: 18px;
+  text-decoration: line-through;
+  color: #888;
+}
+.badge-sale {
+  background: #e11d48;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  border-radius: 4px;
+}
+.quantity-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 15px 0;
+}
+.qty-input {
+  width: 60px;
+  text-align: center;
+  padding: 8px;
+  border: 1px solid var(--color-border, #e5e5e5);
+}
+.qty-btn {
+  background: #f3f4f6;
+  border: 1px solid var(--color-border, #e5e5e5);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.product-form-buttons {
+  margin-top: 20px;
+}
+.trust-badges-wrapper {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border, #e5e5e5);
+}
+.trust-badges-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 10px;
+}
+.trust-badge-item {
+  font-size: 12px;
+  color: #555;
+  background: #f9fafb;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid #f3f4f6;
+}
+
+/* ── Product Gallery Section ── */
+.product-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+.gallery-item {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #e5e5e5);
+}
+.gallery-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ── Product Benefits Section ── */
+.benefits-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+  margin-top: 30px;
+}
+@media (max-width: 768px) {
+  .benefits-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.benefit-card {
+  padding: 25px;
+  background: #f9fafb;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #f3f4f6;
+}
+.benefit-icon {
+  font-size: 32px;
+  margin-bottom: 15px;
+}
+
+/* ── Specifications Section ── */
+.specifications-table-wrapper {
+  max-width: 800px;
+  margin: 30px auto 0;
+}
+.specifications-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.specifications-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--color-border, #e5e5e5);
+}
+.specifications-table tr:nth-child(even) {
+  background: #f9fafb;
+}
+.spec-label {
+  font-weight: bold;
+  color: #333;
+}
+
+/* ── Image With Text Section ── */
+.image-with-text-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+}
+@media (max-width: 768px) {
+  .image-with-text-grid.grid-reverse {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .image-with-text-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.feature-image {
+  width: 100%;
+  border-radius: 8px;
+}
+
+/* ── Featured Product Section ── */
+.featured-product-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 40px;
+  align-items: center;
+}
+@media (max-width: 768px) {
+  .featured-product-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.featured-product-image {
+  width: 100%;
+  border-radius: 8px;
+}`;
+}
+

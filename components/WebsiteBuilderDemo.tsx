@@ -3037,25 +3037,38 @@ export default function WebsiteBuilderDemo() {
     }
   }
 
-  function handleExportThemeZip() {
+  async function handleExportThemeZip() {
     if (!result) return;
-    const files = generateShopifyTheme(result, input);
-    // Build a simple concatenated text file with all theme files
-    let content = '';
-    for (const f of files) {
-      content += `\n${'='.repeat(60)}\n`;
-      content += `FILE: ${f.key}\n`;
-      content += `${'='.repeat(60)}\n\n`;
-      content += f.value;
-      content += '\n';
+    setDeployError('');
+    setDeployStatus('generating-files');
+    try {
+      const res = await fetch('/api/shopify/export-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result, input }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const filename = `rootx-shopify-theme-${(input.businessName || 'shopify-theme')
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .toLowerCase()}.zip`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDeployStatus('idle');
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Theme export failed');
+      setDeployStatus('error');
     }
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(input.businessName || 'shopify-theme').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-theme.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   function handleDeployReset() {
@@ -4946,21 +4959,68 @@ export default function WebsiteBuilderDemo() {
                       <Download size={16} style={{ color: '#eab308' }} />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold">Export Theme Files</h4>
-                      <p className="text-xs" style={{ color: '#71717a' }}>Download all Shopify Liquid theme files</p>
+                      <h4 className="text-sm font-bold">Manual Theme Export</h4>
+                      <p className="text-xs" style={{ color: '#71717a' }}>Generate and package theme as ZIP without connecting Shopify account</p>
                     </div>
                     <button
                       onClick={handleExportThemeZip}
-                      className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all"
-                      style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)', color: '#eab308' }}
+                      disabled={deployStatus === 'generating-files'}
+                      className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                      style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)', color: '#eab308', cursor: deployStatus === 'generating-files' ? 'not-allowed' : 'pointer' }}
                     >
-                      <Download size={14} /> Download Theme
+                      {deployStatus === 'generating-files' ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" /> Generating ZIP...
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} /> Download Shopify Theme ZIP
+                        </>
+                      )}
                     </button>
                   </div>
-                  <div className="px-5 py-3">
-                    <p className="text-xs" style={{ color: '#52525b' }}>
-                      Exports all 26+ Shopify OS 2.0 theme files — layout, templates, sections, snippets, assets, config, and locales.
+                  
+                  {deployError && deployStatus === 'error' && (
+                    <div className="mx-5 mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg"
+                      style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.12)' }}>
+                      <AlertTriangle size={14} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+                      <div className="text-xs flex flex-col gap-0.5">
+                        <span className="font-bold text-red-400">Theme Validation / Generation Failed</span>
+                        <p style={{ color: '#fca5a5' }}>{deployError}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="px-5 py-4">
+                    <p className="text-xs mb-4" style={{ color: '#a1a1aa' }}>
+                      Exports a fully valid Shopify Online Store 2.0 theme containing layout, templates, sections, snippets, assets, config, and locales pre-populated with your generated brand and product data.
                     </p>
+
+                    <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <h5 className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: '#e4e4e7' }}>
+                        Step-by-Step Shopify Manual Upload Instructions
+                      </h5>
+                      <ol className="flex flex-col gap-2.5 text-xs text-zinc-400 list-decimal pl-4">
+                        <li>
+                          Click the <strong style={{ color: '#eab308' }}>Download Shopify Theme ZIP</strong> button above to download the theme package.
+                        </li>
+                        <li>
+                          Log in to your <strong>Shopify Admin</strong> dashboard.
+                        </li>
+                        <li>
+                          In the left sidebar, navigate to <strong>Online Store</strong> &rarr; <strong>Themes</strong>.
+                        </li>
+                        <li>
+                          Scroll down to the <strong>Theme library</strong> section, click <strong>Add theme</strong>, and select <strong>Upload zip file</strong>.
+                        </li>
+                        <li>
+                          Select the downloaded <code className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">rootx-shopify-theme-*.zip</code> file and click <strong>Upload file</strong>.
+                        </li>
+                        <li>
+                          Once the theme is uploaded and installed, click <strong>Publish</strong> on the new theme block to make it live for your store visitors.
+                        </li>
+                      </ol>
+                    </div>
                   </div>
                 </div>
 
