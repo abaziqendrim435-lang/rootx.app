@@ -133,10 +133,10 @@ function generateTemplates(
       'hero-product': { type: 'hero-product', settings: {} },
       'product-benefits': { type: 'product-benefits', settings: {} },
       'image-with-text': { type: 'image-with-text', settings: {} },
-      'featured-product': { type: 'featured-product', settings: {} },
+      'product-specifications': { type: 'product-specifications', settings: {} },
       faq: { type: 'faq', settings: {} },
     },
-    order: ['hero-product', 'product-benefits', 'image-with-text', 'featured-product', 'faq'],
+    order: ['hero-product', 'product-benefits', 'image-with-text', 'product-specifications', 'faq'],
   } : {
     sections: {
       hero: { type: 'hero', settings: {} },
@@ -4222,7 +4222,7 @@ function generateHeroProductSection(
         </div>
 
         <!-- Add to cart form -->
-        {% form 'product', product %}
+        <form action="/cart/add" method="post" enctype="multipart/form-data" class="product-form">
           <div class="product-form-options">
             <!-- Dynamic variants if any -->
             {% if section.settings.variant_1_name != blank %}
@@ -4252,7 +4252,7 @@ function generateHeroProductSection(
               Add to Cart
             </button>
           </div>
-        {% endform %}
+        </form>
 
         <div class="trust-badges-wrapper">
           <p class="trust-title">{{ section.settings.trust_title }}</p>

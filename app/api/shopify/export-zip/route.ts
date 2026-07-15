@@ -195,6 +195,28 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      // Ensure index.json contains required sections
+      const sections = Object.values(indexJson.sections).map((s: any) => s.type);
+      const hasHero = sections.includes('hero') || sections.includes('hero-product');
+      const hasBenefits = sections.includes('product-benefits');
+      const hasImageWithText = sections.includes('image-with-text');
+      const hasSpecs = sections.includes('product-specifications');
+      const hasFaq = sections.includes('faq');
+
+      if (!hasHero || !hasBenefits || !hasImageWithText || !hasSpecs || !hasFaq) {
+        const missing = [];
+        if (!hasHero) missing.push('hero section (hero or hero-product)');
+        if (!hasBenefits) missing.push('product benefits (product-benefits)');
+        if (!hasImageWithText) missing.push('image/text section (image-with-text)');
+        if (!hasSpecs) missing.push('specifications (product-specifications)');
+        if (!hasFaq) missing.push('FAQ (faq)');
+
+        return NextResponse.json(
+          { error: `Validation Failed: index.json is missing required homepage sections: ${missing.join(', ')}` },
+          { status: 400 }
+        );
+      }
     }
 
     const heroProductLiquid = fileMap.get('sections/hero-product.liquid');

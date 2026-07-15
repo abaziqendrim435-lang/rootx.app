@@ -309,12 +309,29 @@ function validateTheme(files: any[], productName: string): string[] {
     }
   }
 
-  // 6. Verify settings and image URLs are present in index.json
+  // 6. Verify settings and image URLs are present in index.json, and homepage has required sections
   const indexJsonStr = fileMap.get('templates/index.json');
   if (indexJsonStr) {
     const indexJson = JSON.parse(indexJsonStr);
     if (!indexJson.sections || Object.keys(indexJson.sections).length === 0) {
       errors.push('index.json has no sections configured.');
+    }
+
+    const sections = Object.values(indexJson.sections).map((s: any) => s.type);
+    const hasHero = sections.includes('hero') || sections.includes('hero-product');
+    const hasBenefits = sections.includes('product-benefits');
+    const hasImageWithText = sections.includes('image-with-text');
+    const hasSpecs = sections.includes('product-specifications');
+    const hasFaq = sections.includes('faq');
+
+    if (!hasHero || !hasBenefits || !hasImageWithText || !hasSpecs || !hasFaq) {
+      const missing = [];
+      if (!hasHero) missing.push('hero section (hero or hero-product)');
+      if (!hasBenefits) missing.push('product benefits (product-benefits)');
+      if (!hasImageWithText) missing.push('image/text section (image-with-text)');
+      if (!hasSpecs) missing.push('specifications (product-specifications)');
+      if (!hasFaq) missing.push('FAQ (faq)');
+      errors.push(`index.json is missing required homepage sections: ${missing.join(', ')}`);
     }
   }
 
