@@ -107,6 +107,8 @@ function mapLucideToEmoji(icon: string): string {
 }
 
 export interface ProductProfile {
+  brandName: string;
+  brandSlogan: string;
   cleanTitle: string;
   cleanDescription: string;
   category: 'tech_futuristic' | 'soft_lifestyle' | 'bold_conversion' | 'modern_commerce' | 'luxury_editorial' | 'friendly_pet';
@@ -125,6 +127,76 @@ export interface ProductProfile {
   googleFontsUrl: string;
   buttonClass: string;
   shadowClass: string;
+}
+
+function generateBrandNameAndSlogan(businessName: string, category: string): { brandName: string; slogan: string } {
+  let clean = businessName.replace(/\s+Store$/i, '').trim();
+
+  // If title is already short, clean it up
+  const words = clean.split(/\s+/).filter(w => !w.match(/^(and|with|the|of|for|active|noise|cancelling|wireless|over|ear|rosewater|organic|hydrating|memory|foam|seat|cushion|ergonomic|massage|pro|mist|pure|glow|sound|aero|cushion|chair)$/i));
+  
+  let name = '';
+  if (words.length > 0 && words[0].length >= 3 && words[0].length <= 15) {
+    name = words[0];
+  } else {
+    name = clean.split(/\s+/).slice(0, 2).join(' ');
+  }
+
+  if (name.length > 18) {
+    name = name.substring(0, 18).trim();
+  }
+
+  name = name.replace(/[|_\-\[\]{}()]/g, '').trim();
+  name = name.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase());
+
+  let slogan = 'Elevating your daily experience.';
+  switch (category) {
+    case 'tech_futuristic':
+      slogan = 'Next-gen technology for modern life.';
+      break;
+    case 'soft_lifestyle':
+      slogan = 'Pure organic beauty from within.';
+      break;
+    case 'bold_conversion':
+      slogan = 'Unleash your ultimate performance.';
+      break;
+    case 'luxury_editorial':
+      slogan = 'Timeless elegance, crafted for you.';
+      break;
+    case 'friendly_pet':
+      slogan = 'Nurturing your pets with care and love.';
+      break;
+    case 'modern_commerce':
+    default:
+      slogan = 'Thoughtful design for comfortable spaces.';
+      break;
+  }
+
+  return { brandName: name, slogan };
+}
+
+function resolveCategoryColors(inputColor: string, category: string, role: 'primary' | 'secondary'): string {
+  const isDefaultBlue = !inputColor || inputColor.toLowerCase() === '#3b82f6' || inputColor.toLowerCase() === '#0000ff' || inputColor.toLowerCase() === '#000000';
+  
+  if (category === 'soft_lifestyle') {
+    if (isDefaultBlue) {
+      return role === 'primary' ? '#7c2d12' : '#fed7aa';
+    }
+  } else if (category === 'luxury_editorial') {
+    if (isDefaultBlue) {
+      return role === 'primary' ? '#1c1917' : '#d4af37';
+    }
+  } else if (category === 'friendly_pet') {
+    if (isDefaultBlue) {
+      return role === 'primary' ? '#f97316' : '#fef08a';
+    }
+  } else if (category === 'modern_commerce') {
+    if (isDefaultBlue) {
+      return role === 'primary' ? '#0f766e' : '#ccfbf1';
+    }
+  }
+  
+  return inputColor;
 }
 
 function cleanProductTitle(rawTitle: string, businessName: string): string {
@@ -208,13 +280,14 @@ function profileProduct(gen: WebsiteGeneration, input: WebsiteBuilderInput): Pro
     category = 'modern_commerce';
   }
 
+  const { brandName, slogan: brandSlogan } = generateBrandNameAndSlogan(input.businessName, category);
   const rawTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
   const cleanTitle = cleanProductTitle(rawTitle, input.businessName);
   const cleanDescription = cleanProductDescription(gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate comfort and performance.');
 
   // Default color palette setup
-  let primaryColor = input.primaryColor;
-  let secondaryColor = input.secondaryColor;
+  let primaryColor = resolveCategoryColors(input.primaryColor, category, 'primary');
+  let secondaryColor = resolveCategoryColors(input.secondaryColor, category, 'secondary');
   let accentColor = secondaryColor;
   let backgroundColor = '#ffffff';
   let surfaceColor = '#ffffff';
@@ -342,13 +415,15 @@ function profileProduct(gen: WebsiteGeneration, input: WebsiteBuilderInput): Pro
 
   // Preserve user custom color preferences
   if (input.primaryColor && input.primaryColor.startsWith('#') && input.primaryColor !== '#000000') {
-    primaryColor = input.primaryColor;
+    primaryColor = resolveCategoryColors(input.primaryColor, category, 'primary');
   }
   if (input.secondaryColor && input.secondaryColor.startsWith('#') && input.secondaryColor !== '#000000') {
-    secondaryColor = input.secondaryColor;
+    secondaryColor = resolveCategoryColors(input.secondaryColor, category, 'secondary');
   }
 
   return {
+    brandName,
+    brandSlogan,
     cleanTitle,
     cleanDescription,
     category,
@@ -781,6 +856,8 @@ function generateHeaderSection(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): string {
+  const profile = profileProduct(gen, input);
+
   return `<header class="site-header" data-section-id="{{ section.id }}" data-section-type="header">
   <div class="container header-inner">
     <a href="/" class="header-logo">
@@ -834,7 +911,7 @@ function generateHeaderSection(
       "type": "text",
       "id": "logo_text",
       "label": "Logo text",
-      "default": "${escJson(input.businessName)}"
+      "default": "${escJson(profile.brandName)}"
     },
     {
       "type": "link_list",
@@ -1344,40 +1421,36 @@ function generateTestimonialsSection(gen: WebsiteGeneration): string {
     quote: r.content,
     title: r.title,
     subtitle: r.date
-  })) ?? gen.testimonials.testimonials.map(t => ({
+  })) ?? gen.testimonials?.testimonials?.map(t => ({
     name: t.name,
     rating: t.rating,
     quote: t.quote,
     title: '',
     subtitle: `${t.role}${t.company ? ` at ${t.company}` : ''}`
-  }));
+  })) ?? [];
 
-  const heading = gen.ecommerce ? 'Customer Reviews' : gen.testimonials.title;
-  const subheading = gen.ecommerce ? 'Hear from our verified buyers' : gen.testimonials.subtitle;
+  const heading = gen.ecommerce ? 'Customer Reviews' : (gen.testimonials?.title ?? 'Customer Reviews');
+  const subheading = gen.ecommerce ? 'Hear from our verified buyers' : (gen.testimonials?.subtitle ?? 'Hear from our verified buyers');
 
-  const cards = reviews
-    .map(
-      (t) => `
-      <div class="testimonial-card">
-        <div class="testimonial-stars" style="color: #ffb800; font-size: 18px; margin-bottom: 10px;">
-          ${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}
-        </div>
-        {% if '${esc(t.title)}' != blank %}
-          <h4 class="testimonial-title" style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600; color: var(--text-primary);">${esc(t.title)}</h4>
-        {% endif %}
-        <blockquote class="testimonial-quote" style="font-style: italic; color: var(--text-secondary); margin-bottom: 15px;">"${esc(t.quote)}"</blockquote>
-        <div class="testimonial-author" style="display: flex; align-items: center; gap: 10px;">
-          <div class="testimonial-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">${t.name.charAt(0).toUpperCase()}</div>
-          <div class="testimonial-meta" style="display: flex; flex-direction: column; text-align: left;">
-            <strong class="testimonial-name" style="font-size: 14px; color: var(--text-primary);">${esc(t.name)}</strong>
-            <span class="testimonial-role" style="font-size: 12px; color: var(--text-muted);">${esc(t.subtitle)}</span>
-          </div>
-        </div>
-      </div>`
-    )
-    .join('\n');
+  const r1_author = reviews[0]?.name ?? 'Sarah M.';
+  const r1_title = reviews[0]?.title ?? 'Amazing Quality';
+  const r1_text = reviews[0]?.quote ?? 'This product exceeded all my expectations. Highly recommended!';
+  const r1_rating = reviews[0]?.rating ?? 5;
+  const r1_subtitle = reviews[0]?.subtitle ?? 'Verified Buyer';
 
-  return `<section class="testimonials-section" data-section-id="{{ section.id }}" data-section-type="testimonials">
+  const r2_author = reviews[1]?.name ?? 'James L.';
+  const r2_title = reviews[1]?.title ?? 'Fast Shipping & Great Value';
+  const r2_text = reviews[1]?.quote ?? 'Super quick shipping, and the product is exactly as described.';
+  const r2_rating = reviews[1]?.rating ?? 5;
+  const r2_subtitle = reviews[1]?.subtitle ?? 'Verified Buyer';
+
+  const r3_author = reviews[2]?.name ?? 'Emma K.';
+  const r3_title = reviews[2]?.title ?? 'Will buy again!';
+  const r3_text = reviews[2]?.quote ?? 'I am very pleased with this purchase. Customer service was excellent too.';
+  const r3_rating = reviews[2]?.rating ?? 5;
+  const r3_subtitle = reviews[2]?.subtitle ?? 'Verified Buyer';
+
+  return `<section class="testimonials-section section" data-section-id="{{ section.id }}" data-section-type="testimonials">
   <div class="container">
     <div class="section-header">
       <h2 class="section-title">{{ section.settings.heading }}</h2>
@@ -1387,7 +1460,77 @@ function generateTestimonialsSection(gen: WebsiteGeneration): string {
     </div>
 
     <div class="testimonials-grid">
-${cards}
+      {% if section.settings.review_1_text != blank %}
+        <div class="testimonial-card">
+          <div class="testimonial-stars">
+            {% assign r1 = section.settings.review_1_rating | plus: 0 %}
+            {% for i in (1..5) %}
+              {% if i <= r1 %}★{% else %}☆{% endif %}
+            {% endfor %}
+          </div>
+          {% if section.settings.review_1_title != blank %}
+            <h4 class="testimonial-title">{{ section.settings.review_1_title }}</h4>
+          {% endif %}
+          <blockquote class="testimonial-quote">"{{ section.settings.review_1_text }}"</blockquote>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">{{ section.settings.review_1_author | slice: 0 | upcase }}</div>
+            <div class="testimonial-meta">
+              <strong class="testimonial-name">{{ section.settings.review_1_author }}</strong>
+              {% if section.settings.review_1_subtitle != blank %}
+                <span class="testimonial-role">{{ section.settings.review_1_subtitle }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if section.settings.review_2_text != blank %}
+        <div class="testimonial-card">
+          <div class="testimonial-stars">
+            {% assign r2 = section.settings.review_2_rating | plus: 0 %}
+            {% for i in (1..5) %}
+              {% if i <= r2 %}★{% else %}☆{% endif %}
+            {% endfor %}
+          </div>
+          {% if section.settings.review_2_title != blank %}
+            <h4 class="testimonial-title">{{ section.settings.review_2_title }}</h4>
+          {% endif %}
+          <blockquote class="testimonial-quote">"{{ section.settings.review_2_text }}"</blockquote>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">{{ section.settings.review_2_author | slice: 0 | upcase }}</div>
+            <div class="testimonial-meta">
+              <strong class="testimonial-name">{{ section.settings.review_2_author }}</strong>
+              {% if section.settings.review_2_subtitle != blank %}
+                <span class="testimonial-role">{{ section.settings.review_2_subtitle }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if section.settings.review_3_text != blank %}
+        <div class="testimonial-card">
+          <div class="testimonial-stars">
+            {% assign r3 = section.settings.review_3_rating | plus: 0 %}
+            {% for i in (1..5) %}
+              {% if i <= r3 %}★{% else %}☆{% endif %}
+            {% endfor %}
+          </div>
+          {% if section.settings.review_3_title != blank %}
+            <h4 class="testimonial-title">{{ section.settings.review_3_title }}</h4>
+          {% endif %}
+          <blockquote class="testimonial-quote">"{{ section.settings.review_3_text }}"</blockquote>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">{{ section.settings.review_3_author | slice: 0 | upcase }}</div>
+            <div class="testimonial-meta">
+              <strong class="testimonial-name">{{ section.settings.review_3_author }}</strong>
+              {% if section.settings.review_3_subtitle != blank %}
+                <span class="testimonial-role">{{ section.settings.review_3_subtitle }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 </section>
@@ -1407,6 +1550,54 @@ ${cards}
       "id": "subheading",
       "label": "Subheading",
       "default": "${escJson(subheading)}"
+    },
+    {
+      "type": "header",
+      "content": "Review 1"
+    },
+    { "type": "text", "id": "review_1_author", "label": "Author", "default": "${escJson(r1_author)}" },
+    { "type": "text", "id": "review_1_subtitle", "label": "Subtitle", "default": "${escJson(r1_subtitle)}" },
+    { "type": "text", "id": "review_1_title", "label": "Title", "default": "${escJson(r1_title)}" },
+    { "type": "textarea", "id": "review_1_text", "label": "Review Text", "default": "${escJson(r1_text)}" },
+    { "type": "select", "id": "review_1_rating", "label": "Rating (1-5)", "default": "${r1_rating}", "options": [
+        { "value": "1", "label": "1 Star" },
+        { "value": "2", "label": "2 Stars" },
+        { "value": "3", "label": "3 Stars" },
+        { "value": "4", "label": "4 Stars" },
+        { "value": "5", "label": "5 Stars" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Review 2"
+    },
+    { "type": "text", "id": "review_2_author", "label": "Author", "default": "${escJson(r2_author)}" },
+    { "type": "text", "id": "review_2_subtitle", "label": "Subtitle", "default": "${escJson(r2_subtitle)}" },
+    { "type": "text", "id": "review_2_title", "label": "Title", "default": "${escJson(r2_title)}" },
+    { "type": "textarea", "id": "review_2_text", "label": "Review Text", "default": "${escJson(r2_text)}" },
+    { "type": "select", "id": "review_2_rating", "label": "Rating (1-5)", "default": "${r2_rating}", "options": [
+        { "value": "1", "label": "1 Star" },
+        { "value": "2", "label": "2 Stars" },
+        { "value": "3", "label": "3 Stars" },
+        { "value": "4", "label": "4 Stars" },
+        { "value": "5", "label": "5 Stars" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Review 3"
+    },
+    { "type": "text", "id": "review_3_author", "label": "Author", "default": "${escJson(r3_author)}" },
+    { "type": "text", "id": "review_3_subtitle", "label": "Subtitle", "default": "${escJson(r3_subtitle)}" },
+    { "type": "text", "id": "review_3_title", "label": "Title", "default": "${escJson(r3_title)}" },
+    { "type": "textarea", "id": "review_3_text", "label": "Review Text", "default": "${escJson(r3_text)}" },
+    { "type": "select", "id": "review_3_rating", "label": "Rating (1-5)", "default": "${r3_rating}", "options": [
+        { "value": "1", "label": "1 Star" },
+        { "value": "2", "label": "2 Stars" },
+        { "value": "3", "label": "3 Stars" },
+        { "value": "4", "label": "4 Stars" },
+        { "value": "5", "label": "5 Stars" }
+      ]
     }
   ],
   "presets": [
@@ -2992,15 +3183,25 @@ function generateSectionsCSS(input: WebsiteBuilderInput): string {
    ============================================================ */
 
 /* ── Header ────────────────────────────────────────────────── */
+/* ── Section Rhythm ── */
+.section {
+  padding: clamp(3.5rem, 8vw, 6rem) 0;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+}
+.section:nth-of-type(even) {
+  background-color: var(--bg-secondary);
+}
 
 .site-header {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
   border-bottom: 1px solid var(--border-color);
   backdrop-filter: blur(12px);
-  background: color-mix(in srgb, var(--bg-primary), transparent 5%);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all var(--transition);
 }
 
 .header-inner {
@@ -5038,7 +5239,7 @@ function generateImageWithTextSection(gen: WebsiteGeneration): string {
   return `<section class="image-with-text section" data-section-id="{{ section.id }}">
   <div class="container">
     <div class="image-with-text-grid {% if section.settings.layout == 'right' %}grid-reverse{% endif %}">
-      <div class="image-with-text-media">
+      <div class="image-with-text-media {% if section.settings.image_url == section.settings.fallback_image_url and section.settings.fallback_image_url != blank %}image-with-text-media--zoom-crop{% endif %}">
         {% if section.settings.image_url != blank %}
           <img src="{{ section.settings.image_url }}" alt="{{ section.settings.heading | escape }}" class="feature-image" />
         {% else %}
@@ -5065,6 +5266,7 @@ function generateImageWithTextSection(gen: WebsiteGeneration): string {
     { "type": "text", "id": "heading", "label": "Heading", "default": "${escJson(featureSections[0]?.title ?? 'Designed to Perfection')}" },
     { "type": "richtext", "id": "text", "label": "Text", "default": "<p>${escJson(featureSections[0]?.description ?? 'Experience the difference with our meticulously engineered product, built to fulfill all your expectations and more.')}</p>" },
     { "type": "text", "id": "image_url", "label": "Image URL", "default": "${escJson(featureSections[0]?.imageUrl ?? images[0] ?? '')}" },
+    { "type": "text", "id": "fallback_image_url", "label": "Fallback Base Image URL (for crop validation)", "default": "${escJson(images[0] ?? '')}" },
     { "type": "select", "id": "layout", "label": "Image alignment", "options": [
         { "value": "left", "label": "Left" },
         { "value": "right", "label": "Right" }
@@ -5649,6 +5851,155 @@ function generateEcommerceCSS(): string {
   text-transform: uppercase;
   flex-shrink: 0;
 }
-`;
+
+/* ── Fallback Zoom Crop ── */
+.image-with-text-media--zoom-crop {
+  overflow: hidden;
+  position: relative;
+}
+.image-with-text-media--zoom-crop img {
+  object-position: center 25% !important;
+  transform: scale(1.22);
+  filter: brightness(0.97) contrast(1.03);
 }
 
+/* ── Testimonials Card Polish ── */
+.testimonials-section {
+  background-color: var(--bg-secondary);
+}
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+.testimonial-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  padding: 2.5rem 2rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.testimonial-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+.testimonial-stars {
+  color: #ffb800;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+.testimonial-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+.testimonial-quote {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+  font-style: italic;
+  flex-grow: 1;
+}
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1.25rem;
+}
+.testimonial-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+.testimonial-meta {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+.testimonial-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.testimonial-role {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+/* ── FAQ Accordion Polish ── */
+.faq-section {
+  background-color: var(--bg-primary);
+}
+.faq-list {
+  max-width: 800px;
+  margin: 3rem auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.faq-item {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: var(--bg-secondary);
+  overflow: hidden;
+  transition: all var(--transition);
+}
+.faq-question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.faq-question:hover {
+  color: var(--primary);
+}
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease;
+  padding: 0 2rem;
+}
+.faq-question[aria-expanded="true"] + .faq-answer {
+  padding-bottom: 1.5rem;
+}
+.faq-answer p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.faq-chevron {
+  transition: transform var(--transition);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.faq-question[aria-expanded="true"] .faq-chevron {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+`;
+}
