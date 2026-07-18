@@ -21,6 +21,7 @@ const REQUIRED_FILES = [
   'sections/header.liquid',
   'sections/footer.liquid',
   'sections/hero-product.liquid',
+  'sections/trust-bar.liquid',
   'sections/product-gallery.liquid',
   'sections/product-benefits.liquid',
   'sections/product-specifications.liquid',

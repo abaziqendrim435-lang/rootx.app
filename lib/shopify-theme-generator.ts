@@ -106,24 +106,284 @@ function mapLucideToEmoji(icon: string): string {
   return mapping[key] ?? '✨';
 }
 
+export interface ProductProfile {
+  cleanTitle: string;
+  cleanDescription: string;
+  category: 'tech_futuristic' | 'soft_lifestyle' | 'bold_conversion' | 'modern_commerce' | 'luxury_editorial' | 'friendly_pet';
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  surfaceColor: string;
+  textColor: string;
+  textSecondaryColor: string;
+  borderColor: string;
+  borderRadius: string;
+  borderRadiusLg: string;
+  headingFont: string;
+  bodyFont: string;
+  googleFontsUrl: string;
+  buttonClass: string;
+  shadowClass: string;
+}
+
+function cleanProductTitle(rawTitle: string, businessName: string): string {
+  if (!rawTitle) return '';
+  let title = rawTitle;
+  if (businessName) {
+    const escapedBrand = businessName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    title = title.replace(new RegExp(escapedBrand, 'gi'), '');
+  }
+  const uselessWords = [
+    'aliexpress', 'dropship', 'dropshipping', 'supplier', 'retail', 'wholesale',
+    'hot selling', 'top quality', 'free shipping', 'fast shipping', '2026 new', '2025 new',
+    'factory price', 'oem', 'odm', 'brand new', 'original', 'genuine', 'high quality',
+    'best seller', 'trending', 'popular', 'premium', 'luxury', '100% new', 'new arrival'
+  ];
+  for (const word of uselessWords) {
+    title = title.replace(new RegExp(`\\b${word}\\b`, 'gi'), '');
+  }
+  title = title.replace(/[|_\-\[\]{}()]/g, ' ');
+  title = title.replace(/\s+/g, ' ').trim();
+
+  const words = title.split(' ');
+  const uniqueWords: string[] = [];
+  for (const word of words) {
+    if (word && !uniqueWords.some(w => w.toLowerCase() === word.toLowerCase())) {
+      uniqueWords.push(word);
+    }
+  }
+  title = uniqueWords.join(' ');
+
+  if (words.length > 5) {
+    title = uniqueWords.slice(0, 5).join(' ');
+  }
+
+  return title.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase());
+}
+
+function cleanProductDescription(rawDesc: string): string {
+  if (!rawDesc) return '';
+  let desc = rawDesc;
+  desc = desc.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  desc = desc.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  
+  const badPatterns = [
+    /shipping\b.*/gi,
+    /delivery\b.*/gi,
+    /aliExpress/gi,
+    /dropshipping/gi,
+    /china post/gi,
+    /epacket/gi,
+    /return policy/gi,
+    /refund\b.*/gi,
+    /tracking number/gi,
+    /wholesale/gi
+  ];
+  for (const pat of badPatterns) {
+    desc = desc.replace(pat, '');
+  }
+
+  desc = desc.replace(/&nbsp;/g, ' ');
+  desc = desc.replace(/\s+/g, ' ');
+  
+  return desc.trim();
+}
+
+function profileProduct(gen: WebsiteGeneration, input: WebsiteBuilderInput): ProductProfile {
+  const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText ?? ''}`.toLowerCase();
+  
+  let category: ProductProfile['category'] = 'modern_commerce';
+  if (textToScan.match(/headphone|earbud|gadget|charger|led|smartwatch|tech|electronic|wireless|device|computer|phone|cable/)) {
+    category = 'tech_futuristic';
+  } else if (textToScan.match(/rosewater|cosmetics|beauty|mist|skincare|cream|shampoo|organic|oil|wellness|serum|spa|facial|lotion/)) {
+    category = 'soft_lifestyle';
+  } else if (textToScan.match(/fitness|sport|gym|workout|activewear|resistance|muscle|athlete|running|shoes|yoga|dumbbells/)) {
+    category = 'bold_conversion';
+  } else if (textToScan.match(/jewelry|watch|perfume|leather|luxury|diamond|gold|premium|silk|handbag|ring|fashion/)) {
+    category = 'luxury_editorial';
+  } else if (textToScan.match(/pet|dog|cat|puppy|kitten|leash|collar|toy|veterinary/)) {
+    category = 'friendly_pet';
+  } else if (textToScan.match(/furniture|cushion|chair|home|garden|decor|kitchen|sofa|office|table/)) {
+    category = 'modern_commerce';
+  }
+
+  const rawTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
+  const cleanTitle = cleanProductTitle(rawTitle, input.businessName);
+  const cleanDescription = cleanProductDescription(gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate comfort and performance.');
+
+  // Default color palette setup
+  let primaryColor = input.primaryColor;
+  let secondaryColor = input.secondaryColor;
+  let accentColor = secondaryColor;
+  let backgroundColor = '#ffffff';
+  let surfaceColor = '#ffffff';
+  let textColor = '#1a1a1a';
+  let textSecondaryColor = '#4b5563';
+  let borderColor = '#e5e7eb';
+  let borderRadius = '8px';
+  let borderRadiusLg = '16px';
+  let headingFont = 'Outfit';
+  let bodyFont = 'Inter';
+  let googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700;800&display=swap';
+  let buttonClass = 'btn-rounded';
+  let shadowClass = 'shadow-md';
+
+  switch (category) {
+    case 'tech_futuristic':
+      headingFont = 'Outfit';
+      bodyFont = 'Plus Jakarta Sans';
+      googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap';
+      primaryColor = '#3b82f6';
+      secondaryColor = '#6366f1';
+      accentColor = '#f43f5e';
+      backgroundColor = '#0b0f19';
+      surfaceColor = '#161e2e';
+      textColor = '#f8fafc';
+      textSecondaryColor = '#94a3b8';
+      borderColor = '#334155';
+      borderRadius = '6px';
+      borderRadiusLg = '12px';
+      buttonClass = 'btn-tech';
+      shadowClass = 'shadow-neon';
+      break;
+
+    case 'soft_lifestyle':
+      headingFont = 'Playfair Display';
+      bodyFont = 'Inter';
+      googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap';
+      primaryColor = '#7c2d12';
+      secondaryColor = '#fed7aa';
+      accentColor = '#c2410c';
+      backgroundColor = '#fdfbf7';
+      surfaceColor = '#ffffff';
+      textColor = '#2c1e11';
+      textSecondaryColor = '#6f5e53';
+      borderColor = '#f3eae1';
+      borderRadius = '16px';
+      borderRadiusLg = '32px';
+      buttonClass = 'btn-pill';
+      shadowClass = 'shadow-soft';
+      break;
+
+    case 'bold_conversion':
+      headingFont = 'Montserrat';
+      bodyFont = 'Inter';
+      googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap';
+      primaryColor = '#dc2626';
+      secondaryColor = '#111827';
+      accentColor = '#ea580c';
+      backgroundColor = '#ffffff';
+      surfaceColor = '#f9fafb';
+      textColor = '#111827';
+      textSecondaryColor = '#4b5563';
+      borderColor = '#e5e7eb';
+      borderRadius = '8px';
+      borderRadiusLg = '16px';
+      buttonClass = 'btn-sharp-bold';
+      shadowClass = 'shadow-flat';
+      break;
+
+    case 'luxury_editorial':
+      headingFont = 'Cormorant Garamond';
+      bodyFont = 'Montserrat';
+      googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400&family=Montserrat:wght@400;500;600&display=swap';
+      primaryColor = '#1c1917';
+      secondaryColor = '#d4af37';
+      accentColor = '#78716c';
+      backgroundColor = '#fafaf9';
+      surfaceColor = '#ffffff';
+      textColor = '#1c1917';
+      textSecondaryColor = '#57534e';
+      borderColor = '#e7e5e4';
+      borderRadius = '0px';
+      borderRadiusLg = '0px';
+      buttonClass = 'btn-minimal-sharp';
+      shadowClass = 'shadow-none';
+      break;
+
+    case 'friendly_pet':
+      headingFont = 'Fredoka';
+      bodyFont = 'Quicksand';
+      googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Quicksand:wght@500;600;700&display=swap';
+      primaryColor = '#f97316';
+      secondaryColor = '#fef08a';
+      accentColor = '#10b981';
+      backgroundColor = '#fafaf5';
+      surfaceColor = '#ffffff';
+      textColor = '#431407';
+      textSecondaryColor = '#7c2d12';
+      borderColor = '#f0ebe1';
+      borderRadius = '24px';
+      borderRadiusLg = '48px';
+      buttonClass = 'btn-bubbly';
+      shadowClass = 'shadow-cute';
+      break;
+
+    case 'modern_commerce':
+    default:
+      headingFont = 'Outfit';
+      bodyFont = 'Plus Jakarta Sans';
+      googleFontsUrl = 'https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap';
+      primaryColor = '#0f766e';
+      secondaryColor = '#ccfbf1';
+      accentColor = '#0d9488';
+      backgroundColor = '#fcfdfd';
+      surfaceColor = '#ffffff';
+      textColor = '#0f172a';
+      textSecondaryColor = '#475569';
+      borderColor = '#e2e8f0';
+      borderRadius = '12px';
+      borderRadiusLg = '24px';
+      buttonClass = 'btn-rounded-modern';
+      shadowClass = 'shadow-clean';
+      break;
+  }
+
+  // Preserve user custom color preferences
+  if (input.primaryColor && input.primaryColor.startsWith('#') && input.primaryColor !== '#000000') {
+    primaryColor = input.primaryColor;
+  }
+  if (input.secondaryColor && input.secondaryColor.startsWith('#') && input.secondaryColor !== '#000000') {
+    secondaryColor = input.secondaryColor;
+  }
+
+  return {
+    cleanTitle,
+    cleanDescription,
+    category,
+    primaryColor,
+    secondaryColor,
+    accentColor,
+    backgroundColor,
+    surfaceColor,
+    textColor,
+    textSecondaryColor,
+    borderColor,
+    borderRadius,
+    borderRadiusLg,
+    headingFont,
+    bodyFont,
+    googleFontsUrl,
+    buttonClass,
+    shadowClass
+  };
+}
+
 // ── Layout ────────────────────────────────────────────────────
 
 function generateLayout(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): ShopifyThemeFile[] {
-  const { typography, colorPalette } = gen.branding;
-  const primaryColor = colorPalette.find((c) => c.name.toLowerCase() === 'primary')?.hex ?? input.primaryColor;
-  const secondaryColor = colorPalette.find((c) => c.name.toLowerCase() === 'secondary')?.hex ?? input.secondaryColor;
-  const accentColor = colorPalette.find((c) => c.name.toLowerCase().includes('accent'))?.hex ?? secondaryColor;
-  const resolvedStyle = gen.ecommerce?.preferredStyle ?? input.preferredStyle;
+  const profile = profileProduct(gen, input);
 
   const themeLayout = `<!doctype html>
 <html class="no-js" lang="{{ request.locale.iso_code }}">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 
   <title>{{ page_title }}{% unless page_title contains shop.name %} — {{ shop.name }}{% endunless %}</title>
 
@@ -135,21 +395,28 @@ function generateLayout(
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="${typography.googleFontsUrl}" rel="stylesheet">
+  <link href="${profile.googleFontsUrl}" rel="stylesheet">
 
   {{ 'theme.css' | asset_url | stylesheet_tag }}
 
   <style>
     :root {
-      --primary: ${primaryColor};
-      --secondary: ${secondaryColor};
-      --accent: ${accentColor};
-      --font-heading: '${typography.heading}', sans-serif;
-      --font-body: '${typography.body}', sans-serif;
+      --primary: ${profile.primaryColor};
+      --secondary: ${profile.secondaryColor};
+      --accent: ${profile.accentColor};
+      --bg-primary: ${profile.backgroundColor};
+      --bg-secondary: ${profile.surfaceColor};
+      --text-primary: ${profile.textColor};
+      --text-secondary: ${profile.textSecondaryColor};
+      --border-color: ${profile.borderColor};
+      --border-radius: ${profile.borderRadius};
+      --border-radius-lg: ${profile.borderRadiusLg};
+      --font-heading: '${profile.headingFont}', sans-serif;
+      --font-body: '${profile.bodyFont}', sans-serif;
     }
   </style>
 </head>
-<body class="template-{{ template | replace: '.', '-' }} style-${resolvedStyle}">
+<body class="template-{{ template | replace: '.', '-' }} style-${profile.category}">
   <a class="skip-to-content" href="#MainContent">{{ 'general.skip_to_content' | t }}</a>
 
   {% section 'header' %}
@@ -201,6 +468,14 @@ function generateTemplates(
           badge_2: gen.ecommerce?.trustBadges?.[1] ?? 'Free Worldwide Shipping',
           badge_3: gen.ecommerce?.trustBadges?.[2] ?? 'Secure SSL Encrypted Checkout',
           shipping_text: gen.ecommerce?.shippingText ?? 'Free shipping on all orders this week!'
+        }
+      },
+      'trust-bar': {
+        type: 'trust-bar',
+        settings: {
+          badge_1: gen.ecommerce?.trustBadges?.[0] ?? '30-Day Money Back Guarantee',
+          badge_2: gen.ecommerce?.trustBadges?.[1] ?? 'Free Worldwide Shipping',
+          badge_3: gen.ecommerce?.trustBadges?.[2] ?? 'Secure SSL Encrypted Checkout'
         }
       },
       'product-benefits': {
@@ -286,7 +561,7 @@ function generateTemplates(
         }
       }
     },
-    order: ['hero-product', 'product-benefits', 'image-with-text-1', 'image-with-text-2', 'product-specifications', 'testimonials', 'faq'],
+    order: ['hero-product', 'trust-bar', 'product-benefits', 'image-with-text-1', 'image-with-text-2', 'product-specifications', 'testimonials', 'faq'],
   } : {
     sections: {
       hero: { type: 'hero', settings: {} },
@@ -476,6 +751,7 @@ function generateSections(
     file('sections/header.liquid', generateHeaderSection(gen, input)),
     file('sections/footer.liquid', generateFooterSection(gen, input)),
     file('sections/hero.liquid', generateHeroSection(gen, input)),
+    file('sections/trust-bar.liquid', generateTrustBarSection(gen, input)),
     file('sections/featured-collection.liquid', generateFeaturedCollectionSection()),
     file('sections/rich-text.liquid', generateRichTextSection()),
     file('sections/contact-form.liquid', generateContactFormSection(gen)),
@@ -4387,14 +4663,64 @@ function generateLocales(
   return [file('locales/en.default.json', JSON.stringify(locale, null, 2))];
 }
 
+function generateTrustBarSection(gen: WebsiteGeneration, input: WebsiteBuilderInput): string {
+  const badge1 = gen.ecommerce?.trustBadges?.[0] ?? '30-Day Money Back Guarantee';
+  const badge2 = gen.ecommerce?.trustBadges?.[1] ?? 'Free Worldwide Shipping';
+  const badge3 = gen.ecommerce?.trustBadges?.[2] ?? 'Secure SSL Encrypted Checkout';
+  
+  return `<section class="trust-bar section" data-section-id="{{ section.id }}">
+  <div class="container">
+    <div class="trust-bar-inner">
+      <div class="trust-bar-item">
+        <svg class="trust-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span class="trust-text">{{ section.settings.badge_1 }}</span>
+      </div>
+      <div class="trust-bar-item">
+        <svg class="trust-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="3" width="15" height="13"></rect>
+          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+          <circle cx="5.5" cy="18.5" r="2.5"></circle>
+          <circle cx="18.5" cy="18.5" r="2.5"></circle>
+        </svg>
+        <span class="trust-text">{{ section.settings.badge_2 }}</span>
+      </div>
+      <div class="trust-bar-item">
+        <svg class="trust-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <span class="trust-text">{{ section.settings.badge_3 }}</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Trust Bar",
+  "settings": [
+    { "type": "text", "id": "badge_1", "label": "Badge 1", "default": "${escJson(badge1)}" },
+    { "type": "text", "id": "badge_2", "label": "Badge 2", "default": "${escJson(badge2)}" },
+    { "type": "text", "id": "badge_3", "label": "Badge 3", "default": "${escJson(badge3)}" }
+  ],
+  "presets": [
+    {
+      "name": "Trust Bar"
+    }
+  ]
+}
+{% endschema %}`;
+}
+
 // ── New Ecommerce / Dropshipping Sections ──────────────────────
 
 function generateHeroProductSection(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): string {
-  const productTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
-  const productDescription = gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate performance and comfort.';
+  const profile = profileProduct(gen, input);
   const price = gen.ecommerce?.price || '29.99';
   const compareAtPrice = gen.ecommerce?.compareAtPrice || '49.99';
   const images = gen.ecommerce?.images || [];
@@ -4406,7 +4732,7 @@ function generateHeroProductSection(
       <div class="hero-product-media">
         <div class="main-image-container">
           {% if section.settings.image_1 != blank %}
-            <img id="HeroProductMainImage" src="{{ section.settings.image_1 }}" alt="{{ section.settings.title }}" class="main-product-image" />
+            <img id="HeroProductMainImage" src="{{ section.settings.image_1 }}" alt="{{ section.settings.title | escape }}" class="main-product-image" />
           {% else %}
             {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
           {% endif %}
@@ -4500,16 +4826,32 @@ function generateHeroProductSection(
       </div>
     </div>
   </div>
+
+  <!-- Sticky Mobile Add to Cart Bar -->
+  <div class="sticky-buybox">
+    <div class="sticky-buybox-left">
+      {% if section.settings.image_1 != blank %}
+        <img src="{{ section.settings.image_1 }}" alt="{{ section.settings.title | escape }}" class="sticky-buybox-img" />
+      {% endif %}
+      <div class="sticky-buybox-meta">
+        <span class="sticky-buybox-title">{{ section.settings.title }}</span>
+        <span class="sticky-buybox-price">$ {{ section.settings.price }}</span>
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary sticky-buybox-btn" onclick="document.querySelector('.product-form-buttons button[type=submit]').click();">
+      Add to Cart
+    </button>
+  </div>
 </section>
 
 {% schema %}
 {
   "name": "Hero Product",
   "settings": [
-    { "type": "text", "id": "title", "label": "Product Title", "default": "${escJson(productTitle)}" },
+    { "type": "text", "id": "title", "label": "Product Title", "default": "${escJson(profile.cleanTitle)}" },
     { "type": "text", "id": "price", "label": "Price", "default": "${escJson(price)}" },
     { "type": "text", "id": "compare_at_price", "label": "Compare at Price", "default": "${escJson(compareAtPrice)}" },
-    { "type": "richtext", "id": "description", "label": "Product Description", "default": "<p>${escJson(productDescription)}</p>" },
+    { "type": "richtext", "id": "description", "label": "Product Description", "default": "<p>${escJson(profile.cleanDescription)}</p>" },
     { "type": "text", "id": "image_1", "label": "Product Image 1 (URL)", "default": "${escJson(images[0] ?? '')}" },
     { "type": "text", "id": "image_2", "label": "Product Image 2 (URL)", "default": "${escJson(images[1] ?? '')}" },
     { "type": "text", "id": "image_3", "label": "Product Image 3 (URL)", "default": "${escJson(images[2] ?? '')}" },
@@ -4743,8 +5085,7 @@ function generateFeaturedProductSection(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): string {
-  const productTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
-  const productDescription = gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate performance and comfort.';
+  const profile = profileProduct(gen, input);
   const price = gen.ecommerce?.price || '29.99';
   const compareAtPrice = gen.ecommerce?.compareAtPrice || '49.99';
   const images = gen.ecommerce?.images || [];
@@ -4779,10 +5120,10 @@ function generateFeaturedProductSection(
 {
   "name": "Featured Product",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Product Title", "default": "${escJson(productTitle)}" },
+    { "type": "text", "id": "heading", "label": "Product Title", "default": "${escJson(profile.cleanTitle)}" },
     { "type": "text", "id": "price", "label": "Price", "default": "${escJson(price)}" },
     { "type": "text", "id": "compare_at_price", "label": "Compare at Price", "default": "${escJson(compareAtPrice)}" },
-    { "type": "textarea", "id": "description", "label": "Short Description", "default": "${escJson(productDescription.slice(0, 160) + '...')}" },
+    { "type": "textarea", "id": "description", "label": "Short Description", "default": "${escJson(profile.cleanDescription.slice(0, 160) + '...')}" },
     { "type": "text", "id": "image_url", "label": "Product Image URL", "default": "${escJson(images[0] ?? '')}" },
     { "type": "text", "id": "product_handle", "label": "Product Handle", "default": "main-product" }
   ],
@@ -4800,224 +5141,514 @@ function generateEcommerceCSS(): string {
    RootX Theme — Ecommerce & New Sections Stylesheet
    ============================================================ */
 
+/* ── Trust Bar ── */
+.trust-bar {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1.5rem 0;
+}
+.trust-bar-inner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: center;
+}
+.trust-bar-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
+.trust-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.trust-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 /* ── Hero Product Section ── */
 .hero-product {
-  padding: 60px 0;
-  background: var(--color-bg, #ffffff);
+  padding: clamp(3rem, 8vw, 6rem) 0;
+  background: var(--bg-primary);
 }
 .hero-product-inner {
-  max-width: 1200px;
+  max-width: var(--container-max);
   margin: 0 auto;
-  padding: 0 20px;
 }
 .hero-product-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr));
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: start;
 }
-@media (max-width: 768px) {
+@media (max-width: 480px) {
   .hero-product-grid {
     grid-template-columns: 1fr;
   }
 }
 .main-image-container {
-  border: 1px solid var(--color-border, #e5e5e5);
-  border-radius: 8px;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
   overflow: hidden;
-  margin-bottom: 15px;
-  background: #fff;
+  background: var(--bg-secondary);
 }
 .main-product-image {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: auto;
-  display: block;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-slow);
 }
 .thumbnail-images {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  margin-top: 15px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
 }
 .thumbnail-item {
-  width: 80px;
-  height: 80px;
-  border: 1px solid var(--color-border, #e5e5e5);
-  border-radius: 4px;
+  flex: 0 0 75px;
+  height: 75px;
+  border: 2px solid transparent;
+  border-radius: var(--border-radius);
   overflow: hidden;
   cursor: pointer;
-  background: #fff;
+  background: var(--bg-secondary);
+  transition: all var(--transition);
 }
 .thumbnail-item.active {
-  border-color: var(--primary, #000);
-  box-shadow: 0 0 0 1px var(--primary, #000);
+  border-color: var(--primary);
 }
 .thumbnail-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+.hero-product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.product-title {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  color: var(--text-primary);
+  margin: 0;
+}
 .product-price-wrapper {
-  margin: 15px 0;
   display: flex;
   align-items: center;
   gap: 15px;
 }
 .price-current {
-  font-size: 24px;
-  font-weight: bold;
-  color: var(--primary, #000);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--primary);
 }
 .price-compare {
-  font-size: 18px;
+  font-size: 1.25rem;
   text-decoration: line-through;
-  color: #888;
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 .badge-sale {
-  background: #e11d48;
+  background: var(--accent, #e11d48);
   color: #fff;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: bold;
-  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 999px;
+  text-transform: uppercase;
 }
-.quantity-input-wrapper {
+.product-description {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.product-form {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 15px 0;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--border-color);
 }
-.qty-input {
-  width: 60px;
-  text-align: center;
-  padding: 8px;
-  border: 1px solid var(--color-border, #e5e5e5);
+.option-label, .quantity-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
 }
-.qty-btn {
-  background: #f3f4f6;
-  border: 1px solid var(--color-border, #e5e5e5);
-  padding: 8px 12px;
+.option-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
   cursor: pointer;
 }
-.product-form-buttons {
-  margin-top: 20px;
+.quantity-input-wrapper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+.qty-btn {
+  background: transparent;
+  border: none;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qty-btn:hover {
+  background: var(--bg-secondary);
+}
+.qty-input {
+  width: 50px;
+  height: 40px;
+  text-align: center;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.btn-add-to-cart {
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  font-weight: 700;
 }
 .trust-badges-wrapper {
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid var(--color-border, #e5e5e5);
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+.trust-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
 }
 .trust-badges-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
-  margin-top: 10px;
+  gap: 10px;
 }
 .trust-badge-item {
-  font-size: 12px;
-  color: #555;
-  background: #f9fafb;
-  padding: 6px 12px;
-  border-radius: 12px;
-  border: 1px solid #f3f4f6;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+}
+.shipping-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── Product Gallery Section ── */
+.product-gallery {
+  padding: clamp(3rem, 6vw, 5rem) 0;
+}
 .product-gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-  margin-top: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 24px;
 }
 .gallery-item {
-  border-radius: 8px;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--border-radius-lg);
   overflow: hidden;
-  border: 1px solid var(--color-border, #e5e5e5);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 .gallery-image {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform var(--transition-slow);
+}
+.gallery-item:hover .gallery-image {
+  transform: scale(1.03);
 }
 
 /* ── Product Benefits Section ── */
+.product-benefits {
+  padding: clamp(3rem, 6vw, 5rem) 0;
+  background: var(--bg-secondary);
+}
 .benefits-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 30px;
-  margin-top: 30px;
-}
-@media (max-width: 768px) {
-  .benefits-grid {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
 }
 .benefit-card {
-  padding: 25px;
-  background: #f9fafb;
-  border-radius: 8px;
+  padding: 2.5rem 2rem;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
   text-align: center;
-  border: 1px solid #f3f4f6;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.benefit-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-lg);
 }
 .benefit-icon {
-  font-size: 32px;
-  margin-bottom: 15px;
+  font-size: 2.5rem;
+  margin-bottom: 1.25rem;
+}
+.benefit-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+.benefit-desc {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 /* ── Specifications Section ── */
+.product-specifications {
+  padding: clamp(3rem, 6vw, 5rem) 0;
+}
 .specifications-table-wrapper {
   max-width: 800px;
-  margin: 30px auto 0;
+  margin: 2rem auto 0;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
 }
 .specifications-table {
   width: 100%;
   border-collapse: collapse;
 }
+.specifications-table tr {
+  border-bottom: 1px solid var(--border-color);
+}
+.specifications-table tr:last-child {
+  border-bottom: none;
+}
 .specifications-table td {
-  padding: 12px 15px;
-  border-bottom: 1px solid var(--color-border, #e5e5e5);
+  padding: 1rem 1.5rem;
+  font-size: 0.95rem;
 }
 .specifications-table tr:nth-child(even) {
-  background: #f9fafb;
+  background: var(--bg-secondary);
 }
 .spec-label {
-  font-weight: bold;
-  color: #333;
+  font-weight: 700;
+  color: var(--text-primary);
+  width: 40%;
+}
+.spec-value {
+  color: var(--text-secondary);
 }
 
 /* ── Image With Text Section ── */
+.image-with-text {
+  padding: clamp(3rem, 8vw, 6rem) 0;
+}
 .image-with-text-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr));
+  gap: clamp(2rem, 5vw, 4rem);
   align-items: center;
 }
-@media (max-width: 768px) {
-  .image-with-text-grid.grid-reverse {
-    display: flex;
-    flex-direction: column-reverse;
-  }
+@media (max-width: 480px) {
   .image-with-text-grid {
     grid-template-columns: 1fr;
   }
 }
-.feature-image {
+.image-with-text-media {
+  position: relative;
   width: 100%;
-  border-radius: 8px;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+.feature-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.image-with-text-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  text-align: left;
+}
+.feature-heading {
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  color: var(--text-primary);
+  margin: 0;
+}
+.feature-desc {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  line-height: 1.7;
 }
 
 /* ── Featured Product Section ── */
+.featured-product {
+  padding: clamp(3rem, 6vw, 5rem) 0;
+}
 .featured-product-grid {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr));
+  gap: clamp(2rem, 5vw, 4rem);
   align-items: center;
 }
-@media (max-width: 768px) {
+@media (max-width: 480px) {
   .featured-product-grid {
     grid-template-columns: 1fr;
   }
 }
-.featured-product-image {
+.featured-product-media {
+  position: relative;
   width: 100%;
-  border-radius: 8px;
-}`;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+.featured-product-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.featured-product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  align-items: start;
+}
+.featured-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--primary);
+  background: var(--secondary);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+/* ── Sticky Mobile Add to Cart Bar ── */
+.sticky-buybox {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  padding: 10px 16px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  z-index: 999;
+  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.05);
+}
+@media (max-width: 768px) {
+  .sticky-buybox {
+    display: flex;
+  }
+  body {
+    padding-bottom: 70px;
+  }
+}
+.sticky-buybox-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.sticky-buybox-img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.sticky-buybox-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sticky-buybox-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sticky-buybox-price {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.sticky-buybox-btn {
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+`;
 }
 
