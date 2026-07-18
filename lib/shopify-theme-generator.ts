@@ -61,6 +61,51 @@ function file(key: string, value: string): ShopifyThemeFile {
   return { key, value };
 }
 
+function mapLucideToEmoji(icon: string): string {
+  const mapping: Record<string, string> = {
+    star: '⭐',
+    gem: '💎',
+    shield: '🛡️',
+    checkcircle: '✅',
+    check: '✅',
+    truck: '🚚',
+    heart: '❤️',
+    thumbsup: '👍',
+    clock: '🕒',
+    zap: '⚡',
+    activity: '📈',
+    award: '🏆',
+    gift: '🎁',
+    lock: '🔒',
+    refreshcw: '🔄',
+    rotateccw: '🔄',
+    shoppingcart: '🛒',
+    package: '📦',
+    headphones: '🎧',
+    info: 'ℹ️',
+    sparkles: '✨',
+    feather: '🪶',
+    smile: '😊',
+    target: '🎯',
+    trendingup: '📈',
+    flame: '🔥',
+    moon: '🌙',
+    sun: '☀️',
+    coffee: '☕',
+    home: '🏠',
+    mappin: '📍',
+    mail: '✉️',
+    phone: '📞',
+    globe: '🌐',
+    key: '🔑',
+    search: '🔍',
+    settings: '⚙️',
+    tool: '🔧',
+  };
+  const key = icon.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return mapping[key] ?? '✨';
+}
+
 // ── Layout ────────────────────────────────────────────────────
 
 function generateLayout(
@@ -68,7 +113,10 @@ function generateLayout(
   input: WebsiteBuilderInput
 ): ShopifyThemeFile[] {
   const { typography, colorPalette } = gen.branding;
-  const accentColor = colorPalette.find((c) => c.name.toLowerCase().includes('accent'))?.hex ?? input.primaryColor;
+  const primaryColor = colorPalette.find((c) => c.name.toLowerCase() === 'primary')?.hex ?? input.primaryColor;
+  const secondaryColor = colorPalette.find((c) => c.name.toLowerCase() === 'secondary')?.hex ?? input.secondaryColor;
+  const accentColor = colorPalette.find((c) => c.name.toLowerCase().includes('accent'))?.hex ?? secondaryColor;
+  const resolvedStyle = gen.ecommerce?.preferredStyle ?? input.preferredStyle;
 
   const themeLayout = `<!doctype html>
 <html class="no-js" lang="{{ request.locale.iso_code }}">
@@ -93,15 +141,15 @@ function generateLayout(
 
   <style>
     :root {
-      --primary: ${input.primaryColor};
-      --secondary: ${input.secondaryColor};
+      --primary: ${primaryColor};
+      --secondary: ${secondaryColor};
       --accent: ${accentColor};
       --font-heading: '${typography.heading}', sans-serif;
       --font-body: '${typography.body}', sans-serif;
     }
   </style>
 </head>
-<body class="template-{{ template | replace: '.', '-' }} style-${input.preferredStyle}">
+<body class="template-{{ template | replace: '.', '-' }} style-${resolvedStyle}">
   <a class="skip-to-content" href="#MainContent">{{ 'general.skip_to_content' | t }}</a>
 
   {% section 'header' %}
@@ -123,20 +171,122 @@ function generateLayout(
 
 function generateTemplates(
   gen: WebsiteGeneration,
-  _input: WebsiteBuilderInput
+  input: WebsiteBuilderInput
 ): ShopifyThemeFile[] {
   const t = (key: string, value: object) => file(key, JSON.stringify(value, null, 2));
+
+  const productTitle = gen.ecommerce ? input.businessName.replace(/\s+Store$/i, '') : input.businessName;
+  const productDescription = gen.ecommerce?.shippingText || gen.about.content || 'Premium product designed for ultimate performance and comfort.';
+  const price = gen.ecommerce?.price || '29.99';
+  const compareAtPrice = gen.ecommerce?.compareAtPrice || '49.99';
+  const images = gen.ecommerce?.images || [];
 
   // Determine index page templates based on store type
   const indexTemplate = gen.ecommerce ? {
     sections: {
-      'hero-product': { type: 'hero-product', settings: {} },
-      'product-benefits': { type: 'product-benefits', settings: {} },
-      'image-with-text': { type: 'image-with-text', settings: {} },
-      'product-specifications': { type: 'product-specifications', settings: {} },
-      faq: { type: 'faq', settings: {} },
+      'hero-product': {
+        type: 'hero-product',
+        settings: {
+          title: productTitle,
+          price: price,
+          compare_at_price: compareAtPrice,
+          description: `<p>${productDescription}</p>`,
+          image_1: images[0] ?? '',
+          image_2: images[1] ?? '',
+          image_3: images[2] ?? '',
+          variant_1_name: gen.ecommerce?.variants?.[0]?.name ?? '',
+          variant_1_values: gen.ecommerce?.variants?.[0]?.values?.join(', ') ?? '',
+          trust_title: 'Guaranteed Safe Checkout',
+          badge_1: gen.ecommerce?.trustBadges?.[0] ?? '30-Day Money Back Guarantee',
+          badge_2: gen.ecommerce?.trustBadges?.[1] ?? 'Free Worldwide Shipping',
+          badge_3: gen.ecommerce?.trustBadges?.[2] ?? 'Secure SSL Encrypted Checkout',
+          shipping_text: gen.ecommerce?.shippingText ?? 'Free shipping on all orders this week!'
+        }
+      },
+      'product-benefits': {
+        type: 'product-benefits',
+        settings: {
+          heading: 'Why Choose Us',
+          benefit_1_icon: gen.homepage.features?.[0]?.icon ? mapLucideToEmoji(gen.homepage.features[0].icon) : '✨',
+          benefit_1_title: gen.homepage.features?.[0]?.title ?? 'Premium Quality',
+          benefit_1_desc: gen.homepage.features?.[0]?.description ?? '',
+          benefit_2_icon: gen.homepage.features?.[1]?.icon ? mapLucideToEmoji(gen.homepage.features[1].icon) : '⚡',
+          benefit_2_title: gen.homepage.features?.[1]?.title ?? 'Modern Design',
+          benefit_2_desc: gen.homepage.features?.[1]?.description ?? '',
+          benefit_3_icon: gen.homepage.features?.[2]?.icon ? mapLucideToEmoji(gen.homepage.features[2].icon) : '🛡️',
+          benefit_3_title: gen.homepage.features?.[2]?.title ?? '30-Day Guarantee',
+          benefit_3_desc: gen.homepage.features?.[2]?.description ?? '',
+          benefit_4_icon: gen.homepage.features?.[3]?.icon ? mapLucideToEmoji(gen.homepage.features[3].icon) : '💎',
+          benefit_4_title: gen.homepage.features?.[3]?.title ?? 'Exceptional Performance',
+          benefit_4_desc: gen.homepage.features?.[3]?.description ?? '',
+          benefit_5_icon: gen.homepage.features?.[4]?.icon ? mapLucideToEmoji(gen.homepage.features[4].icon) : '🔄',
+          benefit_5_title: gen.homepage.features?.[4]?.title ?? 'Easy Returns',
+          benefit_5_desc: gen.homepage.features?.[4]?.description ?? '',
+          benefit_6_icon: gen.homepage.features?.[5]?.icon ? mapLucideToEmoji(gen.homepage.features[5].icon) : '👍',
+          benefit_6_title: gen.homepage.features?.[5]?.title ?? 'Customer Support',
+          benefit_6_desc: gen.homepage.features?.[5]?.description ?? ''
+        }
+      },
+      'image-with-text-1': {
+        type: 'image-with-text',
+        settings: {
+          heading: gen.ecommerce?.featureSections?.[0]?.title ?? 'Designed to Perfection',
+          text: `<p>${gen.ecommerce?.featureSections?.[0]?.description ?? 'Experience the difference with our meticulously engineered product.'}</p>`,
+          image_url: gen.ecommerce?.featureSections?.[0]?.imageUrl ?? images[0] ?? '',
+          layout: 'left',
+          button_label: 'Learn More',
+          button_link: '/collections/all'
+        }
+      },
+      'image-with-text-2': {
+        type: 'image-with-text',
+        settings: {
+          heading: gen.ecommerce?.featureSections?.[1]?.title ?? 'Premium Quality Materials',
+          text: `<p>${gen.ecommerce?.featureSections?.[1]?.description ?? 'Our product is made from premium materials designed to last.'}</p>`,
+          image_url: gen.ecommerce?.featureSections?.[1]?.imageUrl ?? images[1] ?? images[0] ?? '',
+          layout: 'right',
+          button_label: 'Shop Now',
+          button_link: '/collections/all'
+        }
+      },
+      'product-specifications': {
+        type: 'product-specifications',
+        settings: {
+          heading: 'Technical Specifications',
+          spec_1_label: gen.ecommerce?.specifications?.[0]?.label ?? '',
+          spec_1_value: gen.ecommerce?.specifications?.[0]?.value ?? '',
+          spec_2_label: gen.ecommerce?.specifications?.[1]?.label ?? '',
+          spec_2_value: gen.ecommerce?.specifications?.[1]?.value ?? '',
+          spec_3_label: gen.ecommerce?.specifications?.[2]?.label ?? '',
+          spec_3_value: gen.ecommerce?.specifications?.[2]?.value ?? '',
+          spec_4_label: gen.ecommerce?.specifications?.[3]?.label ?? '',
+          spec_4_value: gen.ecommerce?.specifications?.[3]?.value ?? '',
+          spec_5_label: gen.ecommerce?.specifications?.[4]?.label ?? '',
+          spec_5_value: gen.ecommerce?.specifications?.[4]?.value ?? '',
+          spec_6_label: gen.ecommerce?.specifications?.[5]?.label ?? '',
+          spec_6_value: gen.ecommerce?.specifications?.[5]?.value ?? '',
+          spec_7_label: gen.ecommerce?.specifications?.[6]?.label ?? '',
+          spec_7_value: gen.ecommerce?.specifications?.[6]?.value ?? '',
+          spec_8_label: gen.ecommerce?.specifications?.[7]?.label ?? '',
+          spec_8_value: gen.ecommerce?.specifications?.[7]?.value ?? ''
+        }
+      },
+      testimonials: {
+        type: 'testimonials',
+        settings: {
+          heading: 'Customer Reviews',
+          subheading: 'Hear from our verified buyers'
+        }
+      },
+      faq: {
+        type: 'faq',
+        settings: {
+          heading: gen.faq.title,
+          subheading: gen.faq.subtitle
+        }
+      }
     },
-    order: ['hero-product', 'product-benefits', 'image-with-text', 'product-specifications', 'faq'],
+    order: ['hero-product', 'product-benefits', 'image-with-text-1', 'image-with-text-2', 'product-specifications', 'testimonials', 'faq'],
   } : {
     sections: {
       hero: { type: 'hero', settings: {} },
@@ -159,10 +309,64 @@ function generateTemplates(
 
   const productTemplate = {
     sections: {
-      'hero-product': { type: 'hero-product', settings: {} },
-      'product-gallery': { type: 'product-gallery', settings: {} },
-      'product-specifications': { type: 'product-specifications', settings: {} },
-      faq: { type: 'faq', settings: {} },
+      'hero-product': {
+        type: 'hero-product',
+        settings: {
+          title: productTitle,
+          price: price,
+          compare_at_price: compareAtPrice,
+          description: `<p>${productDescription}</p>`,
+          image_1: images[0] ?? '',
+          image_2: images[1] ?? '',
+          image_3: images[2] ?? '',
+          variant_1_name: gen.ecommerce?.variants?.[0]?.name ?? '',
+          variant_1_values: gen.ecommerce?.variants?.[0]?.values?.join(', ') ?? '',
+          trust_title: 'Guaranteed Safe Checkout',
+          badge_1: gen.ecommerce?.trustBadges?.[0] ?? '30-Day Money Back Guarantee',
+          badge_2: gen.ecommerce?.trustBadges?.[1] ?? 'Free Worldwide Shipping',
+          badge_3: gen.ecommerce?.trustBadges?.[2] ?? 'Secure SSL Encrypted Checkout',
+          shipping_text: gen.ecommerce?.shippingText ?? 'Free shipping on all orders this week!'
+        }
+      },
+      'product-gallery': {
+        type: 'product-gallery',
+        settings: {
+          heading: 'Product Gallery',
+          image_1: images[0] ?? '',
+          image_2: images[1] ?? '',
+          image_3: images[2] ?? '',
+          image_4: images[3] ?? ''
+        }
+      },
+      'product-specifications': {
+        type: 'product-specifications',
+        settings: {
+          heading: 'Technical Specifications',
+          spec_1_label: gen.ecommerce?.specifications?.[0]?.label ?? '',
+          spec_1_value: gen.ecommerce?.specifications?.[0]?.value ?? '',
+          spec_2_label: gen.ecommerce?.specifications?.[1]?.label ?? '',
+          spec_2_value: gen.ecommerce?.specifications?.[1]?.value ?? '',
+          spec_3_label: gen.ecommerce?.specifications?.[2]?.label ?? '',
+          spec_3_value: gen.ecommerce?.specifications?.[2]?.value ?? '',
+          spec_4_label: gen.ecommerce?.specifications?.[3]?.label ?? '',
+          spec_4_value: gen.ecommerce?.specifications?.[3]?.value ?? '',
+          spec_5_label: gen.ecommerce?.specifications?.[4]?.label ?? '',
+          spec_5_value: gen.ecommerce?.specifications?.[4]?.value ?? '',
+          spec_6_label: gen.ecommerce?.specifications?.[5]?.label ?? '',
+          spec_6_value: gen.ecommerce?.specifications?.[5]?.value ?? '',
+          spec_7_label: gen.ecommerce?.specifications?.[6]?.label ?? '',
+          spec_7_value: gen.ecommerce?.specifications?.[6]?.value ?? '',
+          spec_8_label: gen.ecommerce?.specifications?.[7]?.label ?? '',
+          spec_8_value: gen.ecommerce?.specifications?.[7]?.value ?? ''
+        }
+      },
+      faq: {
+        type: 'faq',
+        settings: {
+          heading: gen.faq.title,
+          subheading: gen.faq.subtitle
+        }
+      }
     },
     order: ['hero-product', 'product-gallery', 'product-specifications', 'faq'],
   };
@@ -450,7 +654,9 @@ function generateHeroSection(
     )
     .join('\n          ');
 
-  return `<section class="hero hero--${input.preferredStyle}" data-section-id="{{ section.id }}" data-section-type="hero">
+  const resolvedStyle = gen.ecommerce?.preferredStyle ?? input.preferredStyle;
+
+  return `<section class="hero hero--${resolvedStyle}" data-section-id="{{ section.id }}" data-section-type="hero">
   <div class="hero-overlay"></div>
   <div class="container hero-inner">
     <div class="hero-content">
@@ -856,21 +1062,39 @@ ${faqItemsHtml}
 // ── Section: Testimonials ─────────────────────────────────────
 
 function generateTestimonialsSection(gen: WebsiteGeneration): string {
-  const { testimonials } = gen;
+  const reviews = gen.ecommerce?.reviews?.map(r => ({
+    name: r.author,
+    rating: r.rating,
+    quote: r.content,
+    title: r.title,
+    subtitle: r.date
+  })) ?? gen.testimonials.testimonials.map(t => ({
+    name: t.name,
+    rating: t.rating,
+    quote: t.quote,
+    title: '',
+    subtitle: `${t.role}${t.company ? ` at ${t.company}` : ''}`
+  }));
 
-  const cards = testimonials.testimonials
+  const heading = gen.ecommerce ? 'Customer Reviews' : gen.testimonials.title;
+  const subheading = gen.ecommerce ? 'Hear from our verified buyers' : gen.testimonials.subtitle;
+
+  const cards = reviews
     .map(
       (t) => `
       <div class="testimonial-card">
-        <div class="testimonial-stars">
+        <div class="testimonial-stars" style="color: #ffb800; font-size: 18px; margin-bottom: 10px;">
           ${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}
         </div>
-        <blockquote class="testimonial-quote">"${esc(t.quote)}"</blockquote>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">${t.name.charAt(0).toUpperCase()}</div>
-          <div class="testimonial-meta">
-            <strong class="testimonial-name">${esc(t.name)}</strong>
-            <span class="testimonial-role">${esc(t.role)}${t.company ? ` at ${esc(t.company)}` : ''}</span>
+        {% if '${esc(t.title)}' != blank %}
+          <h4 class="testimonial-title" style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600; color: var(--text-primary);">${esc(t.title)}</h4>
+        {% endif %}
+        <blockquote class="testimonial-quote" style="font-style: italic; color: var(--text-secondary); margin-bottom: 15px;">"${esc(t.quote)}"</blockquote>
+        <div class="testimonial-author" style="display: flex; align-items: center; gap: 10px;">
+          <div class="testimonial-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">${t.name.charAt(0).toUpperCase()}</div>
+          <div class="testimonial-meta" style="display: flex; flex-direction: column; text-align: left;">
+            <strong class="testimonial-name" style="font-size: 14px; color: var(--text-primary);">${esc(t.name)}</strong>
+            <span class="testimonial-role" style="font-size: 12px; color: var(--text-muted);">${esc(t.subtitle)}</span>
           </div>
         </div>
       </div>`
@@ -900,13 +1124,13 @@ ${cards}
       "type": "text",
       "id": "heading",
       "label": "Heading",
-      "default": "${escJson(testimonials.title)}"
+      "default": "${escJson(heading)}"
     },
     {
       "type": "text",
       "id": "subheading",
       "label": "Subheading",
-      "default": "${escJson(testimonials.subtitle)}"
+      "default": "${escJson(subheading)}"
     }
   ],
   "presets": [
@@ -1703,7 +1927,8 @@ function generateAssets(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): ShopifyThemeFile[] {
-  const combinedCSS = `${generateBaseCSS(input)}\n${generateSectionsCSS(input)}\n${generateEcommerceCSS()}`;
+  const resolvedStyle = gen.ecommerce?.preferredStyle ?? input.preferredStyle;
+  const combinedCSS = `${generateBaseCSS(input, resolvedStyle)}\n${generateSectionsCSS(input)}\n${generateEcommerceCSS()}`;
   return [
     file('assets/theme.css', combinedCSS),
     file('assets/theme.js', generateGlobalJS()),
@@ -1712,7 +1937,7 @@ function generateAssets(
 
 // ── Asset: base.css ───────────────────────────────────────────
 
-function generateBaseCSS(input: WebsiteBuilderInput): string {
+function generateBaseCSS(input: WebsiteBuilderInput, resolvedStyle: PreferredStyle): string {
   return `/* ============================================================
    RootX Theme — Base Stylesheet
    Generated for: ${input.businessName}
@@ -2300,7 +2525,7 @@ h6 { font-size: 1rem; }
   transform: translateY(-2px);
 }
 
-${generateStyleOverrides(input.preferredStyle)}
+${generateStyleOverrides(resolvedStyle)}
 
 /* ── Responsive ────────────────────────────────────────────── */
 
@@ -4356,31 +4581,25 @@ function generateProductGallerySection(gen: WebsiteGeneration): string {
 }
 
 function generateProductBenefitsSection(gen: WebsiteGeneration): string {
-  return `<section class="product-benefits section" data-section-id="{{ section.id }}">
+  const features = gen.homepage.features || [];
+
+  let html = `<section class="product-benefits section" data-section-id="{{ section.id }}">
   <div class="container">
     <h2 class="section-title text-center">{{ section.settings.heading }}</h2>
-    <div class="benefits-grid">
-      {% if section.settings.benefit_1_title != blank %}
+    <div class="benefits-grid">`;
+
+  for (let i = 1; i <= 6; i++) {
+    html += `
+      {% if section.settings.benefit_${i}_title != blank %}
         <div class="benefit-card">
-          <div class="benefit-icon">{{ section.settings.benefit_1_icon }}</div>
-          <h3 class="benefit-title">{{ section.settings.benefit_1_title }}</h3>
-          <p class="benefit-desc">{{ section.settings.benefit_1_desc }}</p>
+          <div class="benefit-icon">{{ section.settings.benefit_${i}_icon }}</div>
+          <h3 class="benefit-title">{{ section.settings.benefit_${i}_title }}</h3>
+          <p class="benefit-desc">{{ section.settings.benefit_${i}_desc }}</p>
         </div>
-      {% endif %}
-      {% if section.settings.benefit_2_title != blank %}
-        <div class="benefit-card">
-          <div class="benefit-icon">{{ section.settings.benefit_2_icon }}</div>
-          <h3 class="benefit-title">{{ section.settings.benefit_2_title }}</h3>
-          <p class="benefit-desc">{{ section.settings.benefit_2_desc }}</p>
-        </div>
-      {% endif %}
-      {% if section.settings.benefit_3_title != blank %}
-        <div class="benefit-card">
-          <div class="benefit-icon">{{ section.settings.benefit_3_icon }}</div>
-          <h3 class="benefit-title">{{ section.settings.benefit_3_title }}</h3>
-          <p class="benefit-desc">{{ section.settings.benefit_3_desc }}</p>
-        </div>
-      {% endif %}
+      {% endif %}`;
+  }
+
+  html += `
     </div>
   </div>
 </section>
@@ -4389,16 +4608,22 @@ function generateProductBenefitsSection(gen: WebsiteGeneration): string {
 {
   "name": "Product Benefits",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Heading", "default": "Why Choose Us" },
-    { "type": "text", "id": "benefit_1_icon", "label": "Benefit 1 Icon (Emoji)", "default": "✨" },
-    { "type": "text", "id": "benefit_1_title", "label": "Benefit 1 Title", "default": "${escJson(gen.homepage.features?.[0]?.title ?? 'Premium Quality')}" },
-    { "type": "text", "id": "benefit_1_desc", "label": "Benefit 1 Description", "default": "${escJson(gen.homepage.features?.[0]?.description ?? 'Crafted with the finest materials for unparalleled durability and performance.')}" },
-    { "type": "text", "id": "benefit_2_icon", "label": "Benefit 2 Icon (Emoji)", "default": "⚡" },
-    { "type": "text", "id": "benefit_2_title", "label": "Benefit 2 Title", "default": "${escJson(gen.homepage.features?.[1]?.title ?? 'Ergonomic Design')}" },
-    { "type": "text", "id": "benefit_2_desc", "label": "Benefit 2 Description", "default": "${escJson(gen.homepage.features?.[1]?.description ?? 'Engineered specifically for daily comfort and high performance usage.')}" },
-    { "type": "text", "id": "benefit_3_icon", "label": "Benefit 3 Icon (Emoji)", "default": "🛡️" },
-    { "type": "text", "id": "benefit_3_title", "label": "Benefit 3 Title", "default": "${escJson(gen.homepage.features?.[2]?.title ?? '30-Day Guarantee')}" },
-    { "type": "text", "id": "benefit_3_desc", "label": "Benefit 3 Description", "default": "${escJson(gen.homepage.features?.[2]?.description ?? 'Shop with complete peace of mind. We stand behind our quality fully.')}" }
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Why Choose Us" }`;
+
+  for (let i = 1; i <= 6; i++) {
+    const feat = features[i - 1];
+    const defaultEmoji = i === 1 ? '✨' : i === 2 ? '⚡' : i === 3 ? '🛡️' : i === 4 ? '💎' : i === 5 ? '🔄' : '👍';
+    const resolvedEmoji = feat ? mapLucideToEmoji(feat.icon) : defaultEmoji;
+    const defaultTitle = i === 1 ? 'Premium Quality' : i === 2 ? 'Ergonomic Design' : i === 3 ? '30-Day Guarantee' : i === 4 ? 'Exceptional Performance' : i === 5 ? 'Easy Returns' : 'Customer Support';
+    const defaultDesc = i === 1 ? 'Crafted with the finest materials for durability.' : i === 2 ? 'Engineered for comfort and modern usage.' : i === 3 ? 'Shop with peace of mind. We stand behind our quality.' : i === 4 ? 'High performance in every condition.' : i === 5 ? 'Hassle-free exchange policy.' : 'Dedicated team ready to help.';
+
+    html += `,
+    { "type": "text", "id": "benefit_${i}_icon", "label": "Benefit ${i} Icon (Emoji)", "default": "${resolvedEmoji}" },
+    { "type": "text", "id": "benefit_${i}_title", "label": "Benefit ${i} Title", "default": "${escJson(feat?.title ?? defaultTitle)}" },
+    { "type": "text", "id": "benefit_${i}_desc", "label": "Benefit ${i} Description", "default": "${escJson(feat?.description ?? defaultDesc)}" }`;
+  }
+
+  html += `
   ],
   "presets": [
     {
@@ -4407,47 +4632,31 @@ function generateProductBenefitsSection(gen: WebsiteGeneration): string {
   ]
 }
 {% endschema %}`;
+
+  return html;
 }
 
 function generateProductSpecificationsSection(gen: WebsiteGeneration): string {
   const specifications = gen.ecommerce?.specifications || [];
 
-  return `<section class="product-specifications section" data-section-id="{{ section.id }}">
+  let html = `<section class="product-specifications section" data-section-id="{{ section.id }}">
   <div class="container">
     <h2 class="section-title text-center">{{ section.settings.heading }}</h2>
     <div class="specifications-table-wrapper">
       <table class="specifications-table">
-        <tbody>
-          {% if section.settings.spec_1_label != blank %}
+        <tbody>`;
+
+  for (let i = 1; i <= 8; i++) {
+    html += `
+          {% if section.settings.spec_${i}_label != blank %}
             <tr>
-              <td class="spec-label">{{ section.settings.spec_1_label }}</td>
-              <td class="spec-value">{{ section.settings.spec_1_value }}</td>
+              <td class="spec-label">{{ section.settings.spec_${i}_label }}</td>
+              <td class="spec-value">{{ section.settings.spec_${i}_value }}</td>
             </tr>
-          {% endif %}
-          {% if section.settings.spec_2_label != blank %}
-            <tr>
-              <td class="spec-label">{{ section.settings.spec_2_label }}</td>
-              <td class="spec-value">{{ section.settings.spec_2_value }}</td>
-            </tr>
-          {% endif %}
-          {% if section.settings.spec_3_label != blank %}
-            <tr>
-              <td class="spec-label">{{ section.settings.spec_3_label }}</td>
-              <td class="spec-value">{{ section.settings.spec_3_value }}</td>
-            </tr>
-          {% endif %}
-          {% if section.settings.spec_4_label != blank %}
-            <tr>
-              <td class="spec-label">{{ section.settings.spec_4_label }}</td>
-              <td class="spec-value">{{ section.settings.spec_4_value }}</td>
-            </tr>
-          {% endif %}
-          {% if section.settings.spec_5_label != blank %}
-            <tr>
-              <td class="spec-label">{{ section.settings.spec_5_label }}</td>
-              <td class="spec-value">{{ section.settings.spec_5_value }}</td>
-            </tr>
-          {% endif %}
+          {% endif %}`;
+  }
+
+  html += `
         </tbody>
       </table>
     </div>
@@ -4458,17 +4667,16 @@ function generateProductSpecificationsSection(gen: WebsiteGeneration): string {
 {
   "name": "Product Specifications",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Heading", "default": "Technical Specifications" },
-    { "type": "text", "id": "spec_1_label", "label": "Specification 1 Label", "default": "${escJson(specifications[0]?.label ?? '')}" },
-    { "type": "text", "id": "spec_1_value", "label": "Specification 1 Value", "default": "${escJson(specifications[0]?.value ?? '')}" },
-    { "type": "text", "id": "spec_2_label", "label": "Specification 2 Label", "default": "${escJson(specifications[1]?.label ?? '')}" },
-    { "type": "text", "id": "spec_2_value", "label": "Specification 2 Value", "default": "${escJson(specifications[1]?.value ?? '')}" },
-    { "type": "text", "id": "spec_3_label", "label": "Specification 3 Label", "default": "${escJson(specifications[2]?.label ?? '')}" },
-    { "type": "text", "id": "spec_3_value", "label": "Specification 3 Value", "default": "${escJson(specifications[2]?.value ?? '')}" },
-    { "type": "text", "id": "spec_4_label", "label": "Specification 4 Label", "default": "${escJson(specifications[3]?.label ?? '')}" },
-    { "type": "text", "id": "spec_4_value", "label": "Specification 4 Value", "default": "${escJson(specifications[3]?.value ?? '')}" },
-    { "type": "text", "id": "spec_5_label", "label": "Specification 5 Label", "default": "${escJson(specifications[4]?.label ?? '')}" },
-    { "type": "text", "id": "spec_5_value", "label": "Specification 5 Value", "default": "${escJson(specifications[4]?.value ?? '')}" }
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Technical Specifications" }`;
+
+  for (let i = 1; i <= 8; i++) {
+    const spec = specifications[i - 1];
+    html += `,
+    { "type": "text", "id": "spec_${i}_label", "label": "Specification ${i} Label", "default": "${escJson(spec?.label ?? '')}" },
+    { "type": "text", "id": "spec_${i}_value", "label": "Specification ${i} Value", "default": "${escJson(spec?.value ?? '')}" }`;
+  }
+
+  html += `
   ],
   "presets": [
     {
@@ -4477,6 +4685,8 @@ function generateProductSpecificationsSection(gen: WebsiteGeneration): string {
   ]
 }
 {% endschema %}`;
+
+  return html;
 }
 
 function generateImageWithTextSection(gen: WebsiteGeneration): string {
