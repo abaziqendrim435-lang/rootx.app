@@ -21,8 +21,8 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Only redirect when Supabase is configured AND user is confirmed to be logged out
-    if (isSupabaseEnabled && !loading && !user) {
+    // Redirect when user is confirmed to be logged out
+    if (!loading && !user) {
       router.replace(`/login?from=${encodeURIComponent(pathname)}`);
     }
   }, [user, loading, isSupabaseEnabled, router, pathname]);
@@ -50,7 +50,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   }
 
   // Supabase enabled but not logged in — show redirect blocker
-  if (isSupabaseEnabled && !user) {
+  if (!user) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"

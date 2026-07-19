@@ -18,12 +18,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const pathname = usePathname();
 
   // Detect desktop on mount & resize
+  const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
     const t = setTimeout(() => {
       setSidebarOpen(mq.matches);
+      setIsDesktop(mq.matches);
     }, 0);
-    const handler = (e: MediaQueryListEvent) => setSidebarOpen(e.matches);
+    const handler = (e: MediaQueryListEvent) => {
+      setSidebarOpen(e.matches);
+      setIsDesktop(e.matches);
+    };
     mq.addEventListener('change', handler);
     return () => {
       clearTimeout(t);
@@ -59,7 +64,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       {/* Main content area — shifts right on desktop when sidebar open */}
       <div
         className="transition-all duration-300 min-h-screen flex flex-col"
-        style={{ marginLeft: sidebarOpen ? '240px' : '0' }}
+        style={{ marginLeft: isDesktop && sidebarOpen ? '240px' : '0' }}
       >
         {/* Top bar */}
         <div
@@ -141,29 +146,27 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             )}
 
             {/* Logout */}
-            {isSupabaseEnabled && (
-              <button
-                onClick={handleLogout}
-                className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid var(--color-border)',
-                  color: '#71717a',
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.color = '#ef4444';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.35)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.color = '#71717a';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)';
-                }}
-                title="Sign out"
-                aria-label="Sign out"
-              >
-                <LogOut size={15} />
-              </button>
-            )}
+            <button
+              onClick={handleLogout}
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--color-border)',
+                color: '#71717a',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = '#ef4444';
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.35)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = '#71717a';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)';
+              }}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut size={15} />
+            </button>
           </div>
         </div>
 

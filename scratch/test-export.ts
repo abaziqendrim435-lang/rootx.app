@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { generateShopifyTheme } from '../lib/shopify-theme-generator';
 import type { WebsiteGeneration, WebsiteBuilderInput } from '../lib/website-builder-types';
 import JSZip from 'jszip';

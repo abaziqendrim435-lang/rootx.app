@@ -56,12 +56,9 @@ export default function SignupPage() {
     setStatus('loading');
     setErrorMsg('');
 
+    // Wait a brief moment to simulate network latency in demo mode
     if (!hasSupabaseConfig) {
-      // Demo mode
-      await new Promise((r) => setTimeout(r, 900));
-      setStatus('success');
-      setTimeout(() => router.push('/dashboard'), 1200);
-      return;
+      await new Promise((r) => setTimeout(r, 600));
     }
 
     const { error } = await signUp(email.trim(), password);
@@ -73,6 +70,9 @@ export default function SignupPage() {
           ? 'An account with this email already exists. Try signing in.'
           : error
       );
+    } else if (!hasSupabaseConfig) {
+      setStatus('success');
+      setTimeout(() => router.push('/dashboard'), 1000);
     } else {
       // Supabase by default sends a confirmation email
       setStatus('confirm-email');

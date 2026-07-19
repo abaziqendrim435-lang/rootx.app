@@ -93,7 +93,7 @@ function RequestFormInner() {
 
   if (status === 'success') {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ paddingTop: '64px' }}>
+      <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 64px)' }}>
         <div className="text-center max-w-md mx-auto px-6">
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse-glow"

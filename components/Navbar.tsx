@@ -49,8 +49,8 @@ export default function Navbar() {
     router.push('/');
   }
 
-  // Show logged-in state if: Supabase enabled + user exists, OR demo mode + not loading
-  const isLoggedIn = isSupabaseEnabled ? !!user : false;
+  // Show logged-in state if: user exists (works in both Supabase and demo mode)
+  const isLoggedIn = !!user;
 
   // Don't render nav user controls until auth is resolved (prevents flash)
   const authReady = !loading;
@@ -195,11 +195,9 @@ export default function Navbar() {
             ) : authReady ? (
               /* ─── Guest ─── */
               <>
-                {isSupabaseEnabled && (
-                  <Link href="/login" className="btn-secondary" style={{ padding: '0.5rem 1.2rem', fontSize: '0.85rem' }}>
-                    Sign in
-                  </Link>
-                )}
+                <Link href="/login" className="btn-secondary" style={{ padding: '0.5rem 1.2rem', fontSize: '0.85rem' }}>
+                  Sign in
+                </Link>
                 <Link href="/request" className="btn-primary" style={{ padding: '0.5rem 1.2rem', fontSize: '0.85rem' }}>
                   Get Started →
                 </Link>
@@ -265,11 +263,9 @@ export default function Navbar() {
                 </>
               ) : authReady ? (
                 <>
-                  {isSupabaseEnabled && (
-                    <Link href="/login" className="btn-secondary text-center" onClick={() => setIsOpen(false)}>
-                      Sign in
-                    </Link>
-                  )}
+                  <Link href="/login" className="btn-secondary text-center" onClick={() => setIsOpen(false)}>
+                    Sign in
+                  </Link>
                   <Link href="/signup" className="btn-secondary text-center" onClick={() => setIsOpen(false)}>
                     Create Account
                   </Link>

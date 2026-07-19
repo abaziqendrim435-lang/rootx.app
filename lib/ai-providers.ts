@@ -1,10 +1,11 @@
 // ============================================================
 // RootX — Shared AI Provider Utilities
 // Robust JSON parsing, retry, fallback provider chain
-// Supports: OpenAI, Claude, Gemini, Kimi, Auto Best
+// Supports: OpenRouter, OpenAI, Claude, Gemini, Kimi, Auto Best
 // ============================================================
 
 import type { AIProvider } from '@/lib/website-builder-types';
+import { callOpenRouterSimple } from '@/lib/openrouter';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -98,6 +99,7 @@ function fixTrailingCommas(json: string): string {
 // ── Error Helpers ────────────────────────────────────────────
 
 const PROVIDER_NAMES: Record<ConcreteProvider, string> = {
+  openrouter: 'OpenRouter',
   openai: 'OpenAI',
   claude: 'Anthropic',
   gemini: 'Gemini',
@@ -288,14 +290,14 @@ export async function callKimi(
 // ── Retry + Fallback Dispatch ────────────────────────────────
 
 /**
- * Auto Best fallback order: Gemini → Claude → Kimi → OpenAI
+ * Auto Best fallback order: OpenRouter → Gemini → Claude → Kimi → OpenAI
  */
-const AUTO_BEST_ORDER: ConcreteProvider[] = ['gemini', 'claude', 'kimi', 'openai'];
+const AUTO_BEST_ORDER: ConcreteProvider[] = ['openrouter', 'gemini', 'claude', 'kimi', 'openai'];
 
 /**
  * All concrete providers.
  */
-const ALL_PROVIDERS: ConcreteProvider[] = ['openai', 'claude', 'gemini', 'kimi'];
+const ALL_PROVIDERS: ConcreteProvider[] = ['openrouter', 'openai', 'claude', 'gemini', 'kimi'];
 
 /**
  * Determine which API keys are available.
@@ -305,6 +307,7 @@ const ALL_PROVIDERS: ConcreteProvider[] = ['openai', 'claude', 'gemini', 'kimi']
  */
 export function getAvailableProviders(preferred: AIProvider): ProviderConfig[] {
   const keyMap: Record<ConcreteProvider, string | undefined> = {
+    openrouter: process.env.OPENROUTER_API_KEY,
     openai: process.env.OPENAI_API_KEY,
     claude: process.env.ANTHROPIC_API_KEY,
     gemini: process.env.GEMINI_API_KEY,
@@ -344,6 +347,8 @@ async function callProvider(
   temperature: number,
 ): Promise<string> {
   switch (provider) {
+    case 'openrouter':
+      return callOpenRouterSimple(prompt, apiKey, maxTokens, temperature);
     case 'openai':
       return callOpenAI(prompt, apiKey, maxTokens, temperature);
     case 'claude':

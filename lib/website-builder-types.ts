@@ -19,7 +19,7 @@ export type PreferredStyle =
   | 'tech_futuristic'
   | 'soft_lifestyle';
 
-export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'auto';
+export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'openrouter' | 'auto';
 
 export interface WebsiteBuilderInput {
   businessName: string;

@@ -130,7 +130,7 @@ export interface ProductProfile {
 }
 
 function generateBrandNameAndSlogan(businessName: string, category: string): { brandName: string; slogan: string } {
-  let clean = businessName.replace(/\s+Store$/i, '').trim();
+  const clean = businessName.replace(/\s+Store$/i, '').trim();
 
   // If title is already short, clean it up
   const words = clean.split(/\s+/).filter(w => !w.match(/^(and|with|the|of|for|active|noise|cancelling|wireless|over|ear|rosewater|organic|hydrating|memory|foam|seat|cushion|ergonomic|massage|pro|mist|pure|glow|sound|aero|cushion|chair)$/i));

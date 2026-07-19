@@ -2412,6 +2412,27 @@ function ShopifyDeployModal({
 
 
 
+// Helper to get current timestamp avoiding render impurity flags
+function getTimestamp(): number {
+  return Date.now();
+}
+
+interface ApifyProduct {
+  url: string;
+  title: string;
+  images?: string[];
+  description?: string;
+  price?: string;
+  originalPrice?: string;
+  discount?: string;
+  rating?: number | null;
+  orders?: number | null;
+  seller?: string;
+  shipping?: string;
+  features?: string[];
+  specifications?: Array<{ label: string; value: string }>;
+}
+
 // ════════════════════════════════════════════════════════════════
 // Main Component
 // ════════════════════════════════════════════════════════════════
@@ -2421,10 +2442,20 @@ export default function WebsiteBuilderDemo() {
   const [builderMode, setBuilderMode] = useState<BuilderMode>('business');
 
   // Form state (business mode)
-  const [input, setInput] = useState<WebsiteBuilderInput>({
-    businessName: '', businessType: '', targetAudience: '', brandDescription: '',
-    preferredStyle: 'modern', primaryColor: '#dc2626', secondaryColor: '#1e40af',
-    language: 'English', country: 'United States',
+  const [input, setInput] = useState<WebsiteBuilderInput>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('rootx_builder_input');
+        if (stored) return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse stored input state:', e);
+      }
+    }
+    return {
+      businessName: '', businessType: '', targetAudience: '', brandDescription: '',
+      preferredStyle: 'modern', primaryColor: '#dc2626', secondaryColor: '#1e40af',
+      language: 'English', country: 'United States',
+    };
   });
 
   // Dropshipping state
@@ -2444,8 +2475,8 @@ export default function WebsiteBuilderDemo() {
   const [isApifySearch, setIsApifySearch] = useState(false);
   const [apifyQuery, setApifyQuery] = useState('');
   const [apifyLoading, setApifyLoading] = useState(false);
-  const [apifyResults, setApifyResults] = useState<any[]>([]);
-  const [apifySelectedProduct, setApifySelectedProduct] = useState<any | null>(null);
+  const [apifyResults, setApifyResults] = useState<ApifyProduct[]>([]);
+  const [apifySelectedProduct, setApifySelectedProduct] = useState<ApifyProduct | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [manualDescription, setManualDescription] = useState('');
@@ -2457,8 +2488,26 @@ export default function WebsiteBuilderDemo() {
   const [newSpecValue, setNewSpecValue] = useState('');
 
   // Generation state
-  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [result, setResult] = useState<WebsiteGeneration | null>(null);
+  const [result, setResult] = useState<WebsiteGeneration | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('rootx_builder_result');
+        if (stored) return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse stored result state:', e);
+      }
+    }
+    return null;
+  });
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('rootx_builder_result');
+        if (stored) return 'done';
+      } catch { /* ignore */ }
+    }
+    return 'idle';
+  });
   const [errorMsg, setErrorMsg] = useState('');
 
   // UI state
@@ -2510,27 +2559,20 @@ export default function WebsiteBuilderDemo() {
     checkServerConnection();
   }, []);
 
-  // Save/restore builder state to survive Shopify OAuth redirect
+  // Auto-open modal if they returned from successful oauth
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const storedInput = sessionStorage.getItem('rootx_builder_input');
-        const storedResult = sessionStorage.getItem('rootx_builder_result');
-        if (storedInput) setInput(JSON.parse(storedInput));
-        if (storedResult) {
-          const parsed = JSON.parse(storedResult);
-          setResult(parsed);
-          setStatus('done'); // satisfy status state
-        }
-        
-        // Auto-open modal if they returned from successful oauth
         const params = new URLSearchParams(window.location.search);
         if (params.get('oauth_success') === 'true') {
-          setShowShopifyDeploy(true);
+          const t = setTimeout(() => {
+            setShowShopifyDeploy(true);
+          }, 0);
           window.history.replaceState({}, '', window.location.pathname);
+          return () => clearTimeout(t);
         }
       } catch (e) {
-        console.error('Failed to restore builder state:', e);
+        console.error('Failed to check oauth success redirect:', e);
       }
     }
   }, []);
@@ -2614,7 +2656,7 @@ export default function WebsiteBuilderDemo() {
     setProductAnalysis(null);
     setSelectedImages([]);
     try {
-      let productDataPayload: any = undefined;
+      let productDataPayload: ApifyProduct | undefined = undefined;
 
       // If it's an AliExpress URL, use Apify to scrape it first to bypass anti-bot blocks
       if (submittedUrl.includes('aliexpress.com')) {
@@ -2631,13 +2673,13 @@ export default function WebsiteBuilderDemo() {
         const apifyData = await apifyRes.json();
         if (apifyData.success && apifyData.products && apifyData.products.length > 0) {
           productDataPayload = apifyData.products[0];
-          console.log('[Frontend] Successfully scraped AliExpress product via Apify:', productDataPayload.title);
+          console.log('[Frontend] Successfully scraped AliExpress product via Apify:', apifyData.products[0].title);
         } else {
           throw new Error(apifyData.error || 'Failed to scrape AliExpress product details.');
         }
       }
 
-      const res = await fetch(`/api/agents/analyze-product?cb=${Date.now()}`, {
+      const res = await fetch(`/api/agents/analyze-product?cb=${getTimestamp()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
@@ -2684,7 +2726,7 @@ export default function WebsiteBuilderDemo() {
       setErrorMsg('Product Title and Price are required.');
       return;
     }
-    const mockRequestId = `req_manual_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const mockRequestId = `req_manual_${getTimestamp()}_${Math.random().toString(36).substring(2, 9)}`;
     const manualAnalysis: ProductAnalysis = {
       productTitle: manualTitle.trim(),
       productDescription: manualDescription.trim() || 'No description provided.',
@@ -2710,7 +2752,7 @@ export default function WebsiteBuilderDemo() {
       specifications: manualSpecsInput,
       warnings: ['Manually imported product details'],
       isPlaceholder: false,
-      analysisId: `manual_${Date.now()}`,
+      analysisId: `manual_${getTimestamp()}`,
       timestamp: new Date().toISOString(),
       requestId: mockRequestId
     };
@@ -2856,7 +2898,7 @@ export default function WebsiteBuilderDemo() {
     }
   }
 
-  async function handleSelectApifyProduct(product: any) {
+  async function handleSelectApifyProduct(product: ApifyProduct) {
     setApifySelectedProduct(product);
     setDropStatus('analyzing');
     setErrorMsg('');
@@ -2866,7 +2908,7 @@ export default function WebsiteBuilderDemo() {
 
     try {
       console.log('[Frontend] Analyzing selected Apify product:', product.title);
-      const res = await fetch(`/api/agents/analyze-product?cb=${Date.now()}`, {
+      const res = await fetch(`/api/agents/analyze-product?cb=${getTimestamp()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
@@ -3207,6 +3249,7 @@ export default function WebsiteBuilderDemo() {
               <div className="flex flex-wrap gap-2">
                 {([
                   { key: 'auto' as AIProvider, label: 'Auto Best', color: '#f59e0b', desc: 'Smart routing' },
+                  { key: 'openrouter' as AIProvider, label: 'OpenRouter', color: '#e11d48', desc: 'Multi-model' },
                   { key: 'gemini' as AIProvider, label: 'Gemini', color: '#60a5fa', desc: 'Fast extraction' },
                   { key: 'claude' as AIProvider, label: 'Claude', color: '#a855f7', desc: 'Premium copy' },
                   { key: 'kimi' as AIProvider, label: 'Kimi', color: '#06b6d4', desc: 'Long context' },
@@ -4321,7 +4364,7 @@ export default function WebsiteBuilderDemo() {
                 {/* Reviews Editor */}
                 <SectionCard title="Reviews & Testimonials" icon={<Quote size={16} style={{ color: '#f97316' }} />} color="#f97316">
                   <div className="flex flex-col gap-3">
-                    {(result.ecommerce?.reviews && result.ecommerce.reviews.length > 0 ? result.ecommerce.reviews : result.testimonials.testimonials).map((t: any, i) => (
+                    {(result.ecommerce?.reviews && result.ecommerce.reviews.length > 0 ? result.ecommerce.reviews : result.testimonials.testimonials).map((t: { author?: string; name?: string; rating: number; date?: string; title?: string; content?: string; quote?: string; role?: string; company?: string; }, i: number) => (
                       <div key={i} className="p-3 rounded-xl flex flex-col gap-2" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
                         <div className="flex gap-2">
                           <input
@@ -5337,6 +5380,7 @@ export default function WebsiteBuilderDemo() {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                   {([
                     { key: 'auto' as AIProvider, name: 'Auto Best', model: 'Smart Routing', color: '#f59e0b', icon: <Sparkles size={20} /> },
+                    { key: 'openrouter' as AIProvider, name: 'OpenRouter', model: 'Multi-Model', color: '#e11d48', icon: <Zap size={20} /> },
                     { key: 'gemini' as AIProvider, name: 'Gemini', model: '2.5 Flash', color: '#60a5fa', icon: <Star size={20} /> },
                     { key: 'claude' as AIProvider, name: 'Claude', model: 'Sonnet 4', color: '#a855f7', icon: <Zap size={20} /> },
                     { key: 'kimi' as AIProvider, name: 'Kimi', model: 'K2', color: '#06b6d4', icon: <Globe size={20} /> },

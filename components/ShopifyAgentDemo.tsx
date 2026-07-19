@@ -1207,7 +1207,10 @@ export default function ShopifyAgentDemo() {
   }, []);
 
   useEffect(() => {
-    checkConnection();
+    const t = setTimeout(() => {
+      checkConnection();
+    }, 0);
+    return () => clearTimeout(t);
   }, [checkConnection]);
 
   useEffect(() => {
@@ -1225,12 +1228,18 @@ export default function ShopifyAgentDemo() {
     const success = params.get('oauth_success');
 
     if (err) {
-      setOauthError(err);
+      const t = setTimeout(() => {
+        setOauthError(err);
+      }, 0);
       window.history.replaceState({}, '', window.location.pathname);
+      return () => clearTimeout(t);
     }
     if (success) {
-      checkConnection();
+      const t = setTimeout(() => {
+        checkConnection();
+      }, 0);
       window.history.replaceState({}, '', window.location.pathname);
+      return () => clearTimeout(t);
     }
   }, [checkConnection]);
 
