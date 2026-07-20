@@ -109,18 +109,28 @@ const productHeroVariants: SectionVariantDefinition[] = [
     id: 'centered-product',
     name: 'Centered Product Hero',
     sectionType: 'product_hero',
-    renderLiquid: (gen, input) => `
+    renderLiquid: (gen, input) => {
+      const imgRes = (gen as unknown as { imagePipelineResult?: import('../image-pipeline/types').ImagePipelineResult }).imagePipelineResult;
+      const heroUrl = imgRes?.heroImage?.normalizedUrl || gen.ecommerce?.images?.[0] || '';
+      const galleryUrls = imgRes?.galleryImages?.length 
+        ? imgRes.galleryImages.map(g => g.normalizedUrl)
+        : (gen.ecommerce?.images || []);
+
+      return `
 <section class="hero-product section" data-section-id="{{ section.id }}">
   <div class="container">
     <div class="hero-product-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 3.5rem; align-items: start;">
       <div class="product-gallery-main">
         <div class="main-img-card" style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-large); padding:1.5rem; overflow:hidden;">
-          <img id="HeroMainImg" src="${gen.ecommerce?.images?.[0] || ''}" alt="Product" style="width:100%; height:auto; border-radius:var(--radius-medium);" />
+          ${heroUrl 
+            ? `<img id="HeroMainImg" src="${heroUrl}" alt="${esc(input.businessName)}" style="width:100%; height:auto; border-radius:var(--radius-medium); object-fit:cover;" />`
+            : `<div style="padding:4rem 2rem; text-align:center; background:var(--color-background); border-radius:var(--radius-medium); color:var(--color-muted);">[No Product Image Available]</div>`
+          }
         </div>
         ${
-          gen.ecommerce?.images && gen.ecommerce.images.length > 1
+          galleryUrls.length > 1
             ? `<div class="thumb-row" style="display:flex; gap:0.75rem; margin-top:1rem;">
-                ${gen.ecommerce.images.slice(0, 4).map((img, i) => `<img src="${img}" style="width:70px; height:70px; object-fit:cover; border-radius:var(--radius-small); border:1px solid var(--color-border); cursor:pointer;" onclick="document.getElementById('HeroMainImg').src='${img}';" />`).join('')}
+                ${galleryUrls.slice(0, 5).map((img, i) => `<img src="${img}" style="width:70px; height:70px; object-fit:cover; border-radius:var(--radius-small); border:1px solid var(--color-border); cursor:pointer;" onclick="document.getElementById('HeroMainImg').src='${img}';" />`).join('')}
               </div>`
             : ''
         }
@@ -139,7 +149,8 @@ const productHeroVariants: SectionVariantDefinition[] = [
       </div>
     </div>
   </div>
-</section>`,
+</section>`;
+    },
   },
 ];
 

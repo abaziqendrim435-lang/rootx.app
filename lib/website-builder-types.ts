@@ -399,5 +399,6 @@ export interface DesignEngineResult {
   modelLogs: ModelLog[];
   sectionPlan: SectionPlan;
   iterations: number;
+  imagePipelineResult?: import('./image-pipeline/types').ImagePipelineResult;
 }
 

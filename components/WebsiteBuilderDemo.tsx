@@ -22,6 +22,8 @@ import DesignScorePanel from '@/components/design-engine/DesignScorePanel';
 import ArchetypeSelector from '@/components/design-engine/ArchetypeSelector';
 import DesignPreviewPanel from '@/components/design-engine/DesignPreviewPanel';
 import ModelLogPanel from '@/components/design-engine/ModelLogPanel';
+import ImageDiagnosticsPanel from '@/components/image-pipeline/ImageDiagnosticsPanel';
+import ImageManagerModal from '@/components/image-pipeline/ImageManagerModal';
 import type {
   ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
 } from '@/lib/shopify-types';
@@ -2537,6 +2539,8 @@ export default function WebsiteBuilderDemo() {
   const { copiedId, copy } = useCopy();
   const resultsRef = useRef<HTMLDivElement>(null);
   const [showShopifyDeploy, setShowShopifyDeploy] = useState(false);
+  const [showImageManager, setShowImageManager] = useState(false);
+  const [debugMode, setDebugMode] = useState(process.env.NODE_ENV !== 'production');
 
   // Shopify deploy state
   const [shopifyDomain, setShopifyDomain] = useState('');
@@ -4871,6 +4875,56 @@ export default function WebsiteBuilderDemo() {
             {/* ═══════ PREVIEW TAB ═══════ */}
             {activeTab === 'preview' && (
               <div className="flex flex-col gap-6">
+                {/* Image Pipeline Diagnostics Panel (Dev Mode) */}
+                {designEngineResult?.imagePipelineResult && (
+                  <ImageDiagnosticsPanel
+                    pipelineResult={designEngineResult.imagePipelineResult}
+                    debugMode={debugMode}
+                  />
+                )}
+
+                {/* Toolbar for Image Management */}
+                <div className="flex items-center justify-between p-4 rounded-xl border bg-zinc-900 border-zinc-800">
+                  <div>
+                    <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                      <ImageIcon size={16} className="text-blue-400" />
+                      Product Image Pipeline
+                    </h4>
+                    <p className="text-xs text-zinc-400">
+                      Manage hero selection, section roles, and manual uploads.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowImageManager(true)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 transition-all"
+                  >
+                    <ImageIcon size={14} /> Open Image Manager
+                  </button>
+                </div>
+
+                {/* Image Manager Modal */}
+                {designEngineResult?.imagePipelineResult && (
+                  <ImageManagerModal
+                    isOpen={showImageManager}
+                    onClose={() => setShowImageManager(false)}
+                    images={designEngineResult.imagePipelineResult.images}
+                    onUpdateImages={(updatedImages) => {
+                      if (result && designEngineResult) {
+                        const updatedPipeline = {
+                          ...designEngineResult.imagePipelineResult!,
+                          images: updatedImages,
+                          heroImage: updatedImages.find((img) => img.role === 'hero') || updatedImages[0] || null,
+                          galleryImages: updatedImages,
+                        };
+                        setDesignEngineResult({
+                          ...designEngineResult,
+                          imagePipelineResult: updatedPipeline,
+                        });
+                      }
+                    }}
+                  />
+                )}
+
                 {/* 1. Design Score Panel (0-100 Quality Score) */}
                 {designEngineResult && (
                   <DesignScorePanel

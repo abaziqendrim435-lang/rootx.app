@@ -13,12 +13,16 @@ import { renderSectionVariant } from './section-library';
 import { validateAndScoreDesign } from './quality-validator';
 import { getModelForTask, logModelCall } from './model-router';
 import { getArchetype } from './archetypes';
+import { runImagePipeline } from '../image-pipeline';
 
 export function runDesignEnginePipeline(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): DesignEngineResult {
   const modelLogs: ModelLog[] = [];
+
+  // Stage 0: Run Image Pipeline (Extraction, Normalization, Validation, Ranking & Role Assignment)
+  const imagePipelineResult = runImagePipeline({ gen, input, ecommerce: gen.ecommerce });
 
   // Stage 1-5: Product Analysis, Category, Target Customer, Personality, Archetype Selection
   const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText || ''}`;
@@ -129,6 +133,7 @@ export function runDesignEnginePipeline(
       modelLogs,
       sectionPlan,
       iterations,
+      imagePipelineResult,
     };
 
     // If score passes (>= 85) or max iterations reached, finish
