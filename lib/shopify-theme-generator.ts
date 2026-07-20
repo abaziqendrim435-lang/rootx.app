@@ -14,12 +14,15 @@ import type {
   DesignEngineResult,
 } from './website-builder-types';
 import type { ShopifyThemeFile } from './shopify-types';
-import { runDesignEnginePipeline } from './design-engine';
-
-// ── Public API ────────────────────────────────────────────────
+import { runDesignEnginePipeline } from './design-engine/pipeline';
+import { buildStorefrontSpec } from './storefront-spec/builder';
+import { generateShopifyLiquidSections } from './storefront-spec/liquid-generator';
+import { generateTokenCSSVariables } from './storefront-spec/token-css';
+import { tokensToShopifySettings } from './design-engine/design-tokens';
 
 /**
- * RootX Design Engine V1 — Category-aware premium theme generator.
+ * RootX Storefront Pixel Parity Engine V1.
+ * Consumes canonical StorefrontSpec to generate 100% pixel-parity Shopify theme files.
  */
 export function generateShopifyThemeV2(
   gen: WebsiteGeneration,

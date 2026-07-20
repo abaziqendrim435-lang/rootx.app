@@ -401,5 +401,7 @@ export interface DesignEngineResult {
   iterations: number;
   imagePipelineResult?: import('./image-pipeline/types').ImagePipelineResult;
   qualityGateReport?: import('./quality-gate').QualityGateV2Report;
+  spec?: import('./storefront-spec/types').StorefrontSpec;
+  parityReport?: import('./parity-validator').ParityReport;
 }
 

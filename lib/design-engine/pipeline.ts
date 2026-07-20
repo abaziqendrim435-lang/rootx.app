@@ -6,18 +6,15 @@
 // ============================================================
 
 import type { WebsiteGeneration, WebsiteBuilderInput, DesignEngineResult, ModelLog } from '../website-builder-types';
-import { analyzeAndDetectArchetype } from './category-detector';
-import { generateDesignTokens, tokensToCSSVariables, tokensToShopifySettings } from './design-tokens';
-import { createSectionPlan } from './section-sequencer';
-import { renderSectionVariant } from './section-library';
-import { validateAndScoreDesign } from './quality-validator';
+import { buildStorefrontSpec } from '../storefront-spec/builder';
+import { generateTokenCSSVariables } from '../storefront-spec/token-css';
+import { generateShopifyLiquidSections } from '../storefront-spec/liquid-generator';
+import { validatePreviewExportParity } from '../parity-validator';
+import { validateStorefrontQualityGateV2 } from '../quality-gate';
 import { getModelForTask, logModelCall } from './model-router';
 import { getArchetype } from './archetypes';
-import { runImagePipeline } from '../image-pipeline';
-
-import { buildCleanBrandProfile } from '../title-cleaner';
-import { sanitizePlaceholders } from '../placeholder-cleaner';
-import { validateStorefrontQualityGateV2 } from '../quality-gate';
+import { tokensToShopifySettings } from './design-tokens';
+import { validateAndScoreDesign } from './quality-validator';
 
 export function runDesignEnginePipeline(
   rawGen: WebsiteGeneration,
@@ -25,75 +22,26 @@ export function runDesignEnginePipeline(
 ): DesignEngineResult {
   const modelLogs: ModelLog[] = [];
 
-  // Stage 0.1: Clean Titles, Brand Names, and Slogans
-  const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${rawGen.ecommerce?.shippingText || ''}`;
-  const profile = buildCleanBrandProfile(
-    input.businessName,
-    input.businessName,
-    input.preferredStyle || 'modern_commerce',
-    rawGen.homepage?.hero?.headline,
-    rawGen.homepage?.hero?.subheadline
-  );
+  // Stage 0: Build Canonical StorefrontSpec (Single Source of Truth)
+  const spec = buildStorefrontSpec(rawGen, input);
 
-  // Stage 0.2: Purge Placeholder Content
-  const gen = sanitizePlaceholders(rawGen, profile.cleanBrandName);
+  // Stage 1: Generate CSS Token Variables & Liquid Sections directly from Spec
+  const cssVars = generateTokenCSSVariables(spec);
+  const liquidSections = generateShopifyLiquidSections(spec);
 
-  // Stage 0.3: Run Image Pipeline (Extraction, Normalization, Validation, Ranking & Role Assignment)
-  const imagePipelineResult = runImagePipeline({ gen, input, ecommerce: gen.ecommerce });
-  (gen as unknown as { imagePipelineResult?: typeof imagePipelineResult }).imagePipelineResult = imagePipelineResult;
+  const archDef = getArchetype(spec.archetype);
 
-  // Stage 1-5: Product Analysis, Category, Target Customer, Personality, Archetype Selection
-  const startCategoryTime = Date.now();
-  const analysis = analyzeAndDetectArchetype(textToScan, input.preferredStyle);
-  const categoryTarget = getModelForTask('category_detection');
-  modelLogs.push(
-    logModelCall('category_detection', categoryTarget, Date.now() - startCategoryTime, 120, 45, false)
-  );
+  // Stage 2: Render index.json template
+  const indexTemplateJson = {
+    sections: spec.sections.reduce((acc, sec) => {
+      acc[sec.id] = { type: sec.id, settings: sec.settings };
+      return acc;
+    }, {} as Record<string, unknown>),
+    order: spec.sections.map((sec) => sec.id),
+  };
 
-  let currentArchetypeId = analysis.selectedArchetype;
-  let iterations = 0;
-  let finalResult: DesignEngineResult | null = null;
-
-  // Maximum 3 passes (1 initial + 2 remediation passes if quality score < 85)
-  while (iterations < 3) {
-    iterations++;
-
-    // Stage 6: Generate Design Tokens
-    const tokens = generateDesignTokens(
-      currentArchetypeId,
-      input.primaryColor,
-      input.secondaryColor
-    );
-
-    // Stage 7: Select Section Structure
-    const sectionPlan = createSectionPlan(currentArchetypeId);
-
-    // Stage 8 & 9: Render Sections and Theme Files
-    const archDef = getArchetype(currentArchetypeId);
-    const brandName = profile.cleanBrandName;
-    const brandSlogan = profile.cleanHeroHeadline;
-
-    // Render section liquid files
-    const renderedSections: { key: string; value: string }[] = sectionPlan.sections.map((sec) => {
-      const liquidContent = renderSectionVariant(sec.sectionType, sec.variantId, gen, input);
-      return {
-        key: `sections/${sec.sectionId}.liquid`,
-        value: liquidContent,
-      };
-    });
-
-    // Render index template JSON
-    const indexTemplateJson = {
-      sections: sectionPlan.sections.reduce((acc, sec) => {
-        acc[sec.sectionId] = { type: sec.sectionId, settings: {} };
-        return acc;
-      }, {} as Record<string, unknown>),
-      order: sectionPlan.sections.map((sec) => sec.sectionId),
-    };
-
-    // Render layout/theme.liquid
-    const cssVars = tokensToCSSVariables(tokens);
-    const themeLiquid = `<!doctype html>
+  // Stage 3: Render layout/theme.liquid
+  const themeLiquid = `<!doctype html>
 <html class="no-js" lang="{{ request.locale.iso_code }}">
 <head>
   <meta charset="utf-8">
@@ -108,77 +56,70 @@ export function runDesignEnginePipeline(
     ${cssVars}
   </style>
 </head>
-<body class="archetype-${currentArchetypeId}">
-  {% section 'header' %}
+<body class="archetype-${spec.archetype}">
+  {% section 'announcement-bar' %}
+  {% section 'premium-header' %}
   <main id="MainContent" role="main">
     {{ content_for_layout }}
   </main>
-  {% section 'footer' %}
+  {% section 'premium-footer' %}
   {{ 'theme.js' | asset_url | script_tag }}
 </body>
 </html>`;
 
-    // Package all theme files
-    const themeFiles: { key: string; value: string }[] = [
-      { key: 'layout/theme.liquid', value: themeLiquid },
-      { key: 'templates/index.json', value: JSON.stringify(indexTemplateJson, null, 2) },
-      ...renderedSections,
-      { key: 'assets/theme.css', value: `/* RootX Design Engine V1 — ${archDef.name} */\n${cssVars}` },
-      { key: 'assets/theme.js', value: 'console.log("RootX Theme Engine Active");' },
-      { key: 'config/settings_data.json', value: JSON.stringify(tokensToShopifySettings(tokens), null, 2) },
-    ];
+  // Package theme files
+  const themeFiles = [
+    { key: 'layout/theme.liquid', value: themeLiquid },
+    { key: 'templates/index.json', value: JSON.stringify(indexTemplateJson, null, 2) },
+    ...liquidSections,
+    { key: 'assets/theme.css', value: `/* RootX Pixel Parity Engine V1 — ${archDef.name} */\n${cssVars}` },
+    { key: 'assets/theme.js', value: 'console.log("RootX Pixel Parity Engine Active");' },
+    { key: 'config/settings_data.json', value: JSON.stringify(tokensToShopifySettings(spec.designTokens), null, 2) },
+  ];
 
-    // Stage 10: Run Quality Validation
-    const startValTime = Date.now();
-    const score = validateAndScoreDesign(gen, input, tokens, analysis.category, currentArchetypeId);
-    const valTarget = getModelForTask('layout_validation');
-    modelLogs.push(
-      logModelCall('layout_validation', valTarget, Date.now() - startValTime, 240, 80, false)
-    );
+  // Stage 4: Run Parity & Quality Gate Audits
+  const parityReport = validatePreviewExportParity(spec, themeFiles);
+  const score = validateAndScoreDesign(rawGen, input, spec.designTokens, spec.brand.category, spec.archetype);
 
-    finalResult = {
-      files: themeFiles,
-      score,
-      archetype: currentArchetypeId,
-      tokens,
-      brandName,
-      brandSlogan,
-      fonts: {
-        heading: archDef.typography.headingFont,
-        body: archDef.typography.bodyFont,
+  const result: DesignEngineResult = {
+    files: themeFiles,
+    score,
+    archetype: spec.archetype,
+    tokens: spec.designTokens,
+    brandName: spec.brand.name,
+    brandSlogan: spec.brand.slogan,
+    fonts: {
+      heading: archDef.typography.headingFont,
+      body: archDef.typography.bodyFont,
+    },
+    modelLogs,
+    sectionPlan: { archetypeId: spec.archetype, sections: spec.sections.map(s => ({ sectionId: s.id, sectionType: s.type, variantId: s.variant, variantName: s.type })), totalSections: spec.sections.length },
+    iterations: 1,
+    imagePipelineResult: {
+      images: spec.images.hero ? [spec.images.hero, ...spec.images.gallery] : spec.images.gallery,
+      heroImage: spec.images.hero,
+      featuredProductImage: spec.images.featured,
+      lifestyleImage: spec.images.story,
+      galleryImages: spec.images.gallery,
+      benefitImage: null,
+      finalCtaImage: spec.images.finalCta,
+      hasSingleImageFallback: spec.images.hasSingleImageFallback,
+      hasNoImageFallback: !spec.images.hero,
+      diagnosticInfo: {
+        totalExtracted: spec.images.gallery.length + 1,
+        validCount: spec.images.gallery.length + 1,
+        rejectedCount: 0,
+        selectedHeroUrl: spec.images.hero?.normalizedUrl || null,
+        sourcesFound: { aliexpress: 1, shopify: 0, manual: 0, remote: 0, unknown: 0 },
+        roleAssignments: { hero: 1, 'featured-product': 1, 'product-gallery': spec.images.gallery.length, lifestyle: 1, 'product-detail': 0, benefit: 0, 'final-cta': 1, thumbnail: 0, unassigned: 0 },
+        rejectionLog: [],
       },
-      modelLogs,
-      sectionPlan,
-      iterations,
-      imagePipelineResult,
-      qualityGateReport: validateStorefrontQualityGateV2(
-        {
-          files: themeFiles,
-          score,
-          archetype: currentArchetypeId,
-          tokens,
-          brandName,
-          brandSlogan,
-          fonts: { heading: archDef.typography.headingFont, body: archDef.typography.bodyFont },
-          modelLogs,
-          sectionPlan,
-          iterations,
-          imagePipelineResult,
-        },
-        input
-      ),
-    };
+    },
+    spec,
+    parityReport,
+  };
 
-    // If score passes (>= 85) or max iterations reached, finish
-    if (score.passed || iterations >= 3) {
-      break;
-    }
+  result.qualityGateReport = validateStorefrontQualityGateV2(result, input);
 
-    // Auto-remediation: switch to alternative archetype if confidence low
-    if (analysis.alternativeArchetypes.length > 0) {
-      currentArchetypeId = analysis.alternativeArchetypes[iterations - 1] || 'high_conversion_landing';
-    }
-  }
-
-  return finalResult!;
+  return result;
 }

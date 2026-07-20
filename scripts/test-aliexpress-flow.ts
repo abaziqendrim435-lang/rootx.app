@@ -120,7 +120,7 @@ async function runAliExpressFlowTest() {
 
   // Step 5: Liquid Section & ZIP File Output Check
   console.log('\nStep 5: Liquid Section & ZIP Theme File Output');
-  const heroLiquid = designRes.files.find(f => f.key.includes('sections/'))?.value || '';
+  const heroLiquid = designRes.files.find(f => f.key.includes('hero'))?.value || '';
   assert(heroLiquid.includes('https://ae01.alicdn.com'), 'Liquid section file contains real AliExpress CDN URL');
 
   console.log('\n==================================================');
