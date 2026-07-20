@@ -17,7 +17,14 @@ export type PreferredStyle =
   | 'luxury_editorial'
   | 'bold_conversion'
   | 'tech_futuristic'
-  | 'soft_lifestyle';
+  | 'soft_lifestyle'
+  | 'modern_tech'
+  | 'soft_beauty'
+  | 'bold_fitness'
+  | 'minimal_fashion'
+  | 'warm_home'
+  | 'friendly_pet'
+  | 'high_conversion_landing';
 
 export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'openrouter' | 'auto';
 
@@ -288,3 +295,109 @@ export interface DropshippingInput {
   language: string;
   country: string;
 }
+
+// ── RootX Design Engine V1 Types ────────────────────────────────
+
+export type DesignArchetypeId =
+  | 'luxury_editorial'
+  | 'modern_tech'
+  | 'soft_beauty'
+  | 'bold_fitness'
+  | 'minimal_fashion'
+  | 'warm_home'
+  | 'friendly_pet'
+  | 'high_conversion_landing';
+
+export interface DesignTokens {
+  '--color-primary': string;
+  '--color-secondary': string;
+  '--color-accent': string;
+  '--color-background': string;
+  '--color-surface': string;
+  '--color-text': string;
+  '--color-muted': string;
+  '--color-border': string;
+  '--radius-small': string;
+  '--radius-medium': string;
+  '--radius-large': string;
+  '--shadow-soft': string;
+  '--shadow-medium': string;
+  '--container-width': string;
+  '--section-space': string;
+  '--font-heading': string;
+  '--font-body': string;
+  '--button-height': string;
+  '--button-radius': string;
+}
+
+export interface QualityIssue {
+  ruleId: string;
+  severity: 'error' | 'warning';
+  message: string;
+  recommendation: string;
+}
+
+export interface DesignScore {
+  visualHierarchy: number;
+  brandConsistency: number;
+  mobileResponsiveness: number;
+  typography: number;
+  spacing: number;
+  imageDiversity: number;
+  conversionClarity: number;
+  accessibility: number;
+  contentQuality: number;
+  shopifyCompatibility: number;
+  total: number;
+  issues: QualityIssue[];
+  passed: boolean;
+}
+
+export type TaskType =
+  | 'product_analysis'
+  | 'brand_naming'
+  | 'marketing_copy'
+  | 'layout_validation'
+  | 'category_detection'
+  | 'faq_generation'
+  | 'feature_extraction'
+  | 'fallback';
+
+export interface ModelLog {
+  taskType: TaskType;
+  selectedModel: string;
+  vendor: string;
+  latencyMs: number;
+  promptTokens: number;
+  completionTokens: number;
+  estimatedCost: number;
+  fallbackUsed: boolean;
+  timestamp: string;
+}
+
+export interface SectionVariantSelection {
+  sectionId: string;
+  sectionType: string;
+  variantId: string;
+  variantName: string;
+}
+
+export interface SectionPlan {
+  archetypeId: DesignArchetypeId;
+  sections: SectionVariantSelection[];
+  totalSections: number;
+}
+
+export interface DesignEngineResult {
+  files: { key: string; value: string }[];
+  score: DesignScore;
+  archetype: DesignArchetypeId;
+  tokens: DesignTokens;
+  brandName: string;
+  brandSlogan: string;
+  fonts: { heading: string; body: string };
+  modelLogs: ModelLog[];
+  sectionPlan: SectionPlan;
+  iterations: number;
+}
+

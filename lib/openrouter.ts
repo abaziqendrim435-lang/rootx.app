@@ -200,3 +200,45 @@ export async function callOpenRouterSimple(
   );
   return content;
 }
+
+/**
+ * Call OpenRouter using task-specific model routing and return content along with usage logs
+ */
+export async function callOpenRouterWithTaskType(
+  taskType: keyof typeof import('./design-engine/model-router').TASK_MODEL_ROUTING,
+  prompt: string,
+  apiKey: string,
+  maxTokens: number = 8000
+) {
+  const { getModelForTask, logModelCall } = await import('./design-engine/model-router');
+  const target = getModelForTask(taskType);
+  const startTime = Date.now();
+
+  const response = await callOpenRouter(
+    [
+      {
+        role: 'system',
+        content: 'You are a JSON-only response generator. Always respond with valid JSON.',
+      },
+      { role: 'user', content: prompt },
+    ],
+    apiKey,
+    {
+      model: target.modelId as OpenRouterModelId,
+      maxTokens,
+      jsonMode: true,
+    }
+  );
+
+  const latency = Date.now() - startTime;
+  const promptTokens = response.usage?.prompt_tokens || 200;
+  const completionTokens = response.usage?.completion_tokens || 350;
+
+  const log = logModelCall(taskType, target, latency, promptTokens, completionTokens, false);
+
+  return {
+    content: response.content,
+    log,
+  };
+}
+

@@ -14,10 +14,14 @@ import type {
   WebsiteBuilderInput, WebsiteGeneration, PreferredStyle, AIProvider, ExportFormat,
   HomepageSection, AboutSection, ServicesSection, PricingSection, FAQSection,
   TestimonialsSection, ContactSection, FooterSection, SEOData, BrandingData, MarketingData,
-  BuilderMode, ProductAnalysis, DropshippingInput,
+  BuilderMode, ProductAnalysis, DropshippingInput, DesignEngineResult, DesignArchetypeId,
 } from '@/lib/website-builder-types';
 import { saveGeneration } from '@/lib/dashboard-storage';
-import { generateShopifyTheme } from '@/lib/shopify-theme-generator';
+import { generateShopifyTheme, generateShopifyThemeV2 } from '@/lib/shopify-theme-generator';
+import DesignScorePanel from '@/components/design-engine/DesignScorePanel';
+import ArchetypeSelector from '@/components/design-engine/ArchetypeSelector';
+import DesignPreviewPanel from '@/components/design-engine/DesignPreviewPanel';
+import ModelLogPanel from '@/components/design-engine/ModelLogPanel';
 import type {
   ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
 } from '@/lib/shopify-types';
@@ -2499,6 +2503,20 @@ export default function WebsiteBuilderDemo() {
     }
     return null;
   });
+  const [designEngineResult, setDesignEngineResult] = useState<DesignEngineResult | null>(null);
+
+  // Compute DesignEngineResult whenever result changes
+  useEffect(() => {
+    if (result) {
+      try {
+        const engineRes = generateShopifyThemeV2(result, input);
+        setDesignEngineResult(engineRes);
+      } catch (err) {
+        console.error('Design Engine execution failed:', err);
+      }
+    }
+  }, [result, input]);
+
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -3081,6 +3099,13 @@ export default function WebsiteBuilderDemo() {
 
   async function handleExportThemeZip() {
     if (!result) return;
+
+    if (designEngineResult && !designEngineResult.score.passed) {
+      if (!confirm(`Current Design Quality Score is ${designEngineResult.score.total}/100 (below 85 threshold). Would you like to proceed with export anyway?`)) {
+        return;
+      }
+    }
+
     setDeployError('');
     setDeployStatus('generating-files');
     try {
@@ -4845,58 +4870,48 @@ export default function WebsiteBuilderDemo() {
 
             {/* ═══════ PREVIEW TAB ═══════ */}
             {activeTab === 'preview' && (
-              <div className="flex flex-col gap-4">
-                {/* Viewport toggle */}
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#52525b' }}>Live Preview</p>
-                  <div className="flex gap-1.5">
-                    {([
-                      { key: 'desktop' as const, icon: <Monitor size={14} />, label: 'Desktop' },
-                      { key: 'tablet' as const, icon: <Tablet size={14} />, label: 'Tablet' },
-                      { key: 'mobile' as const, icon: <Smartphone size={14} />, label: 'Mobile' },
-                    ]).map((vp) => (
-                      <button
-                        key={vp.key}
-                        onClick={() => setPreviewViewport(vp.key)}
-                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-all"
-                        style={{
-                          background: previewViewport === vp.key ? 'rgba(220,38,38,0.08)' : 'rgba(255,255,255,0.02)',
-                          border: `1px solid ${previewViewport === vp.key ? 'rgba(220,38,38,0.3)' : 'var(--color-border)'}`,
-                          color: previewViewport === vp.key ? '#ef4444' : '#71717a',
-                        }}
-                      >
-                        {vp.icon} {vp.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* iframe */}
-                <div
-                  className="rounded-2xl overflow-hidden mx-auto transition-all duration-300"
-                  style={{
-                    width: viewportWidths[previewViewport],
-                    maxWidth: '100%',
-                    border: '1px solid var(--color-border)',
-                    background: '#fff',
-                  }}
-                >
-                  <div className="flex items-center gap-1.5 px-3 py-2" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#ef4444' }} />
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#eab308' }} />
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#22c55e' }} />
-                    <div className="flex-1 mx-3 px-3 py-1 rounded-md text-xs font-mono" style={{ background: 'var(--color-surface-2)', color: '#52525b' }}>
-                      {input.businessName.toLowerCase().replace(/\s+/g, '')}.com
-                    </div>
-                  </div>
-                  <iframe
-                    srcDoc={generatePreviewHtml(result, input)}
-                    title="Website Preview"
-                    className="w-full border-0"
-                    style={{ height: '600px', background: '#fff' }}
-                    sandbox="allow-scripts"
+              <div className="flex flex-col gap-6">
+                {/* 1. Design Score Panel (0-100 Quality Score) */}
+                {designEngineResult && (
+                  <DesignScorePanel
+                    score={designEngineResult.score}
+                    onRegenerate={() => {
+                      if (result) {
+                        try {
+                          const newResult = generateShopifyThemeV2(result, input);
+                          setDesignEngineResult(newResult);
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }
+                    }}
                   />
-                </div>
+                )}
+
+                {/* 2. Archetype Selector & Override */}
+                {designEngineResult && (
+                  <ArchetypeSelector
+                    selectedArchetype={designEngineResult.archetype}
+                    onSelectArchetype={(newArchId) => {
+                      const updatedInput = { ...input, preferredStyle: newArchId };
+                      setInput(updatedInput);
+                      if (result) {
+                        const newResult = generateShopifyThemeV2(result, updatedInput);
+                        setDesignEngineResult(newResult);
+                      }
+                    }}
+                  />
+                )}
+
+                {/* 3. Interactive Desktop/Mobile Preview */}
+                {designEngineResult && (
+                  <DesignPreviewPanel result={designEngineResult} />
+                )}
+
+                {/* 4. OpenRouter Multi-Model Routing Telemetry */}
+                {designEngineResult && designEngineResult.modelLogs.length > 0 && (
+                  <ModelLogPanel logs={designEngineResult.modelLogs} />
+                )}
               </div>
             )}
 

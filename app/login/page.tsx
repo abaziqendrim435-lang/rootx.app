@@ -31,12 +31,9 @@ export default function LoginPage() {
     setStatus('loading');
     setErrorMsg('');
 
+    // Wait a brief moment to simulate network latency in demo mode
     if (!hasSupabaseConfig) {
-      // Demo mode: any non-empty credentials "succeed"
-      await new Promise((r) => setTimeout(r, 900));
-      setStatus('success');
-      setTimeout(() => router.push('/dashboard'), 1200);
-      return;
+      await new Promise((r) => setTimeout(r, 600));
     }
 
     const { error } = await signIn(email.trim(), password);

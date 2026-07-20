@@ -11,14 +11,26 @@ import type {
   WebsiteGeneration,
   WebsiteBuilderInput,
   PreferredStyle,
+  DesignEngineResult,
 } from './website-builder-types';
 import type { ShopifyThemeFile } from './shopify-types';
+import { runDesignEnginePipeline } from './design-engine';
 
 // ── Public API ────────────────────────────────────────────────
 
 /**
+ * RootX Design Engine V1 — Category-aware premium theme generator.
+ */
+export function generateShopifyThemeV2(
+  gen: WebsiteGeneration,
+  input: WebsiteBuilderInput
+): DesignEngineResult {
+  return runDesignEnginePipeline(gen, input);
+}
+
+/**
  * Generate a complete Shopify Online Store 2.0 theme from
- * AI-generated website content and user input.
+ * AI-generated website content and user input (v1 backwards-compatible fallback).
  */
 export function generateShopifyTheme(
   gen: WebsiteGeneration,
@@ -3165,6 +3177,13 @@ function generateStyleOverrides(style: PreferredStyle): string {
   transform: translateY(-4px) scale(1.01);
   box-shadow: 0 12px 30px rgba(180, 140, 100, 0.1);
 }`,
+    modern_tech: `/* Modern Tech Alias */`,
+    soft_beauty: `/* Soft Beauty Alias */`,
+    bold_fitness: `/* Bold Fitness Alias */`,
+    minimal_fashion: `/* Minimal Fashion Alias */`,
+    warm_home: `/* Warm Home Alias */`,
+    friendly_pet: `/* Friendly Pet Alias */`,
+    high_conversion_landing: `/* High Conversion Landing Alias */`,
     minimal: `/* Legacy minimal fallback */`,
     luxury: `/* Legacy luxury fallback */`,
     startup: `/* Legacy startup fallback */`,

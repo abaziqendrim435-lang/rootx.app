@@ -52,10 +52,10 @@ export default function ProfilePage() {
   const [resetStatus, setResetStatus] = useState<'idle' | 'loading' | 'sent'>('idle');
 
   useEffect(() => {
-    if (!loading && !user && isSupabaseEnabled) {
+    if (!loading && !user) {
       router.replace('/login');
     }
-  }, [user, loading, isSupabaseEnabled, router]);
+  }, [user, loading, router]);
 
   useEffect(() => {
     if (user?.user_metadata?.display_name) {
