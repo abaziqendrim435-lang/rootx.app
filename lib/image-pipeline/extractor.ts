@@ -46,8 +46,10 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
 
     // Direct image fields
     const directFields = [
-      'images', 'image', 'imageUrl', 'imageUrls', 'featuredImage',
-      'featured_image', 'gallery', 'media', 'supplierImages', 'src', 'url'
+      'images', 'productImages', 'gallery', 'galleryImages', 'media',
+      'imageUrls', 'productMainImageUrl', 'productImage', 'product_image',
+      'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image',
+      'supplierImages', 'featuredImage', 'featured_image', 'src', 'url'
     ];
 
     for (const key of Object.keys(record)) {
@@ -67,12 +69,13 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       } else if (key === 'variants' && Array.isArray(value)) {
         value.forEach((v: Record<string, unknown>, i) => {
           if (v.image) addCandidate(v.image, `${currentPath}[${i}].image`);
+          if (v.imageUrl) addCandidate(v.imageUrl, `${currentPath}[${i}].imageUrl`);
           if (v.image_url) addCandidate(v.image_url, `${currentPath}[${i}].image_url`);
           if (v.src) addCandidate(v.src, `${currentPath}[${i}].src`);
         });
       } else if (typeof value === 'object' && value !== null && !currentPath.includes('__')) {
-        // Shallow nested traversal
-        if (currentPath.split('.').length < 4) {
+        // Deep nested traversal up to 5 levels
+        if (currentPath.split('.').length < 6) {
           traverse(value, currentPath);
         }
       }
@@ -80,5 +83,12 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
   }
 
   traverse(data);
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Image Pipeline Extractor] Extracted raw candidates count:', extracted.length, {
+      sample: extracted.slice(0, 3).map((e) => e.rawUrl),
+    });
+  }
+
   return extracted;
 }

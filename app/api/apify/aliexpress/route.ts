@@ -46,6 +46,7 @@ interface ApifyProductItem {
   specifications?: any;
   description?: string;
   descriptionHtml?: string;
+  variants?: any;
 }
 
 export async function POST(req: NextRequest) {
@@ -237,22 +238,47 @@ export async function POST(req: NextRequest) {
       
       const discount = item.priceDiscount || item.discount || item.discountPercentage || '';
       
-      // 4. Extract images
-      let images: string[] = [];
-      if (Array.isArray(item.images)) {
-        images = item.images.map(i => typeof i === 'string' ? i : i.url || '');
-      } else if (item.images && typeof item.images === 'object') {
-        images = Object.values(item.images).filter(v => typeof v === 'string') as string[];
-      } else if (item.imageUrl) {
-        images = [item.imageUrl];
-      } else if (item.image) {
-        images = [item.image];
-      } else if (item.thumbnail) {
-        images = [item.thumbnail];
+      // 4. Extract images from all possible AliExpress field shapes
+      const rawCandidates: string[] = [];
+
+      const addImgCandidate = (val: unknown) => {
+        if (!val) return;
+        if (typeof val === 'string' && val.trim()) {
+          rawCandidates.push(val.trim());
+        } else if (typeof val === 'object' && val !== null) {
+          const obj = val as Record<string, unknown>;
+          const src = String(obj.src || obj.url || obj.originalUrl || obj.image_url || obj.imageUrl || '').trim();
+          if (src) rawCandidates.push(src);
+        }
+      };
+
+      // Direct array/object fields
+      const imageFields = [
+        'images', 'productImages', 'gallery', 'galleryImages', 'media',
+        'imageUrls', 'productMainImageUrl', 'productImage', 'product_image',
+        'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image'
+      ];
+
+      for (const field of imageFields) {
+        const val = (item as Record<string, unknown>)[field];
+        if (Array.isArray(val)) {
+          val.forEach(addImgCandidate);
+        } else if (val) {
+          addImgCandidate(val);
+        }
       }
-      
+
+      // Check item.variants array if present
+      if (Array.isArray(item.variants)) {
+        item.variants.forEach((v: Record<string, unknown>) => {
+          if (v.image) addImgCandidate(v.image);
+          if (v.imageUrl) addImgCandidate(v.imageUrl);
+          if (v.image_url) addImgCandidate(v.image_url);
+        });
+      }
+
       // Clean and normalize image URLs (obtain high-resolution version)
-      images = images
+      let images = rawCandidates
         .map((src: string) => {
           if (typeof src !== 'string') return '';
           let cleaned = src.trim();
@@ -263,10 +289,16 @@ export async function POST(req: NextRequest) {
           cleaned = cleaned.replace(/_Q[0-9]+\.(?:jpg|png|jpeg|webp)$/i, (ext) => ext.slice(ext.lastIndexOf('.')));
           return cleaned;
         })
-        .filter(Boolean);
+        .filter((url) => url.startsWith('http://') || url.startsWith('https://'));
 
       // Deduplicate images
       images = [...new Set(images)];
+
+      console.log('[Apify Integration] Raw AliExpress image fields detected:', {
+        title: title.slice(0, 40),
+        totalExtracted: images.length,
+        sample: images.slice(0, 3)
+      });
 
       // 5. Extract rating & orders
       const rating = item.ratingValue || item.rating || item.stars || item.aggregateRating?.ratingValue || null;

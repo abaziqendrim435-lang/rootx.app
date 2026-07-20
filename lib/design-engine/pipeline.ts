@@ -23,6 +23,7 @@ export function runDesignEnginePipeline(
 
   // Stage 0: Run Image Pipeline (Extraction, Normalization, Validation, Ranking & Role Assignment)
   const imagePipelineResult = runImagePipeline({ gen, input, ecommerce: gen.ecommerce });
+  (gen as unknown as { imagePipelineResult?: typeof imagePipelineResult }).imagePipelineResult = imagePipelineResult;
 
   // Stage 1-5: Product Analysis, Category, Target Customer, Personality, Archetype Selection
   const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText || ''}`;

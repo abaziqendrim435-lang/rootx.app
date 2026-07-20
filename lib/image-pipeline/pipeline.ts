@@ -89,5 +89,18 @@ export function runImagePipeline(productData: unknown): ImagePipelineResult {
   };
 
   // 4. Role Assignment & Fallback logic
-  return assignRolesAndFallbacks(validImages, diagnosticInfo);
+  const result = assignRolesAndFallbacks(validImages, diagnosticInfo);
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Image Pipeline Result]', {
+      totalExtracted: diagnosticInfo.totalExtracted,
+      validCount: diagnosticInfo.validCount,
+      rejectedCount: diagnosticInfo.rejectedCount,
+      selectedHeroUrl: result.heroImage?.normalizedUrl || 'None',
+      sources: diagnosticInfo.sourcesFound,
+      rejections: rejectionLog.map((r) => `${r.url.slice(0, 35)}... => ${r.reason}`),
+    });
+  }
+
+  return result;
 }

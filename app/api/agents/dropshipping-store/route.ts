@@ -876,12 +876,23 @@ export async function POST(req: NextRequest) {
         else if (providerName === 'gemini') rawFinal = await callGemini(finalPrompt, key!);
         else rawFinal = await callKimi(finalPrompt, key!);
 
-        const parsed = parseJsonRobust(rawFinal);
+        const parsed = parseJsonRobust(rawFinal) as any;
+
+        // Preserve real product images from analysis
+        const finalImages = (sanitizedAnalysis.images && sanitizedAnalysis.images.length > 0)
+          ? sanitizedAnalysis.images
+          : (parsed?.ecommerce?.images || []);
+
         const result: WebsiteGeneration = {
-          ...(parsed as unknown as WebsiteGeneration),
+          ...parsed,
+          ecommerce: {
+            ...(parsed.ecommerce || {}),
+            images: finalImages.filter((u: any) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image/'))),
+          },
           isDemo: false,
           provider: 'multi-model',
         };
+        console.log(`${LOG} Store generation complete (Multi-Model). Preserved images count: ${result.ecommerce?.images?.length || 0}`);
         return NextResponse.json(result);
       } catch (err) {
         console.error(`${LOG} Final validation step failed, falling back to standard prompt:`, err);
@@ -902,12 +913,29 @@ export async function POST(req: NextRequest) {
 
     console.log(`${LOG} Generation complete via ${usedProvider}`);
 
-    // Merge AI output with metadata
+    const parsedObj = (parsed || {}) as any;
+    // Preserve real product images from analysis if AI returned placeholders or omitted images
+    const rawAiImgs = parsedObj?.ecommerce?.images;
+    const validAiImgs = Array.isArray(rawAiImgs)
+      ? rawAiImgs.filter((u) => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:image/')))
+      : [];
+
+    const finalImages = sanitizedAnalysis.images && sanitizedAnalysis.images.length > 0
+      ? [...new Set([...sanitizedAnalysis.images, ...validAiImgs])]
+      : validAiImgs;
+
+    // Merge AI output with metadata and preserved images
     const result: WebsiteGeneration = {
-      ...(parsed as unknown as WebsiteGeneration),
+      ...parsedObj,
+      ecommerce: {
+        ...(parsedObj.ecommerce || {}),
+        images: finalImages,
+      },
       isDemo: false,
       provider: usedProvider,
     };
+
+    console.log(`${LOG} Store generation complete. Preserved images count: ${result.ecommerce?.images?.length || 0}, sample: ${result.ecommerce?.images?.slice(0, 2)}`);
 
     return NextResponse.json(result);
   } catch (err: unknown) {

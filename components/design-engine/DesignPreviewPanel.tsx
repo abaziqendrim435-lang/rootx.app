@@ -2,21 +2,40 @@
 
 import React, { useState } from 'react';
 import type { DesignEngineResult } from '@/lib/website-builder-types';
-import { Monitor, Smartphone, Layers, Palette, Type } from 'lucide-react';
+import { Monitor, Smartphone, Layers, Palette, Type, Image as ImageIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   result: DesignEngineResult;
 }
 
+function stripLiquidDirectives(liquidStr: string): string {
+  if (!liquidStr) return '';
+  return liquidStr
+    .replace(/{%\s*schema\s*%}[\s\S]*?{%\s*endschema\s*%}/gi, '')
+    .replace(/{%\s*if[\s\S]*?{%\s*endif\s*%}/gi, '')
+    .replace(/{%\s*[\s\S]*?%\s*}/g, '')
+    .replace(/\{\{\s*section\.settings\.headline\s*\}\}/g, 'Premium Collection')
+    .replace(/\{\{\s*section\.settings\.subheadline\s*\}\}/g, 'Engineered for exceptional daily performance.')
+    .replace(/\{\{\s*section\.settings\.cta_url\s*\}\}/g, '#')
+    .replace(/\{\{\s*[\s\S]*?\s*\}\}/g, '');
+}
+
 export default function DesignPreviewPanel({ result }: Props) {
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
 
-  // Find theme.liquid or template file
-  const themeFile = result.files.find((f) => f.key === 'layout/theme.liquid')?.value || '';
-  const indexJson = result.files.find((f) => f.key === 'templates/index.json')?.value || '';
   const themeCss = result.files.find((f) => f.key === 'assets/theme.css')?.value || '';
+  const sectionFiles = result.files.filter((f) => f.key.startsWith('sections/'));
 
-  // Generate a mock rendered preview HTML doc
+  // Hero image resolution
+  const imgPipeline = result.imagePipelineResult;
+  const heroUrl = imgPipeline?.heroImage?.normalizedUrl || imgPipeline?.images?.[0]?.normalizedUrl || '';
+  const validImagesCount = imgPipeline?.images?.length || 0;
+  const totalExtractedCount = imgPipeline?.diagnosticInfo?.totalExtracted || 0;
+
+  // Render liquid section templates into clean HTML body
+  const renderedSectionsHtml = sectionFiles.map((sf) => stripLiquidDirectives(sf.value)).join('\n');
+
+  // Generate full interactive preview HTML document
   const previewHtml = `<!doctype html>
 <html>
 <head>
@@ -27,54 +46,42 @@ export default function DesignPreviewPanel({ result }: Props) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&family=Playfair+Display:ital,wght@0,600;0,700&display=swap" rel="stylesheet">
   <style>
     ${themeCss}
-    body { font-family: ${result.tokens['--font-body']}; color: ${result.tokens['--color-text']}; background: ${result.tokens['--color-background']}; margin: 0; padding: 0; }
-    .preview-header { padding: 1.25rem 2rem; border-bottom: 1px solid ${result.tokens['--color-border']}; display: flex; justify-content: space-between; align-items: center; background: ${result.tokens['--color-surface']}; }
-    .preview-logo { font-family: ${result.tokens['--font-heading']}; font-size: 1.5rem; font-weight: 800; color: ${result.tokens['--color-primary']}; }
-    .preview-hero { padding: 4rem 2rem; text-align: center; background: ${result.tokens['--color-surface']}; border-bottom: 1px solid ${result.tokens['--color-border']}; }
-    .preview-title { font-family: ${result.tokens['--font-heading']}; font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; color: ${result.tokens['--color-text']}; }
-    .preview-desc { max-width: 600px; margin: 0 auto 2rem; color: ${result.tokens['--color-muted']}; line-height: 1.6; }
-    .preview-btn { display: inline-block; padding: 0.9rem 2.5rem; height: ${result.tokens['--button-height']}; border-radius: ${result.tokens['--button-radius']}; background: ${result.tokens['--color-primary']}; color: #fff; text-decoration: none; font-weight: 700; }
-    .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; padding: 3rem 2rem; }
-    .preview-card { padding: 1.5rem; border: 1px solid ${result.tokens['--color-border']}; border-radius: ${result.tokens['--radius-medium']}; background: ${result.tokens['--color-surface']}; box-shadow: ${result.tokens['--shadow-soft']}; }
+    * { box-sizing: border-box; }
+    body { font-family: ${result.tokens['--font-body']}, system-ui, sans-serif; color: ${result.tokens['--color-text']}; background: ${result.tokens['--color-background']}; margin: 0; padding: 0; }
+    .header { padding: 1.25rem 2rem; border-bottom: 1px solid ${result.tokens['--color-border']}; display: flex; justify-content: space-between; align-items: center; background: ${result.tokens['--color-surface']}; }
+    .logo { font-family: ${result.tokens['--font-heading']}; font-size: 1.5rem; font-weight: 800; color: ${result.tokens['--color-primary']}; }
+    .btn { display: inline-block; padding: 0.8rem 1.8rem; border-radius: ${result.tokens['--button-radius']}; font-weight: 700; text-decoration: none; cursor: pointer; border: none; }
+    .btn-primary { background: ${result.tokens['--color-primary']}; color: #fff; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+    .section { padding: 3.5rem 0; }
+    img { max-width: 100%; height: auto; display: block; object-fit: cover; }
+    
+    /* Dev debug overlay */
+    .debug-banner { background: #09090b; color: #a1a1aa; padding: 0.75rem 1rem; border-bottom: 1px solid #27272a; font-family: monospace; font-size: 11px; display: flex; gap: 1rem; flex-wrap: wrap; }
+    .debug-badge { background: #18181b; padding: 0.2rem 0.5rem; border-radius: 4px; color: #e4e4e7; border: 1px solid #27272a; }
   </style>
 </head>
 <body>
-  <div class="preview-header">
-    <div class="preview-logo">${result.brandName}</div>
-    <div style="display:flex; gap:1.5rem; font-size:0.9rem;">
-      <span>Shop</span><span>Features</span><span>FAQ</span>
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">${result.brandName}</div>
+    <div style="display:flex; gap:1.5rem; font-size:0.9rem; font-weight:600;">
+      <a href="#" style="color:inherit; text-decoration:none;">Shop</a>
+      <a href="#" style="color:inherit; text-decoration:none;">Features</a>
+      <a href="#" style="color:inherit; text-decoration:none;">FAQ</a>
     </div>
-  </div>
-  <div class="preview-hero">
-    <div class="preview-title">${result.brandName} Store</div>
-    <div class="preview-desc">${result.brandSlogan}</div>
-    <a href="#" class="preview-btn">Shop Now — Best Sellers</a>
-  </div>
-  <div class="preview-grid">
-    <div class="preview-card">
-      <div style="font-size:1.5rem; margin-bottom:0.5rem;">🛡️</div>
-      <strong>Guaranteed Quality</strong>
-      <p style="font-size:0.85rem; color:${result.tokens['--color-muted']}; margin-top:0.25rem;">Crafted with premium components.</p>
-    </div>
-    <div class="preview-card">
-      <div style="font-size:1.5rem; margin-bottom:0.5rem;">🚚</div>
-      <strong>Free Express Delivery</strong>
-      <p style="font-size:0.85rem; color:${result.tokens['--color-muted']}; margin-top:0.25rem;">Tracked shipping on all orders.</p>
-    </div>
-    <div class="preview-card">
-      <div style="font-size:1.5rem; margin-bottom:0.5rem;">🔒</div>
-      <strong>Secure Checkout</strong>
-      <p style="font-size:0.85rem; color:${result.tokens['--color-muted']}; margin-top:0.25rem;">256-Bit SSL protection.</p>
-    </div>
-  </div>
+  </header>
+
+  <!-- Sections Rendered from Theme Engine -->
+  ${renderedSectionsHtml}
 </body>
 </html>`;
 
   return (
     <div className="space-y-4 mb-6">
       {/* Top Controls Bar */}
-      <div className="flex items-center justify-between p-4 rounded-xl border bg-zinc-900 border-zinc-800">
-        <div className="flex items-center gap-4 text-xs text-zinc-300">
+      <div className="flex items-center justify-between p-4 rounded-xl border bg-zinc-900 border-zinc-800 flex-wrap gap-3">
+        <div className="flex items-center gap-4 text-xs text-zinc-300 flex-wrap">
           <span className="flex items-center gap-1.5 font-bold text-white">
             <Palette size={14} className="text-blue-400" />
             Archetype: <span className="text-blue-400 capitalize">{result.archetype.replace('_', ' ')}</span>
@@ -84,8 +91,8 @@ export default function DesignPreviewPanel({ result }: Props) {
             Fonts: <span className="text-white">{result.fonts.heading}</span> / {result.fonts.body}
           </span>
           <span className="flex items-center gap-1.5">
-            <Layers size={14} className="text-amber-400" />
-            Sections: <span className="text-white">{result.sectionPlan.totalSections} Rendered</span>
+            <ImageIcon size={14} className="text-amber-400" />
+            Hero Photo: <span className="text-amber-400 font-mono truncate max-w-[150px]">{heroUrl || 'No image'}</span>
           </span>
         </div>
 
@@ -112,13 +119,30 @@ export default function DesignPreviewPanel({ result }: Props) {
         </div>
       </div>
 
+      {/* Development Debug Result (Visible in Dev Mode) */}
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="p-3 rounded-xl border bg-zinc-950 border-zinc-800 text-[11px] font-mono text-zinc-300 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-blue-400 font-bold">Image Pipeline Output:</span>
+            <span>Raw Found: <strong className="text-white">{totalExtractedCount}</strong></span>
+            <span>Valid Images: <strong className="text-emerald-400">{validImagesCount}</strong></span>
+            <span>Hero Rendered: <strong className="text-amber-400 truncate max-w-[250px]">{heroUrl ? heroUrl.slice(0, 40) + '...' : 'None'}</strong></span>
+          </div>
+          {imgPipeline?.diagnosticInfo?.rejectionLog && imgPipeline.diagnosticInfo.rejectionLog.length > 0 && (
+            <span className="text-amber-400 text-[10px]">
+              {imgPipeline.diagnosticInfo.rejectionLog.length} Rejected (Audit Log Active)
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Frame Container */}
       <div className="flex justify-center bg-zinc-950 p-6 rounded-2xl border border-zinc-800 overflow-hidden min-h-[500px]">
         <div
           className="transition-all duration-300 rounded-xl overflow-hidden shadow-2xl border border-zinc-800 bg-white"
           style={{
             width: device === 'desktop' ? '100%' : '375px',
-            height: device === 'desktop' ? '550px' : '650px',
+            height: device === 'desktop' ? '650px' : '750px',
           }}
         >
           <iframe
