@@ -18,6 +18,7 @@ import type {
 } from '@/lib/website-builder-types';
 import { saveGeneration } from '@/lib/dashboard-storage';
 import { generateShopifyTheme, generateShopifyThemeV2 } from '@/lib/shopify-theme-generator';
+import { cleanBrandName } from '@/lib/title-cleaner';
 import DesignScorePanel from '@/components/design-engine/DesignScorePanel';
 import ArchetypeSelector from '@/components/design-engine/ArchetypeSelector';
 import DesignPreviewPanel from '@/components/design-engine/DesignPreviewPanel';
@@ -2734,7 +2735,7 @@ export default function WebsiteBuilderDemo() {
       setDropInput((prev) => ({
         ...prev,
         productUrl: submittedUrl,
-        storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
+        storeName: data.analysis.productTitle ? cleanBrandName(data.analysis.productTitle) : prev.storeName,
       }));
       setDropStatus('analyzed');
     } catch (err) {

@@ -15,18 +15,34 @@ import { getModelForTask, logModelCall } from './model-router';
 import { getArchetype } from './archetypes';
 import { runImagePipeline } from '../image-pipeline';
 
+import { buildCleanBrandProfile } from '../title-cleaner';
+import { sanitizePlaceholders } from '../placeholder-cleaner';
+import { validateStorefrontQualityGateV2 } from '../quality-gate';
+
 export function runDesignEnginePipeline(
-  gen: WebsiteGeneration,
+  rawGen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): DesignEngineResult {
   const modelLogs: ModelLog[] = [];
 
-  // Stage 0: Run Image Pipeline (Extraction, Normalization, Validation, Ranking & Role Assignment)
+  // Stage 0.1: Clean Titles, Brand Names, and Slogans
+  const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${rawGen.ecommerce?.shippingText || ''}`;
+  const profile = buildCleanBrandProfile(
+    input.businessName,
+    input.businessName,
+    input.preferredStyle || 'modern_commerce',
+    rawGen.homepage?.hero?.headline,
+    rawGen.homepage?.hero?.subheadline
+  );
+
+  // Stage 0.2: Purge Placeholder Content
+  const gen = sanitizePlaceholders(rawGen, profile.cleanBrandName);
+
+  // Stage 0.3: Run Image Pipeline (Extraction, Normalization, Validation, Ranking & Role Assignment)
   const imagePipelineResult = runImagePipeline({ gen, input, ecommerce: gen.ecommerce });
   (gen as unknown as { imagePipelineResult?: typeof imagePipelineResult }).imagePipelineResult = imagePipelineResult;
 
   // Stage 1-5: Product Analysis, Category, Target Customer, Personality, Archetype Selection
-  const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText || ''}`;
   const startCategoryTime = Date.now();
   const analysis = analyzeAndDetectArchetype(textToScan, input.preferredStyle);
   const categoryTarget = getModelForTask('category_detection');
@@ -54,8 +70,8 @@ export function runDesignEnginePipeline(
 
     // Stage 8 & 9: Render Sections and Theme Files
     const archDef = getArchetype(currentArchetypeId);
-    const brandName = input.businessName.replace(/\s+Store$/i, '').trim();
-    const brandSlogan = gen.homepage.hero.subheadline || archDef.tagline;
+    const brandName = profile.cleanBrandName;
+    const brandSlogan = profile.cleanHeroHeadline;
 
     // Render section liquid files
     const renderedSections: { key: string; value: string }[] = sectionPlan.sections.map((sec) => {
@@ -135,6 +151,22 @@ export function runDesignEnginePipeline(
       sectionPlan,
       iterations,
       imagePipelineResult,
+      qualityGateReport: validateStorefrontQualityGateV2(
+        {
+          files: themeFiles,
+          score,
+          archetype: currentArchetypeId,
+          tokens,
+          brandName,
+          brandSlogan,
+          fonts: { heading: archDef.typography.headingFont, body: archDef.typography.bodyFont },
+          modelLogs,
+          sectionPlan,
+          iterations,
+          imagePipelineResult,
+        },
+        input
+      ),
     };
 
     // If score passes (>= 85) or max iterations reached, finish

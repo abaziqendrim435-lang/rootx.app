@@ -400,5 +400,6 @@ export interface DesignEngineResult {
   sectionPlan: SectionPlan;
   iterations: number;
   imagePipelineResult?: import('./image-pipeline/types').ImagePipelineResult;
+  qualityGateReport?: import('./quality-gate').QualityGateV2Report;
 }
 
