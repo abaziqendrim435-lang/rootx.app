@@ -532,6 +532,61 @@ export const ARCHETYPES: Record<DesignArchetypeId, ArchetypeDefinition> = {
     navigationStyle: 'sticky-cta',
     productPageLayout: 'conversion-focused-hero',
   },
+  high_conversion_single: {
+    id: 'high_conversion_single',
+    name: 'High-Conversion Single Product',
+    tagline: 'Direct response buybox hero, problem-solution sales funnel',
+    description: 'Designed for viral single-product dropshipping and direct response offers.',
+    typography: {
+      headingFont: 'Outfit',
+      bodyFont: 'Inter',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Outfit:wght@700&family=Inter:wght@400;500;600&display=swap',
+      headingTransform: 'none',
+      headingWeight: '700',
+      bodyWeight: '400',
+    },
+    colorBehavior: {
+      primary: '#16a34a',
+      secondary: '#15803d',
+      accent: '#f59e0b',
+      background: '#ffffff',
+      surface: '#f0fdf4',
+      text: '#0f172a',
+      muted: '#475569',
+      border: '#bbf7d0',
+    },
+    borderRadius: {
+      small: '6px',
+      medium: '10px',
+      large: '16px',
+    },
+    shadowStyle: {
+      soft: '0 4px 16px rgba(22, 163, 74, 0.08)',
+      medium: '0 10px 30px rgba(22, 163, 74, 0.16)',
+    },
+    buttonStyle: {
+      height: '56px',
+      radius: '10px',
+      className: 'btn-conversion-dominant',
+      hoverTransform: 'translateY(-2px) scale(1.01)',
+    },
+    heroComposition: 'conversion-dominant',
+    cardStyle: {
+      border: '1px solid #bbf7d0',
+      shadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
+      background: '#ffffff',
+      radius: '12px',
+    },
+    sectionSpacing: '4.5rem',
+    imageTreatment: {
+      aspectRatio: '1/1',
+      borderRadius: '12px',
+      hoverZoom: true,
+      overlay: 'transparent',
+    },
+    navigationStyle: 'sticky-cta',
+    productPageLayout: 'conversion-focused-hero',
+  },
 };
 
 /**
@@ -547,6 +602,7 @@ export function getArchetype(id: DesignArchetypeId | string): ArchetypeDefinitio
   if (id === 'bold_conversion') return ARCHETYPES.bold_fitness;
   if (id === 'premium_minimal' || id === 'minimal') return ARCHETYPES.minimal_fashion;
   if (id === 'modern_commerce' || id === 'modern' || id === 'corporate' || id === 'startup') return ARCHETYPES.warm_home;
+  if (id === 'high_conversion_single') return ARCHETYPES.high_conversion_single;
   
   return ARCHETYPES.high_conversion_landing;
 }

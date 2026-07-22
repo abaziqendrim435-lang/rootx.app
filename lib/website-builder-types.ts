@@ -24,7 +24,8 @@ export type PreferredStyle =
   | 'minimal_fashion'
   | 'warm_home'
   | 'friendly_pet'
-  | 'high_conversion_landing';
+  | 'high_conversion_landing'
+  | 'high_conversion_single';
 
 export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'openrouter' | 'auto';
 
@@ -306,7 +307,8 @@ export type DesignArchetypeId =
   | 'minimal_fashion'
   | 'warm_home'
   | 'friendly_pet'
-  | 'high_conversion_landing';
+  | 'high_conversion_landing'
+  | 'high_conversion_single';
 
 export interface DesignTokens {
   '--color-primary': string;

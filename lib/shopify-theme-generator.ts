@@ -3023,6 +3023,12 @@ function generateStyleOverrides(style: PreferredStyle): string {
   --border-radius: 10px;
   --border-radius-lg: 16px;
 }`,
+    high_conversion_single: `
+/* ── High Conversion Single Overrides ────────────────────────────────── */
+.style-high_conversion_single {
+  --border-radius: 8px;
+  --border-radius-lg: 12px;
+}`,
     premium_minimal: `
 /* ── Premium Minimal Overrides ────────────────────────────────── */
 .style-premium_minimal {

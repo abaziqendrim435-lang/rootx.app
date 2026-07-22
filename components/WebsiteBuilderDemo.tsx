@@ -258,12 +258,14 @@ function InputForm({
   onReset: () => void;
 }) {
   const styles: { label: string; value: PreferredStyle }[] = [
-    { label: 'Minimal', value: 'minimal' },
-    { label: 'Luxury', value: 'luxury' },
-    { label: 'Startup', value: 'startup' },
-    { label: 'Dark', value: 'dark' },
-    { label: 'Modern', value: 'modern' },
-    { label: 'Corporate', value: 'corporate' },
+    { label: 'Modern Technology', value: 'modern_tech' as PreferredStyle },
+    { label: 'Soft Beauty', value: 'soft_beauty' as PreferredStyle },
+    { label: 'Luxury Editorial', value: 'luxury_editorial' as PreferredStyle },
+    { label: 'Minimal Fashion', value: 'minimal_fashion' as PreferredStyle },
+    { label: 'Warm Home', value: 'warm_home' as PreferredStyle },
+    { label: 'Bold Fitness', value: 'bold_fitness' as PreferredStyle },
+    { label: 'Friendly Pet', value: 'friendly_pet' as PreferredStyle },
+    { label: 'High-Conversion Single Product', value: 'high_conversion_single' as PreferredStyle },
   ];
 
   const languages = [
