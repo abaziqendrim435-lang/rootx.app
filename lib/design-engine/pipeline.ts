@@ -57,20 +57,64 @@ export function runDesignEnginePipeline(
   </style>
 </head>
 <body class="archetype-${spec.archetype}">
-  {% section 'announcement-bar' %}
-  {% section 'premium-header' %}
+  {% section 'rootx-announcement-bar' %}
+  {% section 'rootx-header' %}
   <main id="MainContent" role="main">
     {{ content_for_layout }}
   </main>
-  {% section 'premium-footer' %}
+  {% section 'rootx-footer' %}
   {{ 'theme.js' | asset_url | script_tag }}
 </body>
 </html>`;
+
+  const productTemplateJson = {
+    sections: {
+      'rootx-main-product': { type: 'rootx-main-product', settings: {} },
+      'rootx-gallery': { type: 'rootx-gallery', settings: {} },
+      'rootx-specifications': { type: 'rootx-specifications', settings: {} },
+      'rootx-faq': { type: 'rootx-faq', settings: {} },
+    },
+    order: ['rootx-main-product', 'rootx-gallery', 'rootx-specifications', 'rootx-faq'],
+  };
+
+  const collectionTemplateJson = {
+    sections: {
+      'rootx-product-showcase': { type: 'rootx-product-showcase', settings: {} },
+    },
+    order: ['rootx-product-showcase'],
+  };
+
+  const pageTemplateJson = {
+    sections: {
+      'rootx-image-story': { type: 'rootx-image-story', settings: {} },
+      'rootx-faq': { type: 'rootx-faq', settings: {} },
+    },
+    order: ['rootx-image-story', 'rootx-faq'],
+  };
+
+  const template404Json = {
+    sections: {
+      'rootx-hero': { type: 'rootx-hero', settings: {} },
+    },
+    order: ['rootx-hero'],
+  };
+
+  const cartTemplateJson = {
+    sections: {
+      'rootx-main-product': { type: 'rootx-main-product', settings: {} },
+    },
+    order: ['rootx-main-product'],
+  };
 
   // Package theme files
   const themeFiles = [
     { key: 'layout/theme.liquid', value: themeLiquid },
     { key: 'templates/index.json', value: JSON.stringify(indexTemplateJson, null, 2) },
+    { key: 'templates/product.json', value: JSON.stringify(productTemplateJson, null, 2) },
+    { key: 'templates/collection.json', value: JSON.stringify(collectionTemplateJson, null, 2) },
+    { key: 'templates/page.json', value: JSON.stringify(pageTemplateJson, null, 2) },
+    { key: 'templates/404.json', value: JSON.stringify(template404Json, null, 2) },
+    { key: 'templates/cart.json', value: JSON.stringify(cartTemplateJson, null, 2) },
     ...liquidSections,
     { key: 'assets/theme.css', value: `/* RootX Pixel Parity Engine V1 — ${archDef.name} */\n${cssVars}` },
     { key: 'assets/theme.js', value: 'console.log("RootX Pixel Parity Engine Active");' },

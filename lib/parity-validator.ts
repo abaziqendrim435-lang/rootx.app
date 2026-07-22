@@ -106,6 +106,41 @@ export function validatePreviewExportParity(
   });
   if (placeholderDetected) failures.push(`Placeholder content detected in exported theme files.`);
 
+  // 7. Section Reference Integrity (JSON & Liquid tags vs. sections/*.liquid)
+  const fileKeysSet = new Set(themeFiles.map((f) => f.key));
+  let missingRefFound = false;
+  themeFiles.forEach((file) => {
+    if (file.key.startsWith('templates/') && file.key.endsWith('.json')) {
+      try {
+        const parsed = JSON.parse(file.value);
+        if (parsed.sections) {
+          for (const sId of Object.keys(parsed.sections)) {
+            const sType = parsed.sections[sId]?.type;
+            if (sType && !fileKeysSet.has(`sections/${sType}.liquid`)) {
+              missingRefFound = true;
+            }
+          }
+        }
+      } catch {}
+    }
+    if (file.key.endsWith('.liquid')) {
+      const matches = file.value.matchAll(/{%\s*section\s*['"]([^'"]+)['"]\s*%}/g);
+      for (const m of matches) {
+        if (!fileKeysSet.has(`sections/${m[1]}.liquid`)) {
+          missingRefFound = true;
+        }
+      }
+    }
+  });
+
+  checks.push({
+    field: 'sectionReferencesExist',
+    passed: !missingRefFound,
+    expected: 'All Referenced Sections Exist',
+    actual: missingRefFound ? 'Missing Section References' : 'All Referenced Sections Exist',
+  });
+  if (missingRefFound) failures.push('One or more referenced Liquid section types do not exist in sections/.');
+
   // Score Calculation
   const passedCount = checks.filter((c) => c.passed).length;
   const overallScore = Math.round((passedCount / checks.length) * 100);

@@ -1,10 +1,11 @@
 // ============================================================
 // RootX Storefront Pixel Parity Engine V1 — Liquid Component Library
-// Renders the 12 required Shopify OS 2.0 Liquid sections directly
+// Renders all 13 required Shopify OS 2.0 Liquid sections directly
 // from StorefrontSpec with valid {% schema %} tags and --rx-* tokens.
 // ============================================================
 
 import type { StorefrontSpec } from './types';
+import { ROOTX_SECTION_TYPES, getSectionFileName } from './section-registry';
 
 function esc(str: string): string {
   if (!str) return '';
@@ -17,13 +18,28 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const content = spec.content;
   const heroImg = spec.images.hero?.normalizedUrl || spec.images.gallery[0]?.normalizedUrl || '';
 
-  const heroSection = spec.sections.find(s => s.id === 'rootx-hero');
+  const heroSection = spec.sections.find(s => s.id === ROOTX_SECTION_TYPES.HERO);
   const heroVariant = heroSection?.variant || 'split';
 
   return [
-    // 1. rootx-header.liquid
+    // 1. rootx-announcement-bar.liquid
     {
-      key: 'sections/rootx-header.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.ANNOUNCEMENT_BAR),
+      value: `
+<div class="announcement-bar" style="background: var(--rx-primary); color: #ffffff; text-align: center; padding: 0.6rem 1rem; font-size: 0.85rem; font-weight: 600;">
+  <span>✨ ${esc(prod.shippingText)} — Free Express Delivery on All Orders</span>
+</div>
+{% schema %}
+{
+  "name": "RootX Announcement Bar",
+  "settings": []
+}
+{% endschema %}`,
+    },
+
+    // 2. rootx-header.liquid
+    {
+      key: getSectionFileName(ROOTX_SECTION_TYPES.HEADER),
       value: `
 <header class="site-header" style="background: var(--rx-surface); border-bottom: 1px solid var(--rx-border); padding: 1.25rem 0;">
   <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
@@ -44,9 +60,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 2. rootx-hero.liquid
+    // 3. rootx-hero.liquid
     {
-      key: 'sections/rootx-hero.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.HERO),
       value: heroVariant === 'editorial' ? `
 <section class="hero-section hero--editorial" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
   <div class="container" style="text-align: center; max-width: 800px;">
@@ -130,9 +146,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 3. rootx-trust-strip.liquid
+    // 4. rootx-trust-strip.liquid
     {
-      key: 'sections/rootx-trust-strip.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.TRUST_STRIP),
       value: `
 <section class="trust-strip" style="padding: 2rem 0; background: var(--rx-surface); border-bottom: 1px solid var(--rx-border);">
   <div class="container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; text-align: center;">
@@ -153,9 +169,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 4. rootx-benefits.liquid
+    // 5. rootx-benefits.liquid
     {
-      key: 'sections/rootx-benefits.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.BENEFITS),
       value: `
 <section class="benefit-grid" style="padding: var(--rx-section-space) 0;">
   <div class="container">
@@ -181,9 +197,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 5. rootx-product-showcase.liquid
+    // 6. rootx-product-showcase.liquid
     {
-      key: 'sections/rootx-product-showcase.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.PRODUCT_SHOWCASE),
       value: `
 <section class="product-showcase" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
   <div class="container">
@@ -201,9 +217,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 6. rootx-gallery.liquid
+    // 7. rootx-gallery.liquid
     {
-      key: 'sections/rootx-gallery.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.GALLERY),
       value: `
 <section class="product-gallery" style="padding: var(--rx-section-space) 0;">
   <div class="container">
@@ -224,9 +240,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 7. rootx-image-story.liquid
+    // 8. rootx-image-story.liquid
     {
-      key: 'sections/rootx-image-story.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.IMAGE_STORY),
       value: `
 <section class="image-story" style="padding: var(--rx-section-space) 0; background: var(--rx-background);">
   <div class="container">
@@ -249,9 +265,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 8. rootx-specifications.liquid
+    // 9. rootx-specifications.liquid
     {
-      key: 'sections/rootx-specifications.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.SPECIFICATIONS),
       value: `
 <section class="specifications" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
   <div class="container" style="max-width: 800px;">
@@ -274,9 +290,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 9. rootx-faq.liquid
+    // 10. rootx-faq.liquid
     {
-      key: 'sections/rootx-faq.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.FAQ),
       value: `
 <section id="rootx-faq" class="faq-accordion" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
   <div class="container" style="max-width: 800px;">
@@ -297,9 +313,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 10. rootx-final-cta.liquid
+    // 11. rootx-final-cta.liquid
     {
-      key: 'sections/rootx-final-cta.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.FINAL_CTA),
       value: `
 <section class="final-cta" style="background: linear-gradient(135deg, var(--rx-primary), var(--rx-secondary)); color: #fff; text-align: center; padding: 5rem 1.5rem;">
   <div class="container" style="max-width: 700px;">
@@ -319,9 +335,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 11. rootx-footer.liquid
+    // 12. rootx-footer.liquid
     {
-      key: 'sections/rootx-footer.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.FOOTER),
       value: `
 <footer class="site-footer" style="background: var(--rx-surface); border-top: 1px solid var(--rx-border); padding: 4rem 0 2rem;">
   <div class="container">
@@ -350,9 +366,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% endschema %}`,
     },
 
-    // 12. rootx-main-product.liquid
+    // 13. rootx-main-product.liquid
     {
-      key: 'sections/rootx-main-product.liquid',
+      key: getSectionFileName(ROOTX_SECTION_TYPES.MAIN_PRODUCT),
       value: `
 <section class="main-product-rootx" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
   <div class="container">

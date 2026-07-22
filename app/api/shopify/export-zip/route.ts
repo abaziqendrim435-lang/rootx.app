@@ -172,14 +172,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Validate JSON templates and check that all referenced sections exist
+    // 5. Validate JSON templates and Liquid {% section %} tags to ensure all referenced sections exist
+    const missingSectionErrors: string[] = [];
     for (const [key, val] of fileMap.entries()) {
+      // 5a. Check JSON templates
       if (key.startsWith('templates/') && key.endsWith('.json')) {
         let templateJson;
         try {
           templateJson = JSON.parse(val);
         } catch {
-          continue; // Handled by standard JSON parser check in step 3
+          continue;
         }
 
         if (templateJson.sections) {
@@ -188,15 +190,31 @@ export async function POST(req: NextRequest) {
             if (section && section.type) {
               const sectionFileName = `sections/${section.type}.liquid`;
               if (!fileMap.has(sectionFileName)) {
-                return NextResponse.json(
-                  { error: `Validation Failed: JSON template '${key}' references section type '${section.type}', but section file '${sectionFileName}' does not exist in the theme.` },
-                  { status: 400 }
-                );
+                missingSectionErrors.push(`JSON template '${key}' references missing section type '${section.type}' ('${sectionFileName}')`);
               }
             }
           }
         }
       }
+
+      // 5b. Check Liquid section tags {% section '...' %}
+      if (key.endsWith('.liquid')) {
+        const matches = val.matchAll(/{%\s*section\s*['"]([^'"]+)['"]\s*%}/g);
+        for (const match of matches) {
+          const sectionType = match[1];
+          const sectionFileName = `sections/${sectionType}.liquid`;
+          if (!fileMap.has(sectionFileName)) {
+            missingSectionErrors.push(`Liquid file '${key}' references missing section type '${sectionType}' ('${sectionFileName}')`);
+          }
+        }
+      }
+    }
+
+    if (missingSectionErrors.length > 0) {
+      return NextResponse.json(
+        { error: `Validation Failed: Referenced section files missing: ${missingSectionErrors.join('; ')}` },
+        { status: 400 }
+      );
     }
 
     // 5.5 Validate image URLs and settings are present in sections
@@ -212,10 +230,10 @@ export async function POST(req: NextRequest) {
 
       // Ensure index.json contains required sections
       const sections = Object.values(indexJson.sections).map((s: any) => (s as any).type);
-      const hasHero = sections.includes('rootx-hero') || sections.includes('hero') || sections.includes('hero-product');
-      const hasBenefits = sections.includes('rootx-benefits') || sections.includes('product-benefits');
-      const hasSpecs = sections.includes('rootx-specifications') || sections.includes('product-specifications');
-      const hasFaq = sections.includes('rootx-faq') || sections.includes('faq');
+      const hasHero = sections.includes('rootx-hero');
+      const hasBenefits = sections.includes('rootx-benefits');
+      const hasSpecs = sections.includes('rootx-specifications');
+      const hasFaq = sections.includes('rootx-faq');
 
       if (!hasHero || !hasBenefits || !hasSpecs || !hasFaq) {
         const missing = [];
