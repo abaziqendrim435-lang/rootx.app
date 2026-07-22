@@ -249,6 +249,53 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 5.6 Validate multi-image gallery blocks in templates
+    for (const [key, val] of fileMap.entries()) {
+      if (key.startsWith('templates/') && key.endsWith('.json')) {
+        let tJson: any;
+        try { tJson = JSON.parse(val); } catch { continue; }
+        if (tJson.sections) {
+          for (const secId of Object.keys(tJson.sections)) {
+            const sec = tJson.sections[secId];
+            if (sec && (secId.includes('gallery') || secId.includes('product') || secId.includes('hero'))) {
+              if (sec.blocks && sec.block_order) {
+                const seenBlockUrls = new Set<string>();
+                for (const bId of sec.block_order) {
+                  const b = sec.blocks[bId];
+                  if (!b) {
+                    return NextResponse.json(
+                      { error: `Validation Failed: ${key} section '${secId}' block_order references missing block '${bId}'.` },
+                      { status: 400 }
+                    );
+                  }
+                  const url = b.settings?.image_url;
+                  if (!url || typeof url !== 'string' || url.trim() === '') {
+                    return NextResponse.json(
+                      { error: `Validation Failed: ${key} section '${secId}' block '${bId}' contains empty image_url.` },
+                      { status: 400 }
+                    );
+                  }
+                  if (!url.startsWith('https://') && !url.startsWith('data:image/')) {
+                    return NextResponse.json(
+                      { error: `Validation Failed: ${key} section '${secId}' block '${bId}' has invalid image URL scheme (${url}).` },
+                      { status: 400 }
+                    );
+                  }
+                  if (seenBlockUrls.has(url)) {
+                    return NextResponse.json(
+                      { error: `Validation Failed: ${key} section '${secId}' contains duplicate gallery image URL (${url}).` },
+                      { status: 400 }
+                    );
+                  }
+                  seenBlockUrls.add(url);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     const heroProductLiquid = fileMap.get('sections/rootx-hero.liquid');
     if (heroProductLiquid) {
       const schemaMatch = heroProductLiquid.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);

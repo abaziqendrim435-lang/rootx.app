@@ -55,20 +55,37 @@ export function buildStorefrontSpec(
   const sectionPlan = createSectionPlan(archetypeId);
   const archDef = getArchetype(archetypeId);
 
-  // 5. Construct Section Specifications
-  const sections = sectionPlan.sections.map((sec) => ({
-    id: sec.sectionId,
-    type: sec.sectionType,
-    variant: sec.variantId,
-    enabled: true,
+  // 5. Construct Section Specifications with Multi-Image Gallery Blocks
+  const galleryList = (images.gallery && images.gallery.length > 0)
+    ? images.gallery.slice(0, 10)
+    : (images.hero ? [images.hero] : []);
+
+  const galleryBlocks = galleryList.map((img, i) => ({
+    id: `image_${i + 1}`,
+    type: 'image',
     settings: {
-      headline: profile.cleanHeroHeadline,
-      subheadline: profile.cleanHeroSubheadline,
-      cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
-      cta_url: '/cart/add',
-      hero_image: images.hero?.normalizedUrl || '',
+      image_url: img.normalizedUrl,
+      alt_text: img.altText || profile.cleanProductName,
     },
   }));
+
+  const sections = sectionPlan.sections.map((sec) => {
+    const isGallerySection = sec.sectionId === 'rootx-gallery' || sec.sectionId === 'rootx-main-product' || sec.sectionId === 'rootx-hero';
+    return {
+      id: sec.sectionId,
+      type: sec.sectionType,
+      variant: sec.variantId,
+      enabled: true,
+      settings: {
+        headline: profile.cleanHeroHeadline,
+        subheadline: profile.cleanHeroSubheadline,
+        cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
+        cta_url: '/cart/add',
+        hero_image: images.hero?.normalizedUrl || '',
+      },
+      blocks: isGallerySection ? galleryBlocks : undefined,
+    };
+  });
 
   return {
     version: '1.0',

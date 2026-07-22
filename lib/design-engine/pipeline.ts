@@ -31,10 +31,27 @@ export function runDesignEnginePipeline(
 
   const archDef = getArchetype(spec.archetype);
 
-  // Stage 2: Render index.json template
+  // Stage 2: Render index.json template with blocks and block_order
+  const buildTemplateSectionObj = (secId: string) => {
+    const sec = spec.sections.find((s) => s.id === secId);
+    const obj: Record<string, unknown> = { type: secId, settings: sec?.settings || {} };
+    if (sec?.blocks && sec.blocks.length > 0) {
+      const blocksObj: Record<string, unknown> = {};
+      const blockOrder: string[] = [];
+      sec.blocks.forEach((b: any, idx: number) => {
+        const blockId = b.id || `image_${idx + 1}`;
+        blocksObj[blockId] = { type: b.type || 'image', settings: b.settings || {} };
+        blockOrder.push(blockId);
+      });
+      obj.blocks = blocksObj;
+      obj.block_order = blockOrder;
+    }
+    return obj;
+  };
+
   const indexTemplateJson = {
     sections: spec.sections.reduce((acc, sec) => {
-      acc[sec.id] = { type: sec.id, settings: sec.settings };
+      acc[sec.id] = buildTemplateSectionObj(sec.id);
       return acc;
     }, {} as Record<string, unknown>),
     order: spec.sections.map((sec) => sec.id),
@@ -69,10 +86,10 @@ export function runDesignEnginePipeline(
 
   const productTemplateJson = {
     sections: {
-      'rootx-main-product': { type: 'rootx-main-product', settings: {} },
-      'rootx-gallery': { type: 'rootx-gallery', settings: {} },
-      'rootx-specifications': { type: 'rootx-specifications', settings: {} },
-      'rootx-faq': { type: 'rootx-faq', settings: {} },
+      'rootx-main-product': buildTemplateSectionObj('rootx-main-product'),
+      'rootx-gallery': buildTemplateSectionObj('rootx-gallery'),
+      'rootx-specifications': buildTemplateSectionObj('rootx-specifications'),
+      'rootx-faq': buildTemplateSectionObj('rootx-faq'),
     },
     order: ['rootx-main-product', 'rootx-gallery', 'rootx-specifications', 'rootx-faq'],
   };

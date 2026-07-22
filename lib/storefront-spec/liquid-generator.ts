@@ -1,7 +1,8 @@
 // ============================================================
 // RootX Storefront Pixel Parity Engine V1 — Liquid Component Library
 // Renders all 13 required Shopify OS 2.0 Liquid sections directly
-// from StorefrontSpec with valid {% schema %} tags and --rx-* tokens.
+// from StorefrontSpec with dynamic image blocks, {% schema %} tags,
+// and --rx-* design tokens.
 // ============================================================
 
 import type { StorefrontSpec } from './types';
@@ -20,6 +21,8 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 
   const heroSection = spec.sections.find(s => s.id === ROOTX_SECTION_TYPES.HERO);
   const heroVariant = heroSection?.variant || 'split';
+
+  const galleryList = spec.images.gallery.filter((img) => Boolean(img.normalizedUrl));
 
   return [
     // 1. rootx-announcement-bar.liquid
@@ -69,7 +72,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <span style="text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.85rem; color: var(--rx-primary); font-weight: 700;">${esc(brand.name)}</span>
     <h1 style="font-size: clamp(2.5rem, 5vw, 4rem); font-family: var(--rx-heading-font); margin: 0.75rem 0 1rem; color: var(--rx-text);">${esc(content.heroHeadline)}</h1>
     <p style="font-size: 1.2rem; color: var(--rx-muted); margin-bottom: 2rem;">${esc(content.heroSubheadline)}</p>
-    ${heroImg ? `<div style="margin-bottom: 2rem;"><img src="${heroImg}" alt="${esc(prod.cleanName)}" style="max-width: 600px; width: 100%; border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow);" /></div>` : ''}
+    ${heroImg ? `<div style="margin-bottom: 2rem;"><img id="rx-hero-main-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="max-width: 600px; width: 100%; height: 400px; object-fit: cover; border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow);" /></div>` : ''}
     <div style="display: flex; gap: 1rem; justify-content: center; align-items: center; margin-bottom: 1.5rem;">
       <span style="font-size: 2.2rem; font-weight: 800; color: var(--rx-primary);">$${esc(prod.price)}</span>
       ${prod.compareAtPrice ? `<span style="font-size: 1.4rem; text-decoration: line-through; color: var(--rx-muted);">$${esc(prod.compareAtPrice)}</span>` : ''}
@@ -101,7 +104,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       </form>
     </div>
     <div>
-      ${heroImg ? `<img src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow);" />` : ''}
+      ${heroImg ? `<img id="rx-hero-main-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; object-fit: cover; border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow);" />` : ''}
     </div>
   </div>
 </section>
@@ -132,7 +135,24 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       </div>
       <div>
         <div style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1.25rem; overflow: hidden; box-shadow: var(--rx-shadow);">
-          ${heroImg ? `<img src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: auto; border-radius: var(--rx-radius-md); object-fit: cover;" />` : ''}
+          ${heroImg ? `<img id="rx-hero-split-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 380px; border-radius: var(--rx-radius-md); object-fit: cover;" />` : ''}
+          <div class="rx-thumbs-wrapper" style="display: flex; gap: 0.5rem; overflow-x: auto; margin-top: 0.75rem; padding-bottom: 0.25rem; scrollbar-width: thin;">
+            {% if section.blocks.size > 0 %}
+              {% for block in section.blocks %}
+                {% if block.settings.image_url != blank %}
+                  <button type="button" onclick="document.getElementById('rx-hero-split-img').src='{{ block.settings.image_url }}'" style="border: 2px solid var(--rx-border); border-radius: var(--rx-radius-sm); padding: 0; background: none; cursor: pointer; flex-shrink: 0; width: 60px; height: 60px; overflow: hidden;">
+                    <img src="{{ block.settings.image_url }}" alt="Thumbnail" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+                  </button>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              ${galleryList.map((img, i) => `
+                <button type="button" onclick="document.getElementById('rx-hero-split-img').src='${img.normalizedUrl}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; background: none; cursor: pointer; flex-shrink: 0; width: 60px; height: 60px; overflow: hidden;">
+                  <img src="${img.normalizedUrl}" alt="Thumbnail" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+                </button>
+              `).join('')}
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>
@@ -141,6 +161,19 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% schema %}
 {
   "name": "RootX Hero",
+  "blocks": [
+    {
+      "type": "image",
+      "name": "Product Image",
+      "settings": [
+        {
+          "type": "text",
+          "id": "image_url",
+          "label": "Image URL"
+        }
+      ]
+    }
+  ],
   "settings": []
 }
 {% endschema %}`,
@@ -223,18 +256,44 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       value: `
 <section class="product-gallery" style="padding: var(--rx-section-space) 0;">
   <div class="container">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem;">
-      ${spec.images.gallery.slice(0, 4).map((img) => `
-        <div style="border-radius: var(--rx-radius-md); overflow: hidden; border: 1px solid var(--rx-border);">
-          <img src="${img.normalizedUrl}" alt="${esc(prod.cleanName)}" style="width: 100%; height: auto; display: block; object-fit: cover;" />
-        </div>
-      `).join('')}
+    <div style="text-align: center; margin-bottom: 2rem;">
+      <h2 style="font-size: 2.2rem; font-family: var(--rx-heading-font); color: var(--rx-text);">Product Gallery</h2>
+    </div>
+    <div class="gallery-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem;">
+      {% if section.blocks.size > 0 %}
+        {% for block in section.blocks %}
+          {% if block.settings.image_url != blank %}
+            <div class="gallery-item" style="border-radius: var(--rx-radius-md); overflow: hidden; border: 1px solid var(--rx-border); aspect-ratio: 1/1;">
+              <img src="{{ block.settings.image_url }}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        ${galleryList.map((img) => `
+          <div class="gallery-item" style="border-radius: var(--rx-radius-md); overflow: hidden; border: 1px solid var(--rx-border); aspect-ratio: 1/1;">
+            <img src="${img.normalizedUrl}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
+          </div>
+        `).join('')}
+      {% endif %}
     </div>
   </div>
 </section>
 {% schema %}
 {
   "name": "RootX Gallery",
+  "blocks": [
+    {
+      "type": "image",
+      "name": "Gallery Image",
+      "settings": [
+        {
+          "type": "text",
+          "id": "image_url",
+          "label": "Image URL"
+        }
+      ]
+    }
+  ],
   "settings": []
 }
 {% endschema %}`,
@@ -372,17 +431,39 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       value: `
 <section class="main-product-rootx" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
   <div class="container">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 3.5rem; align-items: start;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 3.5rem; align-items: start;">
       <div>
-        ${heroImg ? `<img src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: auto; border-radius: var(--rx-radius-lg); object-fit: cover;" />` : ''}
+        <div style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1rem; margin-bottom: 1rem; box-shadow: var(--rx-shadow);">
+          <img id="rx-main-prod-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; border-radius: var(--rx-radius-md); object-fit: cover; display: block; transition: opacity 0.2s ease-in-out;" />
+        </div>
+        <div class="rx-thumbs-wrapper" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
+          {% if section.blocks.size > 0 %}
+            {% for block in section.blocks %}
+              {% if block.settings.image_url != blank %}
+                <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ block.settings.image_url }}'" style="border: 2px solid var(--rx-border); border-radius: var(--rx-radius-sm); padding: 0; background: none; cursor: pointer; flex-shrink: 0; width: 70px; height: 70px; overflow: hidden;">
+                  <img src="{{ block.settings.image_url }}" alt="Thumbnail" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+                </button>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            ${galleryList.map((img, i) => `
+              <button type="button" onclick="document.getElementById('rx-main-prod-img').src='${img.normalizedUrl}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; background: none; cursor: pointer; flex-shrink: 0; width: 70px; height: 70px; overflow: hidden;">
+                <img src="${img.normalizedUrl}" alt="Thumbnail" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+              </button>
+            `).join('')}
+          {% endif %}
+        </div>
       </div>
       <div>
-        <h1 style="font-size: 2.4rem; font-family: var(--rx-heading-font); color: var(--rx-text);">${esc(prod.cleanName)}</h1>
-        <div style="font-size: 2rem; font-weight: 800; color: var(--rx-primary); margin: 1rem 0;">$${esc(prod.price)}</div>
-        <p style="color: var(--rx-muted); margin-bottom: 2rem;">${esc(prod.shortDescription)}</p>
+        <h1 style="font-size: 2.4rem; font-family: var(--rx-heading-font); color: var(--rx-text); margin-bottom: 1rem;">${esc(prod.cleanName)}</h1>
+        <div style="display: flex; align-items: baseline; gap: 1rem; margin-bottom: 1.5rem;">
+          <span style="font-size: 2.2rem; font-weight: 800; color: var(--rx-primary);">$${esc(prod.price)}</span>
+          ${prod.compareAtPrice ? `<span style="font-size: 1.3rem; text-decoration: line-through; color: var(--rx-muted);">$${esc(prod.compareAtPrice)}</span>` : ''}
+        </div>
+        <p style="color: var(--rx-muted); font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem;">${esc(prod.shortDescription)}</p>
         <form action="/cart/add" method="post">
           <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
-          <button type="submit" class="btn btn-primary" style="width: 100%;">Add to Cart — $${esc(prod.price)}</button>
+          <button type="submit" class="btn btn-primary" style="width: 100%; max-width: 380px; padding: 1.1rem;">Add to Cart — $${esc(prod.price)}</button>
         </form>
       </div>
     </div>
@@ -391,6 +472,19 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% schema %}
 {
   "name": "RootX Main Product",
+  "blocks": [
+    {
+      "type": "image",
+      "name": "Product Image",
+      "settings": [
+        {
+          "type": "text",
+          "id": "image_url",
+          "label": "Image URL"
+        }
+      ]
+    }
+  ],
   "settings": []
 }
 {% endschema %}`,
