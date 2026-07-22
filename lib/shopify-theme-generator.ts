@@ -31,30 +31,11 @@ export function generateShopifyThemeV2(
   return runDesignEnginePipeline(gen, input);
 }
 
-/**
- * Generate a complete Shopify Online Store 2.0 theme from
- * AI-generated website content and user input (v1 backwards-compatible fallback).
- */
 export function generateShopifyTheme(
   gen: WebsiteGeneration,
   input: WebsiteBuilderInput
 ): ShopifyThemeFile[] {
-  return [
-    // Layout
-    ...generateLayout(gen, input),
-    // Templates (JSON)
-    ...generateTemplates(gen, input),
-    // Sections (Liquid)
-    ...generateSections(gen, input),
-    // Snippets (Liquid)
-    ...generateSnippets(gen, input),
-    // Assets (CSS + JS)
-    ...generateAssets(gen, input),
-    // Config
-    ...generateConfig(gen, input),
-    // Locales
-    ...generateLocales(gen, input),
-  ];
+  return runDesignEnginePipeline(gen, input).files;
 }
 
 // ── Helpers ───────────────────────────────────────────────────

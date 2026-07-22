@@ -110,7 +110,7 @@ function runParityTestSuite() {
 
   // Test 12: Liquid section existence
   const liquidSecs = generateShopifyLiquidSections(hocoSpec);
-  assert(liquidSecs.length === 17, 'Test 12: All 17 required Liquid sections generated');
+  assert(liquidSecs.length === 12, 'Test 12: All 12 required Liquid sections generated');
 
   // Test 13: Mobile breakpoint rules
   assert(cssVars.includes('@media (max-width: 768px)'), 'Test 13: Mobile breakpoint @media rules present in CSS');

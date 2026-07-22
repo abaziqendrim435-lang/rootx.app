@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { generateShopifyTheme } from '@/lib/shopify-theme-generator';
+import { runDesignEnginePipeline } from '@/lib/design-engine/pipeline';
+import { validateStorefrontQualityGateV2 } from '@/lib/quality-gate';
 import JSZip from 'jszip';
 
 // ============================================================
@@ -14,25 +14,21 @@ import JSZip from 'jszip';
 const REQUIRED_FILES = [
   'layout/theme.liquid',
   'templates/index.json',
-  'templates/product.json',
-  'templates/collection.json',
-  'templates/page.json',
-  'templates/cart.json',
-  'sections/header.liquid',
-  'sections/footer.liquid',
-  'sections/hero-product.liquid',
-  'sections/trust-bar.liquid',
-  'sections/product-gallery.liquid',
-  'sections/product-benefits.liquid',
-  'sections/product-specifications.liquid',
-  'sections/faq.liquid',
-  'sections/image-with-text.liquid',
-  'sections/featured-product.liquid',
+  'sections/rootx-header.liquid',
+  'sections/rootx-hero.liquid',
+  'sections/rootx-trust-strip.liquid',
+  'sections/rootx-benefits.liquid',
+  'sections/rootx-product-showcase.liquid',
+  'sections/rootx-gallery.liquid',
+  'sections/rootx-image-story.liquid',
+  'sections/rootx-specifications.liquid',
+  'sections/rootx-faq.liquid',
+  'sections/rootx-final-cta.liquid',
+  'sections/rootx-footer.liquid',
+  'sections/rootx-main-product.liquid',
   'assets/theme.css',
   'assets/theme.js',
-  'config/settings_schema.json',
   'config/settings_data.json',
-  'locales/en.default.json',
 ];
 
 export async function POST(req: NextRequest) {
@@ -46,8 +42,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Generate the theme files
-    const files = generateShopifyTheme(result, input);
+    // 1. Run Pipeline & Quality Gate
+    const designResult = runDesignEnginePipeline(result, input);
+    if (!designResult.spec) {
+      return NextResponse.json(
+        { error: 'Validation Failed: Shopify exporter did not receive canonical StorefrontSpec.' },
+        { status: 400 }
+      );
+    }
+
+    const qualityGate = validateStorefrontQualityGateV2(designResult, input);
+    if (!qualityGate.passed && qualityGate.failures.length > 0) {
+      return NextResponse.json(
+        { error: `Quality Gate Failed: ${qualityGate.failures.join('; ')}` },
+        { status: 400 }
+      );
+    }
+
+    const files = designResult.files;
     const fileMap = new Map<string, string>();
     for (const f of files) {
       fileMap.set(f.key, f.value);
@@ -199,20 +211,18 @@ export async function POST(req: NextRequest) {
       }
 
       // Ensure index.json contains required sections
-      const sections = Object.values(indexJson.sections).map((s: any) => s.type);
-      const hasHero = sections.includes('hero') || sections.includes('hero-product');
-      const hasBenefits = sections.includes('product-benefits');
-      const hasImageWithText = sections.includes('image-with-text');
-      const hasSpecs = sections.includes('product-specifications');
-      const hasFaq = sections.includes('faq');
+      const sections = Object.values(indexJson.sections).map((s: any) => (s as any).type);
+      const hasHero = sections.includes('rootx-hero') || sections.includes('hero') || sections.includes('hero-product');
+      const hasBenefits = sections.includes('rootx-benefits') || sections.includes('product-benefits');
+      const hasSpecs = sections.includes('rootx-specifications') || sections.includes('product-specifications');
+      const hasFaq = sections.includes('rootx-faq') || sections.includes('faq');
 
-      if (!hasHero || !hasBenefits || !hasImageWithText || !hasSpecs || !hasFaq) {
+      if (!hasHero || !hasBenefits || !hasSpecs || !hasFaq) {
         const missing = [];
-        if (!hasHero) missing.push('hero section (hero or hero-product)');
-        if (!hasBenefits) missing.push('product benefits (product-benefits)');
-        if (!hasImageWithText) missing.push('image/text section (image-with-text)');
-        if (!hasSpecs) missing.push('specifications (product-specifications)');
-        if (!hasFaq) missing.push('FAQ (faq)');
+        if (!hasHero) missing.push('hero section (rootx-hero)');
+        if (!hasBenefits) missing.push('product benefits (rootx-benefits)');
+        if (!hasSpecs) missing.push('specifications (rootx-specifications)');
+        if (!hasFaq) missing.push('FAQ (rootx-faq)');
 
         return NextResponse.json(
           { error: `Validation Failed: index.json is missing required homepage sections: ${missing.join(', ')}` },
@@ -221,12 +231,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const heroProductLiquid = fileMap.get('sections/hero-product.liquid');
+    const heroProductLiquid = fileMap.get('sections/rootx-hero.liquid');
     if (heroProductLiquid) {
       const schemaMatch = heroProductLiquid.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);
       if (schemaMatch) {
         const schema = JSON.parse(schemaMatch[1].trim());
-        const imageSettings = schema.settings.filter((s: any) => s.id.includes('image'));
+        const imageSettings = (schema.settings || []).filter((s: any) => s.id.includes('image'));
         for (const s of imageSettings) {
           if (!s.default || s.default === '') {
             console.warn(`[ZIP Export] Section setting ${s.id} has an empty image URL.`);

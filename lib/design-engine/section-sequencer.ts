@@ -6,36 +6,23 @@
 import type { DesignArchetypeId, SectionPlan, SectionVariantSelection } from '../website-builder-types';
 
 export function createSectionPlan(archetypeId: DesignArchetypeId): SectionPlan {
-  let selections: SectionVariantSelection[] = [];
+  let heroVariant = 'split';
+  if (archetypeId === 'luxury_editorial') heroVariant = 'editorial';
+  else if (archetypeId === 'modern_tech' || archetypeId === 'bold_fitness') heroVariant = 'split';
+  else if (archetypeId === 'soft_beauty' || archetypeId === 'friendly_pet') heroVariant = 'minimal';
+  else if (archetypeId === 'high_conversion_landing') heroVariant = 'full-bleed';
 
-  switch (archetypeId) {
-    case 'luxury_editorial':
-      selections = [
-        { sectionId: 'hero', sectionType: 'editorial_hero', variantId: 'fullscreen-editorial', variantName: 'Fullscreen Editorial Hero' },
-        { sectionId: 'trust', sectionType: 'trust_bar', variantId: 'card-badges', variantName: 'Card Badges Trust Bar' },
-        { sectionId: 'benefits', sectionType: 'benefit_grid', variantId: 'icon-cards', variantName: 'Icon Cards Benefit Grid' },
-        { sectionId: 'reviews', sectionType: 'social_proof', variantId: 'review-cards', variantName: 'Verified Buyer Cards' },
-        { sectionId: 'faq', sectionType: 'faq', variantId: 'accordion', variantName: 'Animated Accordion FAQ' },
-        { sectionId: 'newsletter', sectionType: 'newsletter', variantId: 'inline-form', variantName: 'Inline Newsletter Form' },
-        { sectionId: 'footer', sectionType: 'premium_footer', variantId: 'multi-column', variantName: 'Multi-Column Premium Footer' },
-      ];
-      break;
-
-    case 'modern_tech':
-    case 'high_conversion_landing':
-    default:
-      selections = [
-        { sectionId: 'hero', sectionType: 'product_hero', variantId: 'centered-product', variantName: 'Centered Product Hero' },
-        { sectionId: 'trust', sectionType: 'trust_bar', variantId: 'card-badges', variantName: 'Card Badges Trust Bar' },
-        { sectionId: 'benefits', sectionType: 'benefit_grid', variantId: 'icon-cards', variantName: 'Icon Cards Benefit Grid' },
-        { sectionId: 'specs', sectionType: 'product_specifications', variantId: 'card-specs', variantName: 'Card Grid Specs' },
-        { sectionId: 'reviews', sectionType: 'social_proof', variantId: 'review-cards', variantName: 'Verified Buyer Cards' },
-        { sectionId: 'faq', sectionType: 'faq', variantId: 'accordion', variantName: 'Animated Accordion FAQ' },
-        { sectionId: 'cta', sectionType: 'final_cta', variantId: 'gradient-banner', variantName: 'Gradient Banner CTA' },
-        { sectionId: 'footer', sectionType: 'premium_footer', variantId: 'multi-column', variantName: 'Multi-Column Premium Footer' },
-      ];
-      break;
-  }
+  const selections: SectionVariantSelection[] = [
+    { sectionId: 'rootx-hero', sectionType: 'rootx-hero', variantId: heroVariant, variantName: 'RootX Hero' },
+    { sectionId: 'rootx-trust-strip', sectionType: 'rootx-trust-strip', variantId: 'default', variantName: 'RootX Trust Strip' },
+    { sectionId: 'rootx-benefits', sectionType: 'rootx-benefits', variantId: 'grid', variantName: 'RootX Benefits' },
+    { sectionId: 'rootx-product-showcase', sectionType: 'rootx-product-showcase', variantId: 'showcase', variantName: 'RootX Product Showcase' },
+    { sectionId: 'rootx-gallery', sectionType: 'rootx-gallery', variantId: 'gallery-4col', variantName: 'RootX Gallery' },
+    { sectionId: 'rootx-image-story', sectionType: 'rootx-image-story', variantId: 'story-split', variantName: 'RootX Image Story' },
+    { sectionId: 'rootx-specifications', sectionType: 'rootx-specifications', variantId: 'spec-grid', variantName: 'RootX Specifications' },
+    { sectionId: 'rootx-faq', sectionType: 'rootx-faq', variantId: 'accordion', variantName: 'RootX FAQ' },
+    { sectionId: 'rootx-final-cta', sectionType: 'rootx-final-cta', variantId: 'banner', variantName: 'RootX Final CTA' },
+  ];
 
   return {
     archetypeId,
