@@ -1,10 +1,64 @@
 // ============================================================
-// RootX Design Engine V1 — 8 Theme Families Architecture
-// Defines unique section order, hero structure, gallery style,
-// spacing rhythm, card design, and product page layout per family.
+// RootX Design Engine V2 — 10 Theme Families Architecture
+// Defines unique section order, hero structure, header variant,
+// gallery style, spacing rhythm, card design, and product page layout.
 // ============================================================
 
 import type { DesignArchetypeId } from '../website-builder-types';
+
+export type HeroVariantType =
+  | 'dark-tech-split'
+  | 'light-product-split'
+  | 'full-bleed-editorial'
+  | 'asymmetrical-beauty'
+  | 'fashion-lookbook'
+  | 'warm-lifestyle'
+  | 'fitness-performance'
+  | 'playful-pet'
+  | 'direct-response'
+  | 'luxury-closeup'
+  | 'wellness-routine'
+  | 'minimal-product-focus';
+
+export type HeaderVariantType =
+  | 'compact-tech'
+  | 'editorial-beauty'
+  | 'minimal-luxury'
+  | 'image-first-fashion'
+  | 'warm-home'
+  | 'bold-fitness'
+  | 'playful-pet'
+  | 'conversion-header'
+  | 'jewelry-minimal'
+  | 'wellness-clean';
+
+export type GalleryVariantType =
+  | 'thumbnail-left'
+  | 'thumbnail-bottom'
+  | 'horizontal-scroll'
+  | 'masonry-lookbook'
+  | 'full-width-editorial'
+  | 'detail-closeup-grid'
+  | 'swipe-mobile'
+  | 'product-focus-minimal'
+  | 'tech-grid-4col'
+  | 'soft-rounded-cards'
+  | 'warm-lifestyle-grid'
+  | 'bold-performance-grid'
+  | 'playful-bubbly-grid'
+  | 'conversion-stacked-blocks';
+
+export type ProductPageLayoutType =
+  | 'tech-spec-split'
+  | 'soft-ingredient-cards'
+  | 'editorial-monochrome'
+  | 'lookbook-vertical'
+  | 'warm-lifestyle-accordion'
+  | 'bold-sticky-buy'
+  | 'playful-bubbly'
+  | 'long-form-direct-response'
+  | 'jewelry-closeup-detail'
+  | 'wellness-timeline-layout';
 
 export interface ThemeFamilyConfig {
   id: DesignArchetypeId;
@@ -13,26 +67,16 @@ export interface ThemeFamilyConfig {
   description: string;
   targetCategories: string[];
   
-  // Section Sequence (Must be unique per theme family)
+  // Section Sequence (Strictly unique per theme family)
   sectionOrder: string[];
   
-  // Hero Composition
-  heroType: 'dark-split' | 'soft-editorial' | 'full-bleed-editorial' | 'image-first-minimal' | 'warm-lifestyle-split' | 'bold-action-dynamic' | 'playful-centered' | 'direct-response-buybox';
-  
-  // Header Style
-  headerStyle: 'compact-tech' | 'soft-floating' | 'minimal-nav' | 'image-nav' | 'warm-centered' | 'bold-condensed' | 'playful-colorful' | 'sticky-buybox';
-  
-  // Gallery Style
-  galleryStyle: 'tech-grid-4col' | 'soft-rounded-cards' | 'lookbook-asymmetric' | 'horizontal-scroll' | 'warm-lifestyle-grid' | 'bold-performance-grid' | 'playful-bubbly-grid' | 'conversion-stacked-blocks';
-  
-  // Card Design
-  cardDesign: 'dark-bordered' | 'soft-shadow-white' | 'gold-border-minimal' | 'flat-no-border' | 'cozy-warm-card' | 'high-contrast-bold' | 'bubbly-rounded-pink' | 'clean-conversion-box';
-  
-  // Spacing Rhythm
-  spacingRhythm: 'compact-dense' | 'generous-airy' | 'expansive-luxury' | 'tight-editorial' | 'cozy-medium' | 'ultra-compact-action' | 'bouncy-medium' | 'conversion-focused-padding';
-  
-  // Product Page Layout
-  productPageStructure: 'tech-spec-split' | 'soft-ingredient-cards' | 'editorial-monochrome' | 'lookbook-vertical' | 'warm-lifestyle-accordion' | 'bold-sticky-buy' | 'playful-bubbly' | 'long-form-direct-response';
+  // Variants
+  heroType: HeroVariantType;
+  headerStyle: HeaderVariantType;
+  galleryStyle: GalleryVariantType;
+  cardDesign: string;
+  spacingRhythm: string;
+  productPageStructure: ProductPageLayoutType;
 
   // Typography & Color Signature
   fonts: { heading: string; body: string; googleFontsUrl: string };
@@ -48,17 +92,17 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
     targetCategories: ['electronics', 'gadgets', 'tech', 'audio', 'hardware'],
     sectionOrder: [
       'rootx-hero',
+      'rootx-trust-strip',
       'rootx-specifications',
       'rootx-benefits',
       'rootx-product-showcase',
-      'rootx-trust-strip',
       'rootx-gallery',
       'rootx-faq',
       'rootx-final-cta'
     ],
-    heroType: 'dark-split',
+    heroType: 'dark-tech-split',
     headerStyle: 'compact-tech',
-    galleryStyle: 'tech-grid-4col',
+    galleryStyle: 'thumbnail-left',
     cardDesign: 'dark-bordered',
     spacingRhythm: 'compact-dense',
     productPageStructure: 'tech-spec-split',
@@ -94,8 +138,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
-    heroType: 'soft-editorial',
-    headerStyle: 'soft-floating',
+    heroType: 'asymmetrical-beauty',
+    headerStyle: 'editorial-beauty',
     galleryStyle: 'soft-rounded-cards',
     cardDesign: 'soft-shadow-white',
     spacingRhythm: 'generous-airy',
@@ -121,7 +165,7 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
     name: 'Luxury Editorial',
     tagline: 'Timeless elegance, gold accents, magazine grid',
     description: 'Designed for high-end fashion, jewelry, watches, and luxury items.',
-    targetCategories: ['luxury', 'jewelry', 'watches', 'high-fashion', 'premium'],
+    targetCategories: ['luxury', 'watches', 'high-fashion', 'premium'],
     sectionOrder: [
       'rootx-hero',
       'rootx-gallery',
@@ -131,8 +175,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-final-cta'
     ],
     heroType: 'full-bleed-editorial',
-    headerStyle: 'minimal-nav',
-    galleryStyle: 'lookbook-asymmetric',
+    headerStyle: 'minimal-luxury',
+    galleryStyle: 'full-width-editorial',
     cardDesign: 'gold-border-minimal',
     spacingRhythm: 'expansive-luxury',
     productPageStructure: 'editorial-monochrome',
@@ -166,8 +210,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-image-story',
       'rootx-final-cta'
     ],
-    heroType: 'image-first-minimal',
-    headerStyle: 'image-nav',
+    heroType: 'fashion-lookbook',
+    headerStyle: 'image-first-fashion',
     galleryStyle: 'horizontal-scroll',
     cardDesign: 'flat-no-border',
     spacingRhythm: 'tight-editorial',
@@ -204,8 +248,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
-    heroType: 'warm-lifestyle-split',
-    headerStyle: 'warm-centered',
+    heroType: 'warm-lifestyle',
+    headerStyle: 'warm-home',
     galleryStyle: 'warm-lifestyle-grid',
     cardDesign: 'cozy-warm-card',
     spacingRhythm: 'cozy-medium',
@@ -240,8 +284,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-gallery',
       'rootx-final-cta'
     ],
-    heroType: 'bold-action-dynamic',
-    headerStyle: 'bold-condensed',
+    heroType: 'fitness-performance',
+    headerStyle: 'bold-fitness',
     galleryStyle: 'bold-performance-grid',
     cardDesign: 'high-contrast-bold',
     spacingRhythm: 'ultra-compact-action',
@@ -277,8 +321,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
-    heroType: 'playful-centered',
-    headerStyle: 'playful-colorful',
+    heroType: 'playful-pet',
+    headerStyle: 'playful-pet',
     galleryStyle: 'playful-bubbly-grid',
     cardDesign: 'bubbly-rounded-pink',
     spacingRhythm: 'bouncy-medium',
@@ -315,8 +359,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
-    heroType: 'direct-response-buybox',
-    headerStyle: 'sticky-buybox',
+    heroType: 'direct-response',
+    headerStyle: 'conversion-header',
     galleryStyle: 'conversion-stacked-blocks',
     cardDesign: 'clean-conversion-box',
     spacingRhythm: 'conversion-focused-padding',
@@ -353,8 +397,8 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
-    heroType: 'direct-response-buybox',
-    headerStyle: 'sticky-buybox',
+    heroType: 'direct-response',
+    headerStyle: 'conversion-header',
     galleryStyle: 'conversion-stacked-blocks',
     cardDesign: 'clean-conversion-box',
     spacingRhythm: 'conversion-focused-padding',
@@ -372,6 +416,81 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       text: '#0f172a',
       muted: '#475569',
       border: '#bbf7d0'
+    }
+  },
+
+  premium_jewelry: {
+    id: 'premium_jewelry',
+    name: 'Premium Jewelry',
+    tagline: 'Craftsmanship, precious metals, macro image detail',
+    description: 'Designed for fine jewelry, rings, gemstones, and artisan gold pieces.',
+    targetCategories: ['jewelry', 'rings', 'gemstones', 'gold', 'diamonds', 'artisan'],
+    sectionOrder: [
+      'rootx-hero',
+      'rootx-image-story',
+      'rootx-specifications',
+      'rootx-gallery',
+      'rootx-product-showcase',
+      'rootx-faq',
+      'rootx-final-cta'
+    ],
+    heroType: 'luxury-closeup',
+    headerStyle: 'jewelry-minimal',
+    galleryStyle: 'detail-closeup-grid',
+    cardDesign: 'gold-border-minimal',
+    spacingRhythm: 'expansive-luxury',
+    productPageStructure: 'jewelry-closeup-detail',
+    fonts: {
+      heading: 'Cormorant Garamond',
+      body: 'Montserrat',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@300;400;500&display=swap'
+    },
+    colors: {
+      primary: '#b45309',
+      secondary: '#78350f',
+      background: '#0c0a09',
+      surface: '#1c1917',
+      text: '#fafaf9',
+      muted: '#a8a29e',
+      border: '#292524'
+    }
+  },
+
+  clean_wellness: {
+    id: 'clean_wellness',
+    name: 'Clean Wellness',
+    tagline: 'Mindful routine, calming palette, holistic vitality',
+    description: 'Designed for health supplements, teas, meditation gear, and natural vitality.',
+    targetCategories: ['wellness', 'supplements', 'health', 'tea', 'vitamins', 'holistic'],
+    sectionOrder: [
+      'rootx-hero',
+      'rootx-benefits',
+      'rootx-specifications',
+      'rootx-image-story',
+      'rootx-gallery',
+      'rootx-trust-strip',
+      'rootx-faq',
+      'rootx-final-cta'
+    ],
+    heroType: 'wellness-routine',
+    headerStyle: 'wellness-clean',
+    galleryStyle: 'swipe-mobile',
+    cardDesign: 'soft-shadow-white',
+    spacingRhythm: 'generous-airy',
+    productPageStructure: 'wellness-timeline-layout',
+    fonts: {
+      heading: 'Playfair Display',
+      body: 'Inter',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=Inter:wght@300;400;500&display=swap'
+    },
+    colors: {
+      primary: '#0d9488',
+      secondary: '#0f766e',
+      background: '#f0fdf4',
+      surface: '#ffffff',
+      text: '#134e4a',
+      muted: '#64748b',
+      border: '#ccfbf1'
     }
   }
 };

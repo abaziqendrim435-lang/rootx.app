@@ -3029,6 +3029,18 @@ function generateStyleOverrides(style: PreferredStyle): string {
   --border-radius: 8px;
   --border-radius-lg: 12px;
 }`,
+    premium_jewelry: `
+/* ── Premium Jewelry Overrides ────────────────────────────────── */
+.style-premium_jewelry {
+  --border-radius: 0px;
+  --border-radius-lg: 4px;
+}`,
+    clean_wellness: `
+/* ── Clean Wellness Overrides ────────────────────────────────── */
+.style-clean_wellness {
+  --border-radius: 14px;
+  --border-radius-lg: 24px;
+}`,
     premium_minimal: `
 /* ── Premium Minimal Overrides ────────────────────────────────── */
 .style-premium_minimal {

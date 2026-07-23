@@ -25,7 +25,9 @@ export type PreferredStyle =
   | 'warm_home'
   | 'friendly_pet'
   | 'high_conversion_landing'
-  | 'high_conversion_single';
+  | 'high_conversion_single'
+  | 'premium_jewelry'
+  | 'clean_wellness';
 
 export type AIProvider = 'openai' | 'claude' | 'gemini' | 'kimi' | 'openrouter' | 'auto';
 
@@ -308,7 +310,9 @@ export type DesignArchetypeId =
   | 'warm_home'
   | 'friendly_pet'
   | 'high_conversion_landing'
-  | 'high_conversion_single';
+  | 'high_conversion_single'
+  | 'premium_jewelry'
+  | 'clean_wellness';
 
 export interface DesignTokens {
   '--color-primary': string;

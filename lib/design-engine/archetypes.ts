@@ -587,6 +587,116 @@ export const ARCHETYPES: Record<DesignArchetypeId, ArchetypeDefinition> = {
     navigationStyle: 'sticky-cta',
     productPageLayout: 'conversion-focused-hero',
   },
+  premium_jewelry: {
+    id: 'premium_jewelry',
+    name: 'Premium Jewelry',
+    tagline: 'Craftsmanship, precious metals, macro image detail',
+    description: 'Designed for fine jewelry, rings, gemstones, and artisan gold pieces.',
+    typography: {
+      headingFont: 'Cormorant Garamond',
+      bodyFont: 'Montserrat',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@300;400;500&display=swap',
+      headingTransform: 'uppercase',
+      headingWeight: '400',
+      bodyWeight: '400',
+    },
+    colorBehavior: {
+      primary: '#b45309',
+      secondary: '#78350f',
+      accent: '#d97706',
+      background: '#0c0a09',
+      surface: '#1c1917',
+      text: '#fafaf9',
+      muted: '#a8a29e',
+      border: '#292524',
+    },
+    borderRadius: {
+      small: '0px',
+      medium: '4px',
+      large: '8px',
+    },
+    shadowStyle: {
+      soft: '0 4px 20px rgba(0, 0, 0, 0.4)',
+      medium: '0 10px 30px rgba(0, 0, 0, 0.6)',
+    },
+    buttonStyle: {
+      height: '52px',
+      radius: '0px',
+      className: 'btn-luxury-jewelry',
+      hoverTransform: 'translateY(-1px)',
+    },
+    heroComposition: 'fullscreen-editorial',
+    cardStyle: {
+      border: '1px solid #292524',
+      shadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+      background: '#1c1917',
+      radius: '4px',
+    },
+    sectionSpacing: '5rem',
+    imageTreatment: {
+      aspectRatio: '1/1',
+      borderRadius: '4px',
+      hoverZoom: true,
+      overlay: 'transparent',
+    },
+    navigationStyle: 'elegant-thin',
+    productPageLayout: 'editorial-split',
+  },
+  clean_wellness: {
+    id: 'clean_wellness',
+    name: 'Clean Wellness',
+    tagline: 'Mindful routine, calming palette, holistic vitality',
+    description: 'Designed for health supplements, teas, meditation gear, and natural vitality.',
+    typography: {
+      headingFont: 'Playfair Display',
+      bodyFont: 'Inter',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=Inter:wght@300;400;500&display=swap',
+      headingTransform: 'none',
+      headingWeight: '600',
+      bodyWeight: '400',
+    },
+    colorBehavior: {
+      primary: '#0d9488',
+      secondary: '#0f766e',
+      accent: '#14b8a6',
+      background: '#f0fdf4',
+      surface: '#ffffff',
+      text: '#134e4a',
+      muted: '#64748b',
+      border: '#ccfbf1',
+    },
+    borderRadius: {
+      small: '8px',
+      medium: '14px',
+      large: '24px',
+    },
+    shadowStyle: {
+      soft: '0 4px 16px rgba(13, 148, 136, 0.06)',
+      medium: '0 10px 30px rgba(13, 148, 136, 0.12)',
+    },
+    buttonStyle: {
+      height: '52px',
+      radius: '14px',
+      className: 'btn-clean-wellness',
+      hoverTransform: 'translateY(-2px)',
+    },
+    heroComposition: 'centered-lifestyle',
+    cardStyle: {
+      border: '1px solid #ccfbf1',
+      shadow: '0 4px 16px rgba(13, 148, 136, 0.05)',
+      background: '#ffffff',
+      radius: '14px',
+    },
+    sectionSpacing: '4.5rem',
+    imageTreatment: {
+      aspectRatio: '1/1',
+      borderRadius: '14px',
+      hoverZoom: true,
+      overlay: 'transparent',
+    },
+    navigationStyle: 'standard-clean',
+    productPageLayout: 'soft-gallery-cards',
+  },
 };
 
 /**
@@ -603,6 +713,8 @@ export function getArchetype(id: DesignArchetypeId | string): ArchetypeDefinitio
   if (id === 'premium_minimal' || id === 'minimal') return ARCHETYPES.minimal_fashion;
   if (id === 'modern_commerce' || id === 'modern' || id === 'corporate' || id === 'startup') return ARCHETYPES.warm_home;
   if (id === 'high_conversion_single') return ARCHETYPES.high_conversion_single;
+  if (id === 'premium_jewelry') return ARCHETYPES.premium_jewelry;
+  if (id === 'clean_wellness') return ARCHETYPES.clean_wellness;
   
   return ARCHETYPES.high_conversion_landing;
 }

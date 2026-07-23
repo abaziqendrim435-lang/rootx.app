@@ -23,7 +23,7 @@ export default function ArchetypeSelector({ selectedArchetype, onSelectArchetype
           </p>
         </div>
         <span className="text-xs px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 font-medium">
-          8 Archetypes Available
+          10 Theme Families Available
         </span>
       </div>
 

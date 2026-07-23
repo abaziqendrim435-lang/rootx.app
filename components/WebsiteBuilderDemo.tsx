@@ -23,6 +23,7 @@ import DesignScorePanel from '@/components/design-engine/DesignScorePanel';
 import ArchetypeSelector from '@/components/design-engine/ArchetypeSelector';
 import DesignPreviewPanel from '@/components/design-engine/DesignPreviewPanel';
 import ModelLogPanel from '@/components/design-engine/ModelLogPanel';
+import ThemeRecommendationPanel from '@/components/design-engine/ThemeRecommendationPanel';
 import ImageDiagnosticsPanel from '@/components/image-pipeline/ImageDiagnosticsPanel';
 import ImageManagerModal from '@/components/image-pipeline/ImageManagerModal';
 import type {
@@ -266,6 +267,8 @@ function InputForm({
     { label: 'Bold Fitness', value: 'bold_fitness' as PreferredStyle },
     { label: 'Friendly Pet', value: 'friendly_pet' as PreferredStyle },
     { label: 'High-Conversion Single Product', value: 'high_conversion_single' as PreferredStyle },
+    { label: 'Premium Jewelry', value: 'premium_jewelry' as PreferredStyle },
+    { label: 'Clean Wellness', value: 'clean_wellness' as PreferredStyle },
   ];
 
   const languages = [
@@ -4945,7 +4948,23 @@ export default function WebsiteBuilderDemo() {
                   />
                 )}
 
-                {/* 2. Archetype Selector & Override */}
+                {/* 2. Top 3 Theme Recommendations */}
+                {designEngineResult?.qualityGateReport?.recommendedThemes && (
+                  <ThemeRecommendationPanel
+                    recommendations={designEngineResult.qualityGateReport.recommendedThemes}
+                    selectedArchetype={designEngineResult.archetype}
+                    onSelectTheme={(newArchId) => {
+                      const updatedInput = { ...input, preferredStyle: newArchId };
+                      setInput(updatedInput);
+                      if (result) {
+                        const newResult = generateShopifyThemeV2(result, updatedInput);
+                        setDesignEngineResult(newResult);
+                      }
+                    }}
+                  />
+                )}
+
+                {/* 3. Full 10 Theme Families Selector */}
                 {designEngineResult && (
                   <ArchetypeSelector
                     selectedArchetype={designEngineResult.archetype}

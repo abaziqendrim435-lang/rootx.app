@@ -5,6 +5,7 @@
 
 import type { DesignEngineResult, WebsiteBuilderInput } from './website-builder-types';
 import { hasPlaceholderContent } from './placeholder-cleaner';
+import { analyzeAndDetectArchetype } from './design-engine/category-detector';
 
 export interface QualityGateCheckResult {
   id: string;
@@ -19,6 +20,7 @@ export interface QualityGateV2Report {
   overallScore: number;
   checks: QualityGateCheckResult[];
   failures: string[];
+  recommendedThemes?: import('./design-engine/category-detector').ThemeRecommendation[];
 }
 
 export function validateStorefrontQualityGateV2(
@@ -138,10 +140,13 @@ export function validateStorefrontQualityGateV2(
   const totalScore = Math.round(checks.reduce((acc, c) => acc + c.score, 0) / checks.length);
   const passed = failures.length === 0 && totalScore >= 85;
 
+  const analysis = analyzeAndDetectArchetype(`${brandName} ${heroHeadline} ${input.businessType || ''} ${input.brandDescription || ''}`);
+
   return {
     passed,
     overallScore: totalScore,
     checks,
     failures,
+    recommendedThemes: analysis.recommendedThemes,
   };
 }
