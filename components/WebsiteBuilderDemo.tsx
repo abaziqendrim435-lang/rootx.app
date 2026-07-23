@@ -4938,7 +4938,7 @@ export default function WebsiteBuilderDemo() {
                     onRegenerate={() => {
                       if (result) {
                         try {
-                          const newResult = generateShopifyThemeV2(result, input);
+                          const newResult = generateShopifyThemeV2(result, input, designEngineResult.spec?.imageLibrary);
                           setDesignEngineResult(newResult);
                         } catch (err) {
                           console.error(err);
@@ -4957,7 +4957,7 @@ export default function WebsiteBuilderDemo() {
                       const updatedInput = { ...input, preferredStyle: newArchId };
                       setInput(updatedInput);
                       if (result) {
-                        const newResult = generateShopifyThemeV2(result, updatedInput);
+                        const newResult = generateShopifyThemeV2(result, updatedInput, designEngineResult.spec?.imageLibrary);
                         setDesignEngineResult(newResult);
                       }
                     }}
@@ -4972,7 +4972,7 @@ export default function WebsiteBuilderDemo() {
                       const updatedInput = { ...input, preferredStyle: newArchId };
                       setInput(updatedInput);
                       if (result) {
-                        const newResult = generateShopifyThemeV2(result, updatedInput);
+                        const newResult = generateShopifyThemeV2(result, updatedInput, designEngineResult.spec?.imageLibrary);
                         setDesignEngineResult(newResult);
                       }
                     }}

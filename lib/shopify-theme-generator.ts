@@ -26,9 +26,10 @@ import { tokensToShopifySettings } from './design-engine/design-tokens';
  */
 export function generateShopifyThemeV2(
   gen: WebsiteGeneration,
-  input: WebsiteBuilderInput
+  input: WebsiteBuilderInput,
+  existingImageLibrary?: import('./image-pipeline/types').ProductImageLibrary
 ): DesignEngineResult {
-  return runDesignEnginePipeline(gen, input);
+  return runDesignEnginePipeline(gen, input, existingImageLibrary);
 }
 
 export function generateShopifyTheme(

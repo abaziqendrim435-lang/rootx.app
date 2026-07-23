@@ -13,9 +13,13 @@ import { generateDesignTokens } from '../design-engine/design-tokens';
 import { createSectionPlan } from '../design-engine/section-sequencer';
 import { getArchetype } from '../design-engine/archetypes';
 
+import type { ProductImageLibrary } from '../image-pipeline/types';
+import { createProductImageLibrary, reassignImagesForTheme } from '../image-pipeline';
+
 export function buildStorefrontSpec(
   rawGen: WebsiteGeneration,
-  input: WebsiteBuilderInput
+  input: WebsiteBuilderInput,
+  existingImageLibrary?: ProductImageLibrary
 ): StorefrontSpec {
   // 1. Clean Title, Brand Name, Hero Headline, and Slogan
   const profile = buildCleanBrandProfile(
@@ -29,22 +33,23 @@ export function buildStorefrontSpec(
   // 2. Purge Placeholder Text
   const gen = sanitizePlaceholders(rawGen, profile.cleanBrandName);
 
-  // 3. Run Image Pipeline for Role Assignments
-  const imgRes = runImagePipeline({ gen, input, ecommerce: gen.ecommerce });
-
-  const images: StorefrontImageAssignments = {
-    hero: imgRes.heroImage,
-    featured: imgRes.heroImage,
-    gallery: imgRes.galleryImages || [],
-    story: imgRes.lifestyleImage || imgRes.heroImage,
-    finalCta: imgRes.heroImage,
-    hasSingleImageFallback: imgRes.hasSingleImageFallback,
-  };
-
-  // 4. Archetype & Design Token Selection
+  // 3. Archetype & Design Token Selection
   const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText || ''}`;
   const categoryAnalysis = analyzeAndDetectArchetype(textToScan, input.preferredStyle);
   const archetypeId = categoryAnalysis.selectedArchetype;
+
+  // 4. Reuse or Create Canonical Product Image Library & Recalculate Theme Role Assignments
+  const imageLibrary = existingImageLibrary || createProductImageLibrary({ gen, input, ecommerce: gen.ecommerce });
+  const themeAssignments = reassignImagesForTheme(imageLibrary, archetypeId);
+
+  const images: StorefrontImageAssignments = {
+    hero: themeAssignments.hero,
+    featured: themeAssignments.featured,
+    gallery: themeAssignments.gallery,
+    story: themeAssignments.story,
+    finalCta: themeAssignments.finalCta,
+    hasSingleImageFallback: themeAssignments.hasSingleImageFallback,
+  };
 
   const designTokens = generateDesignTokens(
     archetypeId,
@@ -56,8 +61,8 @@ export function buildStorefrontSpec(
   const archDef = getArchetype(archetypeId);
 
   // 5. Construct Section Specifications with Multi-Image Gallery Blocks
-  const galleryList = (images.gallery && images.gallery.length > 0)
-    ? images.gallery.slice(0, 10)
+  const galleryList = themeAssignments.productPageGallery && themeAssignments.productPageGallery.length > 0
+    ? themeAssignments.productPageGallery.slice(0, 10)
     : (images.hero ? [images.hero] : []);
 
   const galleryBlocks = galleryList.map((img, i) => ({
@@ -137,6 +142,8 @@ export function buildStorefrontSpec(
     archetype: archetypeId,
     designTokens,
     images,
+    imageLibrary,
+    imageAssignments: themeAssignments,
     sections,
     navigation: {
       links: [

@@ -42,6 +42,28 @@ export interface DiagnosticInfo {
   rejectionLog: Array<{ url: string; reason: string }>;
 }
 
+export interface ProductImageLibrary {
+  allValidImages: NormalizedImage[];
+  heroCandidates: NormalizedImage[];
+  galleryCandidates: NormalizedImage[];
+  lifestyleCandidates: NormalizedImage[];
+  detailCandidates: NormalizedImage[];
+  rejectedImages: Array<{ url: string; reason: string }>;
+  imageMetadata: Record<string, unknown>;
+  originalSourceCount: number;
+  validUniqueCount: number;
+}
+
+export interface ThemeImageAssignments {
+  hero: NormalizedImage | null;
+  featured: NormalizedImage | null;
+  gallery: NormalizedImage[];
+  story: NormalizedImage | null;
+  finalCta: NormalizedImage | null;
+  productPageGallery: NormalizedImage[];
+  hasSingleImageFallback: boolean;
+}
+
 export interface ImagePipelineResult {
   images: NormalizedImage[];
   heroImage: NormalizedImage | null;
@@ -53,4 +75,5 @@ export interface ImagePipelineResult {
   hasSingleImageFallback: boolean;
   hasNoImageFallback: boolean;
   diagnosticInfo: DiagnosticInfo;
+  imageLibrary?: ProductImageLibrary;
 }

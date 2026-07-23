@@ -9,3 +9,5 @@ export * from './validator';
 export * from './ranker';
 export * from './role-assigner';
 export * from './pipeline';
+export * from './library-builder';
+export * from './theme-reassigner';

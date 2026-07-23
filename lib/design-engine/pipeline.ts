@@ -18,12 +18,13 @@ import { validateAndScoreDesign } from './quality-validator';
 
 export function runDesignEnginePipeline(
   rawGen: WebsiteGeneration,
-  input: WebsiteBuilderInput
+  input: WebsiteBuilderInput,
+  existingImageLibrary?: import('../image-pipeline/types').ProductImageLibrary
 ): DesignEngineResult {
   const modelLogs: ModelLog[] = [];
 
   // Stage 0: Build Canonical StorefrontSpec (Single Source of Truth)
-  const spec = buildStorefrontSpec(rawGen, input);
+  const spec = buildStorefrontSpec(rawGen, input, existingImageLibrary);
 
   // Stage 1: Generate CSS Token Variables & Liquid Sections directly from Spec
   const cssVars = generateTokenCSSVariables(spec);

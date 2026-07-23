@@ -62,6 +62,8 @@ export interface StorefrontSpec {
   archetype: DesignArchetypeId;
   designTokens: DesignTokens;
   images: StorefrontImageAssignments;
+  imageLibrary?: import('../image-pipeline/types').ProductImageLibrary;
+  imageAssignments?: import('../image-pipeline/types').ThemeImageAssignments;
   sections: StorefrontSectionSpec[];
   navigation: { links: { label: string; url: string }[] };
   trustMessages: string[];

@@ -45,24 +45,30 @@ export default function ImageDiagnosticsPanel({ pipelineResult, debugMode = true
       {isExpanded && (
         <div className="pt-3 border-t border-zinc-800 space-y-3">
           {/* Summary grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[11px]">
             <div className="p-2 rounded bg-zinc-900 border border-zinc-800">
-              <span className="text-zinc-400 block">Total Extracted:</span>
+              <span className="text-zinc-400 block">Raw Imported:</span>
               <strong className="text-white text-sm">{diagnosticInfo.totalExtracted}</strong>
             </div>
             <div className="p-2 rounded bg-zinc-900 border border-zinc-800">
-              <span className="text-zinc-400 block">Valid Images:</span>
+              <span className="text-zinc-400 block">Valid Unique:</span>
               <strong className="text-emerald-400 text-sm">{diagnosticInfo.validCount}</strong>
             </div>
             <div className="p-2 rounded bg-zinc-900 border border-zinc-800">
-              <span className="text-zinc-400 block">Hero Image:</span>
-              <strong className="text-blue-400 text-xs truncate block">{heroImage ? heroImage.source : 'None'}</strong>
+              <span className="text-zinc-400 block">Persistent Library:</span>
+              <strong className="text-blue-400 text-sm">{pipelineResult.imageLibrary?.validUniqueCount ?? diagnosticInfo.validCount}</strong>
             </div>
             <div className="p-2 rounded bg-zinc-900 border border-zinc-800">
-              <span className="text-zinc-400 block">Fallback Strategy:</span>
-              <strong className="text-amber-400 text-xs">
-                {hasNoImageFallback ? 'No Image Fallback' : hasSingleImageFallback ? 'Single Image Crop' : 'Multi-Image Direct'}
-              </strong>
+              <span className="text-zinc-400 block">Theme Assigned:</span>
+              <strong className="text-purple-400 text-sm">{images.length}</strong>
+            </div>
+            <div className="p-2 rounded bg-zinc-900 border border-zinc-800">
+              <span className="text-zinc-400 block">Shopify Export:</span>
+              <strong className="text-cyan-400 text-sm">{pipelineResult.galleryImages?.length || images.length}</strong>
+            </div>
+            <div className="p-2 rounded bg-zinc-900 border border-zinc-800">
+              <span className="text-zinc-400 block">Rejected:</span>
+              <strong className="text-amber-400 text-sm">{diagnosticInfo.rejectedCount}</strong>
             </div>
           </div>
 
