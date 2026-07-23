@@ -257,11 +257,21 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <h2 style="font-size: 2.2rem; font-family: var(--rx-heading-font); color: var(--rx-text); margin-bottom: 2rem; text-align: center;">Technical Inspection Gallery</h2>
     <div style="display: grid; grid-template-columns: 120px 1fr; gap: 1.5rem;">
       <div style="display: flex; flex-direction: column; gap: 1rem;">
-        ${galleryList.map((img, i) => `
-          <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${img.normalizedUrl}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
-            <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
-          </button>
-        `).join('')}
+        {% if section.blocks.size > 0 %}
+          {% for block in section.blocks %}
+            {% if block.settings.image_url != blank %}
+              <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ block.settings.image_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
+                <img src="{{ block.settings.image_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+              </button>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          ${galleryList.map((img, i) => `
+            <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${img.normalizedUrl}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
+              <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+            </button>
+          `).join('')}
+        {% endif %}
       </div>
       <div>
         <img id="rx-left-gallery-main" src="${heroImg}" alt="Main View" style="width: 100%; height: 480px; object-fit: cover; border-radius: 12px; border: 1px solid var(--rx-border);" />
@@ -275,11 +285,21 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   <div class="container">
     <h2 style="font-size: 2rem; font-family: var(--rx-heading-font); color: var(--rx-text); margin-bottom: 1.5rem;">Lookbook Reel</h2>
     <div style="display: flex; gap: 1.5rem; overflow-x: auto; padding-bottom: 1rem; scrollbar-width: thin;">
-      ${galleryList.map((img) => `
-        <div style="flex-shrink: 0; width: 320px; height: 420px; border-radius: 8px; overflow: hidden;">
-          <img src="${img.normalizedUrl}" alt="Gallery" style="width: 100%; height: 100%; object-fit: cover;" />
-        </div>
-      `).join('')}
+      {% if section.blocks.size > 0 %}
+        {% for block in section.blocks %}
+          {% if block.settings.image_url != blank %}
+            <div style="flex-shrink: 0; width: 320px; height: 420px; border-radius: 8px; overflow: hidden;">
+              <img src="{{ block.settings.image_url }}" alt="Gallery" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        ${galleryList.map((img) => `
+          <div style="flex-shrink: 0; width: 320px; height: 420px; border-radius: 8px; overflow: hidden;">
+            <img src="${img.normalizedUrl}" alt="Gallery" style="width: 100%; height: 100%; object-fit: cover;" />
+          </div>
+        `).join('')}
+      {% endif %}
     </div>
   </div>
 </section>`;
@@ -319,7 +339,26 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   <div class="container">
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 3.5rem;">
       <div>
-        <img id="rx-main-prod-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; object-fit: cover; border-radius: 12px; border: 1px solid #1f2937;" />
+        <div style="background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+          <img id="rx-main-prod-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; object-fit: cover; border-radius: 8px;" />
+        </div>
+        <div class="rx-thumbnails-strip" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
+          {% if section.blocks.size > 0 %}
+            {% for block in section.blocks %}
+              {% if block.settings.image_url != blank %}
+                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url }}')" style="border: 2px solid {% if forloop.first %}#60a5fa{% else %}#1f2937{% endif %}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                  <img src="{{ block.settings.image_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+                </button>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            ${galleryList.map((img, i) => `
+              <button type="button" onclick="changeMainProductImg(this, '${img.normalizedUrl}')" style="border: 2px solid ${i === 0 ? '#60a5fa' : '#1f2937'}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+              </button>
+            `).join('')}
+          {% endif %}
+        </div>
       </div>
       <div>
         <span style="color: #60a5fa; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.1em;">TECHNICAL SPECIFICATION</span>
@@ -336,7 +375,21 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       </div>
     </div>
   </div>
-</section>`;
+</section>
+<script>
+  function changeMainProductImg(btn, url) {
+    var main = document.getElementById('rx-main-prod-img');
+    if (main && url) main.src = url;
+    var container = btn.parentElement;
+    if (container) {
+      var btns = container.getElementsByTagName('button');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].style.borderColor = '#1f2937';
+      }
+    }
+    btn.style.borderColor = '#60a5fa';
+  }
+</script>`;
   } else {
     mainProductHtml = `
 <section class="main-product-rootx product-layout--standard" style="padding: var(--rx-section-space) 0; background: var(--rx-surface);">
@@ -345,6 +398,23 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       <div>
         <div style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1rem; margin-bottom: 1rem;">
           <img id="rx-main-prod-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;" />
+        </div>
+        <div class="rx-thumbnails-strip" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
+          {% if section.blocks.size > 0 %}
+            {% for block in section.blocks %}
+              {% if block.settings.image_url != blank %}
+                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url }}')" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                  <img src="{{ block.settings.image_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+                </button>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            ${galleryList.map((img, i) => `
+              <button type="button" onclick="changeMainProductImg(this, '${img.normalizedUrl}')" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+              </button>
+            `).join('')}
+          {% endif %}
         </div>
       </div>
       <div>
@@ -361,7 +431,21 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       </div>
     </div>
   </div>
-</section>`;
+</section>
+<script>
+  function changeMainProductImg(btn, url) {
+    var main = document.getElementById('rx-main-prod-img');
+    if (main && url) main.src = url;
+    var container = btn.parentElement;
+    if (container) {
+      var btns = container.getElementsByTagName('button');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].style.borderColor = 'var(--rx-border)';
+      }
+    }
+    btn.style.borderColor = 'var(--rx-primary)';
+  }
+</script>`;
   }
 
   return [

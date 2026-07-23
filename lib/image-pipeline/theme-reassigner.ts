@@ -43,7 +43,7 @@ export function reassignImagesForTheme(
   const featuredImage = heroImage;
   const finalCtaImage = availableForStory.length > 1 ? availableForStory[1] : heroImage;
 
-  // 3. Product Page & Storefront Gallery (Preserve ALL valid images up to 10 max)
+  // 3. Product Page & Storefront Gallery (Preserve ALL valid images without artificial capping)
   // Ensure hero image is first, followed by all remaining unique images
   const galleryImages: NormalizedImage[] = [heroImage];
   valid.forEach((img) => {
@@ -52,15 +52,13 @@ export function reassignImagesForTheme(
     }
   });
 
-  const cappedGallery = galleryImages.slice(0, 10);
-
   return {
     hero: heroImage,
     featured: featuredImage,
-    gallery: cappedGallery,
+    gallery: galleryImages,
     story: storyImage,
     finalCta: finalCtaImage,
-    productPageGallery: cappedGallery,
+    productPageGallery: galleryImages,
     hasSingleImageFallback: valid.length === 1,
   };
 }

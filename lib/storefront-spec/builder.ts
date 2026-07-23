@@ -62,7 +62,7 @@ export function buildStorefrontSpec(
 
   // 5. Construct Section Specifications with Multi-Image Gallery Blocks
   const galleryList = themeAssignments.productPageGallery && themeAssignments.productPageGallery.length > 0
-    ? themeAssignments.productPageGallery.slice(0, 10)
+    ? themeAssignments.productPageGallery
     : (images.hero ? [images.hero] : []);
 
   const galleryBlocks = galleryList.map((img, i) => ({

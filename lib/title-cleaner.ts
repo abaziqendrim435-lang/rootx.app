@@ -13,20 +13,17 @@ export interface CleanedBrandProfile {
 }
 
 const SUPPLIER_WORDS = [
-  'aliexpress', 'dropship', 'dropshipping', 'supplier', 'retail', 'wholesale',
-  'hot selling', 'top quality', 'free shipping', 'fast shipping', '2026 new', '2025 new',
-  'factory price', 'oem', 'odm', 'brand new', 'original', 'genuine', 'high quality',
-  'best seller', 'trending', 'popular', 'premium', 'luxury', '100% new', 'new arrival',
-  'store', 'official store', 'global version', 'flagship store', 'direct sales',
-  '1atm', '2atm', '3atm', '5atm', 'ip67', 'ip68', 'amoled display', 'health monitoring',
-  'sports modes', 'voice calling', 'smart watch', 'smartwatch', 'bluetooth', 'wireless'
+  'new', '2026', '2025', '2024', '2027', 'intelligent', 'smart', 'official', 'factory', 'original',
+  'hot sale', 'hotsale', 'best seller', 'bestseller', 'top quality', 'free shipping', 'fast shipping',
+  'aliexpress', 'dropship', 'dropshipping', 'supplier', 'retail', 'wholesale', 'factory price',
+  'oem', 'odm', 'brand new', 'genuine', 'high quality', 'trending', 'popular', '100% new',
+  'new arrival', 'store', 'official store', 'global version', 'flagship store', 'direct sales',
+  '1atm', '2atm', '3atm', '5atm', 'ip67', 'ip68', 'amoled', 'health monitoring', 'sports modes',
+  'voice calling', 'bluetooth', 'wireless'
 ];
 
 /**
  * Deterministically cleans a raw supplier title into a short, premium product name.
- * Example:
- * Raw: "HAYLOU Solar Lite 2 Smartwatch 1.43 AMOLED Display 24h Health Monitoring 150+ Sports Modes Voice Calling Smart Watch 1ATM"
- * Output: "Haylou Solar Lite 2"
  */
 export function cleanProductTitle(rawTitle: string): string {
   if (!rawTitle || typeof rawTitle !== 'string') return 'Premium Product';
@@ -70,38 +67,57 @@ export function cleanProductTitle(rawTitle: string): string {
     result = result.substring(0, 45).trim();
   }
 
-  return result || 'Haylou Solar Lite 2';
+  return result || 'Essential Product';
 }
 
 /**
- * Extracts a short, elegant brand name (Max 18 chars).
- * Example: "Haylou Solar Lite 2" -> "Haylou"
+ * Extracts or generates a short, elegant brand name (Max 18 chars).
  */
-export function cleanBrandName(rawTitleOrStore: string): string {
-  if (!rawTitleOrStore) return 'Haylou';
+export function cleanBrandName(rawTitleOrStore: string, category?: string): string {
+  if (!rawTitleOrStore || typeof rawTitleOrStore !== 'string') {
+    return generateFallbackBrandName(category);
+  }
 
   let name = rawTitleOrStore.replace(/\s+Store$/i, '').trim();
 
-  // Take first word if it looks like a brand name (3 to 15 chars)
+  // Strip supplier keywords from brand candidate
+  for (const word of SUPPLIER_WORDS) {
+    name = name.replace(new RegExp(`\\b${word}\\b`, 'gi'), ' ');
+  }
+  name = name.replace(/\s+/g, ' ').trim();
+
+  // Take first clean word if it looks like a brand name (3 to 15 chars)
   const firstWord = name.split(/\s+/)[0]?.replace(/[^a-zA-Z0-9]/g, '');
-  if (firstWord && firstWord.length >= 3 && firstWord.length <= 15) {
+  if (firstWord && firstWord.length >= 3 && firstWord.length <= 15 && !['product', 'item', 'goods', 'shop'].includes(firstWord.toLowerCase())) {
     name = firstWord;
   } else {
-    name = name.split(/\s+/).slice(0, 2).join(' ');
+    name = generateFallbackBrandName(category);
   }
 
   name = name.replace(/[^a-zA-Z0-9\s]/g, '').trim();
   name = name.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase());
 
-  if (name.length > 18) {
-    name = name.substring(0, 18).trim();
+  if (name.length > 18 || name.length < 3) {
+    name = generateFallbackBrandName(category);
   }
 
-  return name || 'Haylou';
+  return name;
+}
+
+function generateFallbackBrandName(category?: string): string {
+  const cat = (category || '').toLowerCase();
+  if (cat.includes('tech') || cat.includes('electronic')) return 'AeroTech';
+  if (cat.includes('beauty') || cat.includes('wellness') || cat.includes('soft')) return 'Lumina';
+  if (cat.includes('fashion') || cat.includes('apparel')) return 'Maison';
+  if (cat.includes('home')) return 'Haven';
+  if (cat.includes('pet')) return 'Pawsy';
+  if (cat.includes('fitness') || cat.includes('sport')) return 'Apex';
+  if (cat.includes('jewelry')) return 'Solstice';
+  return 'Verve';
 }
 
 /**
- * Generates clean headlines and subheadlines tailored to category.
+ * Generates clean headlines and subheadlines under 60 characters tailored to category.
  */
 export function generateCleanHeadlines(
   productName: string,
@@ -113,34 +129,36 @@ export function generateCleanHeadlines(
   let headline = (rawHeadline || '').trim();
   let subheadline = (rawSubheadline || '').trim();
 
-  // Clean raw headline if it contains supplier words or long product titles
-  if (!headline || headline.length > 60 || headline.toLowerCase().includes('smartwatch') || headline.toLowerCase().includes('haylou solar lite 2 smartwatch')) {
-    switch (category) {
-      case 'tech_futuristic':
-        headline = 'Smarter Health. Better Every Day.';
-        subheadline = 'Track activity, calls, and daily wellness from one lightweight smartwatch.';
-        break;
-      case 'soft_lifestyle':
-        headline = 'Pure Hydration for Radiant Skin.';
-        subheadline = 'Nourish your skin daily with natural organic botanical extracts.';
-        break;
-      case 'bold_conversion':
-        headline = 'Unleash Your Peak Performance.';
-        subheadline = 'Engineered for athletes who demand power, precision, and durability.';
-        break;
-      case 'luxury_editorial':
-        headline = 'Timeless Craftsmanship & Style.';
-        subheadline = 'Exquisitely designed with premium materials for effortless elegance.';
-        break;
-      case 'friendly_pet':
-        headline = 'Gentle Care for Your Best Friend.';
-        subheadline = 'Crafted to keep your pets happy, healthy, and comfortable every day.';
-        break;
-      case 'modern_commerce':
-      default:
-        headline = 'Elevate Your Daily Routine.';
-        subheadline = 'Thoughtfully designed with premium materials for exceptional daily performance.';
-        break;
+  // Strip supplier words from raw headline
+  for (const word of SUPPLIER_WORDS) {
+    headline = headline.replace(new RegExp(`\\b${word}\\b`, 'gi'), ' ');
+  }
+  headline = headline.replace(/\s+/g, ' ').trim();
+
+  // If raw headline is empty, too long (> 60 chars), or contains supplier terms, generate category headline
+  if (!headline || headline.length > 60 || headline.length < 10) {
+    const cat = category.toLowerCase();
+    if (cat.includes('tech')) {
+      headline = 'Smarter Technology. Built For Every Day.';
+      subheadline = 'Track activity, calls, and daily wellness from one sleek device.';
+    } else if (cat.includes('beauty') || cat.includes('wellness') || cat.includes('soft')) {
+      headline = 'Pure Hydration for Radiant Skin.';
+      subheadline = 'Nourish your skin daily with natural organic botanical extracts.';
+    } else if (cat.includes('fitness') || cat.includes('bold')) {
+      headline = 'Unleash Your Peak Performance.';
+      subheadline = 'Engineered for athletes who demand power, precision, and durability.';
+    } else if (cat.includes('luxury') || cat.includes('editorial')) {
+      headline = 'Timeless Craftsmanship & Style.';
+      subheadline = 'Exquisitely designed with premium materials for effortless elegance.';
+    } else if (cat.includes('pet')) {
+      headline = 'Gentle Care for Your Best Friend.';
+      subheadline = 'Crafted to keep your pets happy, healthy, and comfortable every day.';
+    } else if (cat.includes('fashion')) {
+      headline = 'Effortless Style. Superior Comfort.';
+      subheadline = 'Designed to fit your lifestyle with modern tailoring and premium fabrics.';
+    } else {
+      headline = 'Elevate Your Daily Routine.';
+      subheadline = 'Thoughtfully designed with premium materials for exceptional daily performance.';
     }
   }
 
@@ -162,7 +180,7 @@ export function buildCleanBrandProfile(
   rawHeadline?: string,
   rawSubheadline?: string
 ): CleanedBrandProfile {
-  const brandName = cleanBrandName(rawStoreName || rawTitle);
+  const brandName = cleanBrandName(rawStoreName || rawTitle, category);
   const productName = cleanProductTitle(rawTitle);
   const { headline, subheadline, slogan } = generateCleanHeadlines(
     productName,

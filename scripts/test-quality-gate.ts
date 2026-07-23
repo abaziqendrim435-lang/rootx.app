@@ -56,16 +56,18 @@ function runQualityGateTests() {
   assert(report.overallScore >= 85, `Overall Quality Gate score is >= 85 (Got: ${report.overallScore})`);
   assert(report.checks.every(c => c.passed), 'All individual Quality Gate checks passed');
 
-  // Negative test: Raw supplier title rejection
-  const mockBadResult = {
+  // Auto-cleaning test: Raw supplier title automatically cleaned
+  const mockRawSupplierResult = {
     ...mockValidResult,
-    brandName: 'HAYLOU Solar Lite 2 Smartwatch 1.43 AMOLED Display 24h Health Monitoring 150+ Sports Modes Voice Calling Smart Watch 1ATM',
+    brandName: 'HAYLOU Solar Lite 2 Smartwatch 1.43 AMOLED Display 24h Health Monitoring 150+ Sports Modes Voice Calling Smart Watch 1ATM 2026 New Intelligent Smart Watch Official Factory Direct Hot Sale Best Seller Original',
   };
-  const badReport = validateStorefrontQualityGateV2(mockBadResult, mockInput);
-  assert(badReport.passed === false, 'Quality Gate V2 rejected raw supplier title exceeding 18 chars');
+  const cleanedReport = validateStorefrontQualityGateV2(mockRawSupplierResult, mockInput);
+  assert(cleanedReport.passed === true, 'Quality Gate V2 automatically cleans raw supplier title and passes');
+  assert(mockRawSupplierResult.brandName.length <= 18, `Cleaned brand name "${mockRawSupplierResult.brandName}" is <= 18 chars`);
+  assert(!mockRawSupplierResult.brandName.includes('2026'), 'Cleaned brand name does not contain 2026');
 
   console.log('\n==================================================');
-  console.log(' 🎉 ALL QUALITY GATE V2 TESTS PASSED SUCCESSFULY');
+  console.log(' 🎉 ALL QUALITY GATE V2 CLEANING TESTS PASSED SUCCESSFULY');
   console.log('==================================================\n');
 }
 

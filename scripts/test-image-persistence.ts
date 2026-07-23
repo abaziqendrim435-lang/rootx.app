@@ -181,7 +181,7 @@ export function runImagePersistenceTests() {
   const tenLib = createProductImageLibrary(tenImageProd);
   const tenSpec = buildStorefrontSpec(tenImageProd, baseInput, tenLib);
   assert(tenLib.validUniqueCount === 12, '12 candidate images correctly extracted into library');
-  assert(tenSpec.images.gallery.length <= 10, 'Gallery images safely capped to 10 max for performance');
+  assert(tenSpec.images.gallery.length === 12, 'Gallery supports all 12 valid images without hardcoded 10-cap');
 
   // 13. Broken Image Filtered
   console.log('\nTest 13: Broken Image Filtering...');
