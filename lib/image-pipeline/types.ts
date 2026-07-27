@@ -20,6 +20,7 @@ export interface NormalizedImage {
   id: string;
   originalUrl: string;
   normalizedUrl: string;
+  exportedAssetName?: string;
   width: number;
   height: number;
   aspectRatio: number;

@@ -15,11 +15,29 @@ function esc(str: string): string {
   return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
+function renderAssetImgTag(assetNameOrUrl: string, alt: string, style: string, id: string = ''): string {
+  if (!assetNameOrUrl) return '';
+  const idAttr = id ? `id="${id}" ` : '';
+  if (assetNameOrUrl.startsWith('http://') || assetNameOrUrl.startsWith('https://')) {
+    return `<img ${idAttr}src="${assetNameOrUrl}" alt="${esc(alt)}" style="${style}" loading="lazy" />`;
+  }
+  return `<img ${idAttr}src="{{ '${assetNameOrUrl}' | asset_url }}" alt="${esc(alt)}" style="${style}" loading="lazy" />`;
+}
+
+function resolveAssetUrlExpression(assetNameOrUrl: string): string {
+  if (!assetNameOrUrl) return '';
+  if (assetNameOrUrl.startsWith('http://') || assetNameOrUrl.startsWith('https://')) {
+    return assetNameOrUrl;
+  }
+  return `{{ '${assetNameOrUrl}' | asset_url }}`;
+}
+
 export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: string; value: string }[] {
   const brand = spec.brand;
   const prod = spec.product;
   const content = spec.content;
-  const heroImg = spec.images.hero?.normalizedUrl || spec.images.gallery[0]?.normalizedUrl || '';
+  const heroImgAsset = spec.images.hero?.exportedAssetName || spec.images.hero?.normalizedUrl || spec.images.gallery[0]?.exportedAssetName || spec.images.gallery[0]?.normalizedUrl || '';
+  const storyImgAsset = spec.images.story?.exportedAssetName || spec.images.story?.normalizedUrl || '';
 
   const familyConfig = THEME_FAMILIES[spec.archetype] || THEME_FAMILIES.modern_tech;
   const heroSection = spec.sections.find(s => s.id === ROOTX_SECTION_TYPES.HERO);
@@ -28,7 +46,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const galleryVariant = familyConfig.galleryStyle;
   const productPageLayout = familyConfig.productPageStructure;
 
-  const galleryList = spec.images.gallery.filter((img) => Boolean(img.normalizedUrl));
+  const galleryList = spec.images.gallery.filter((img) => Boolean(img.exportedAssetName || img.normalizedUrl));
 
   // 1. Header Liquid Generator
   let headerHtml = '';
@@ -125,7 +143,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     </div>
     <div>
       <div style="background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 1.25rem; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-        ${heroImg ? `<img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 400px; object-fit: cover; border-radius: 10px;" />` : ''}
+        ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 400px; object-fit: cover; border-radius: 10px;', 'rx-hero-img')}
       </div>
     </div>
   </div>
@@ -144,7 +162,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       </form>
     </div>
     <div>
-      ${heroImg ? `<img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 480px; object-fit: cover; border-radius: 200px 200px 20px 20px; box-shadow: 0 15px 35px rgba(236,72,153,0.12);" />` : ''}
+      ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 480px; object-fit: cover; border-radius: 200px 200px 20px 20px; box-shadow: 0 15px 35px rgba(236,72,153,0.12);', 'rx-hero-img')}
     </div>
   </div>
 </section>`;
@@ -155,7 +173,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <span style="text-transform: uppercase; letter-spacing: 0.35em; font-size: 0.8rem; color: #d97706;">FINE CRAFTSMANSHIP</span>
     <h1 style="font-size: clamp(2.8rem, 6vw, 4.5rem); font-family: var(--rx-heading-font); margin: 1.25rem 0; color: #ffffff; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em;">${esc(content.heroHeadline)}</h1>
     <p style="font-size: 1.2rem; color: #a3a3a3; max-width: 650px; margin: 0 auto 2.5rem; line-height: 1.7;">${esc(content.heroSubheadline)}</p>
-    ${heroImg ? `<div style="margin-bottom: 3rem;"><img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; max-width: 750px; height: 450px; object-fit: cover; border-radius: 4px; border: 1px solid #262626;" /></div>` : ''}
+    <div style="margin-bottom: 3rem;">${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; max-width: 750px; height: 450px; object-fit: cover; border-radius: 4px; border: 1px solid #262626;', 'rx-hero-img')}</div>
     <form action="/cart/add" method="post">
       <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
       <button type="submit" class="btn" style="background: #d97706; color: #ffffff; padding: 1.2rem 3.5rem; font-size: 0.95rem; letter-spacing: 0.2em; text-transform: uppercase;">Acquire — $${esc(prod.price)}</button>
@@ -168,7 +186,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   <div class="container">
     <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 3rem; align-items: center;">
       <div>
-        ${heroImg ? `<img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 520px; object-fit: cover; border-radius: 0px;" />` : ''}
+        ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 520px; object-fit: cover; border-radius: 0px;', 'rx-hero-img')}
       </div>
       <div>
         <h1 style="font-size: clamp(2.5rem, 5vw, 3.8rem); font-family: var(--rx-heading-font); color: #09090b; font-weight: 700; margin-bottom: 1rem; line-height: 1.1;">${esc(content.heroHeadline)}</h1>
@@ -189,7 +207,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <span style="background: #ccfbf1; color: #0d9488; padding: 0.35rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">HOLISTIC WELLNESS</span>
     <h1 style="font-size: clamp(2.4rem, 5vw, 3.6rem); font-family: var(--rx-heading-font); color: #134e4a; margin: 1.25rem 0 1rem; line-height: 1.2;">${esc(content.heroHeadline)}</h1>
     <p style="font-size: 1.15rem; color: #64748b; margin-bottom: 2rem;">${esc(content.heroSubheadline)}</p>
-    ${heroImg ? `<div style="margin-bottom: 2rem;"><img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="max-width: 550px; width: 100%; height: 380px; object-fit: cover; border-radius: 24px; box-shadow: 0 10px 30px rgba(13,148,136,0.1);" /></div>` : ''}
+    <div style="margin-bottom: 2rem;">${renderAssetImgTag(heroImgAsset, prod.cleanName, 'max-width: 550px; width: 100%; height: 380px; object-fit: cover; border-radius: 24px; box-shadow: 0 10px 30px rgba(13,148,136,0.1);', 'rx-hero-img')}</div>
     <form action="/cart/add" method="post">
       <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
       <button type="submit" class="btn" style="background: #0d9488; color: #ffffff; padding: 1.1rem 3rem; border-radius: 14px; font-size: 1.05rem; font-weight: 600;">Start Daily Routine — $${esc(prod.price)}</button>
@@ -215,7 +233,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         </form>
       </div>
       <div>
-        ${heroImg ? `<img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; object-fit: cover; border-radius: 12px; border: 2px solid #bbf7d0;" />` : ''}
+        ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 420px; object-fit: cover; border-radius: 12px; border: 2px solid #bbf7d0;', 'rx-hero-img')}
       </div>
     </div>
   </div>
@@ -240,10 +258,8 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       </div>
       <div>
         <div style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1.25rem; overflow: hidden;">
-          ${heroImg ? `<img id="rx-hero-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 380px; border-radius: var(--rx-radius-md); object-fit: cover;" />` : ''}
+          ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 380px; border-radius: var(--rx-radius-md); object-fit: cover;', 'rx-hero-img')}
         </div>
-      </div>
-    </div>
   </div>
 </section>`;
   }
@@ -260,21 +276,23 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         {% if section.blocks.size > 0 %}
           {% for block in section.blocks %}
             {% if block.settings.image_url != blank %}
-              <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ block.settings.image_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
-                <img src="{{ block.settings.image_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+              <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
+                <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
               </button>
             {% endif %}
           {% endfor %}
         {% else %}
-          ${galleryList.map((img, i) => `
-            <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${img.normalizedUrl}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
-              <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
-            </button>
-          `).join('')}
+          ${galleryList.map((img, i) => {
+            const assetStr = img.exportedAssetName || img.normalizedUrl;
+            return `
+            <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${resolveAssetUrlExpression(assetStr)}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: 8px; padding: 0; cursor: pointer; height: 100px; overflow: hidden; background: none;">
+              ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
+            </button>`;
+          }).join('')}
         {% endif %}
       </div>
       <div>
-        <img id="rx-left-gallery-main" src="${heroImg}" alt="Main View" style="width: 100%; height: 480px; object-fit: cover; border-radius: 12px; border: 1px solid var(--rx-border);" />
+        ${renderAssetImgTag(heroImgAsset, 'Main View', 'width: 100%; height: 480px; object-fit: cover; border-radius: 12px; border: 1px solid var(--rx-border);', 'rx-left-gallery-main')}
       </div>
     </div>
   </div>
@@ -289,16 +307,18 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         {% for block in section.blocks %}
           {% if block.settings.image_url != blank %}
             <div style="flex-shrink: 0; width: 320px; height: 420px; border-radius: 8px; overflow: hidden;">
-              <img src="{{ block.settings.image_url }}" alt="Gallery" style="width: 100%; height: 100%; object-fit: cover;" />
+              <img src="{{ block.settings.image_url | asset_url }}" alt="Gallery" style="width: 100%; height: 100%; object-fit: cover;" />
             </div>
           {% endif %}
         {% endfor %}
       {% else %}
-        ${galleryList.map((img) => `
+        ${galleryList.map((img) => {
+          const assetStr = img.exportedAssetName || img.normalizedUrl;
+          return `
           <div style="flex-shrink: 0; width: 320px; height: 420px; border-radius: 8px; overflow: hidden;">
-            <img src="${img.normalizedUrl}" alt="Gallery" style="width: 100%; height: 100%; object-fit: cover;" />
-          </div>
-        `).join('')}
+            ${renderAssetImgTag(assetStr, 'Gallery', 'width: 100%; height: 100%; object-fit: cover;')}
+          </div>`;
+        }).join('')}
       {% endif %}
     </div>
   </div>
@@ -315,16 +335,18 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         {% for block in section.blocks %}
           {% if block.settings.image_url != blank %}
             <div class="gallery-item" style="border-radius: var(--rx-radius-md); overflow: hidden; border: 1px solid var(--rx-border); aspect-ratio: 1/1;">
-              <img src="{{ block.settings.image_url }}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
+              <img src="{{ block.settings.image_url | asset_url }}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
             </div>
           {% endif %}
         {% endfor %}
       {% else %}
-        ${galleryList.map((img) => `
+        ${galleryList.map((img) => {
+          const assetStr = img.exportedAssetName || img.normalizedUrl;
+          return `
           <div class="gallery-item" style="border-radius: var(--rx-radius-md); overflow: hidden; border: 1px solid var(--rx-border); aspect-ratio: 1/1;">
-            <img src="${img.normalizedUrl}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
-          </div>
-        `).join('')}
+            ${renderAssetImgTag(assetStr, prod.cleanName, 'width: 100%; height: 100%; object-fit: cover; display: block;')}
+          </div>`;
+        }).join('')}
       {% endif %}
     </div>
   </div>
@@ -340,23 +362,25 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 3.5rem;">
       <div>
         <div style="background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
-          <img id="rx-main-prod-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; object-fit: cover; border-radius: 8px;" />
+          ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 420px; object-fit: cover; border-radius: 8px;', 'rx-main-prod-img')}
         </div>
         <div class="rx-thumbnails-strip" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
           {% if section.blocks.size > 0 %}
             {% for block in section.blocks %}
               {% if block.settings.image_url != blank %}
-                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url }}')" style="border: 2px solid {% if forloop.first %}#60a5fa{% else %}#1f2937{% endif %}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
-                  <img src="{{ block.settings.image_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url | asset_url }}')" style="border: 2px solid {% if forloop.first %}#60a5fa{% else %}#1f2937{% endif %}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                  <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
                 </button>
               {% endif %}
             {% endfor %}
           {% else %}
-            ${galleryList.map((img, i) => `
-              <button type="button" onclick="changeMainProductImg(this, '${img.normalizedUrl}')" style="border: 2px solid ${i === 0 ? '#60a5fa' : '#1f2937'}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
-                <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
-              </button>
-            `).join('')}
+            ${galleryList.map((img, i) => {
+              const assetStr = img.exportedAssetName || img.normalizedUrl;
+              return `
+              <button type="button" onclick="changeMainProductImg(this, '${resolveAssetUrlExpression(assetStr)}')" style="border: 2px solid ${i === 0 ? '#60a5fa' : '#1f2937'}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
+              </button>`;
+            }).join('')}
           {% endif %}
         </div>
       </div>
@@ -397,23 +421,25 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 3.5rem; align-items: start;">
       <div>
         <div style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1rem; margin-bottom: 1rem;">
-          <img id="rx-main-prod-img" src="${heroImg}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 420px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;" />
+          ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 420px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-main-prod-img')}
         </div>
         <div class="rx-thumbnails-strip" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
           {% if section.blocks.size > 0 %}
             {% for block in section.blocks %}
               {% if block.settings.image_url != blank %}
-                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url }}')" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
-                  <img src="{{ block.settings.image_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url | asset_url }}')" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                  <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
                 </button>
               {% endif %}
             {% endfor %}
           {% else %}
-            ${galleryList.map((img, i) => `
-              <button type="button" onclick="changeMainProductImg(this, '${img.normalizedUrl}')" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
-                <img src="${img.normalizedUrl}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
-              </button>
-            `).join('')}
+            ${galleryList.map((img, i) => {
+              const assetStr = img.exportedAssetName || img.normalizedUrl;
+              return `
+              <button type="button" onclick="changeMainProductImg(this, '${resolveAssetUrlExpression(assetStr)}')" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
+              </button>`;
+            }).join('')}
           {% endif %}
         </div>
       </div>
@@ -609,7 +635,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         <p style="color: var(--rx-muted); line-height: 1.6; font-size: 1.05rem;">${esc(prod.shortDescription)}</p>
       </div>
       <div>
-        ${spec.images.story?.normalizedUrl ? `<img src="${spec.images.story.normalizedUrl}" alt="Story" style="width: 100%; border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow);" />` : ''}
+        ${storyImgAsset ? renderAssetImgTag(storyImgAsset, 'Story', 'width: 100%; border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow);') : ''}
       </div>
     </div>
   </div>

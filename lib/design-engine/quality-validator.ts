@@ -29,7 +29,7 @@ export function validateAndScoreDesign(
   }
 
   // 2. Check headline length
-  const heroHeadline = gen.homepage.hero.headline || '';
+  const heroHeadline = gen.homepage?.hero?.headline || (gen as any).heroHeadline || '';
   if (heroHeadline.length > 75) {
     issues.push({
       ruleId: 'headline_length',

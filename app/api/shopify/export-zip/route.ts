@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDesignEnginePipeline } from '@/lib/design-engine/pipeline';
 import { validateStorefrontQualityGateV2 } from '@/lib/quality-gate';
+import { downloadAndPackageProductImages } from '@/lib/image-pipeline/asset-downloader';
 import JSZip from 'jszip';
 
 // ============================================================
@@ -8,7 +9,7 @@ import JSZip from 'jszip';
 //
 // Generates a complete Shopify Online Store 2.0 theme ZIP,
 // validates all required files, checks JSON & Liquid schemas,
-// and streams it to the browser.
+// downloads and packages local image assets, and streams it to the browser.
 // ============================================================
 
 const REQUIRED_FILES = [
@@ -43,21 +44,27 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Run Pipeline & Quality Gate
-    const designResult = runDesignEnginePipeline(result, input);
-    if (!designResult.spec) {
+    const initialResult = runDesignEnginePipeline(result, input);
+    if (!initialResult.spec) {
       return NextResponse.json(
         { error: 'Validation Failed: Shopify exporter did not receive canonical StorefrontSpec.' },
         { status: 400 }
       );
     }
 
-    const qualityGate = validateStorefrontQualityGateV2(designResult, input);
+    const qualityGate = validateStorefrontQualityGateV2(initialResult, input);
     if (!qualityGate.passed && qualityGate.failures.length > 0) {
       return NextResponse.json(
         { error: `Quality Gate Failed: ${qualityGate.failures.join('; ')}` },
         { status: 400 }
       );
     }
+
+    // 1.5 Download and package all product images server-side into assets/
+    const { assetFiles, updatedSpec } = await downloadAndPackageProductImages(initialResult.spec);
+
+    // Re-run pipeline using updatedSpec to generate Liquid & JSON files referencing local asset filenames
+    const designResult = runDesignEnginePipeline(result, input, undefined, updatedSpec);
 
     const files = designResult.files;
     const fileMap = new Map<string, string>();
@@ -274,7 +281,7 @@ export async function POST(req: NextRequest) {
                       { status: 400 }
                     );
                   }
-                  if (!url.startsWith('https://') && !url.startsWith('data:image/')) {
+                  if (!url.startsWith('https://') && !url.startsWith('data:image/') && !url.startsWith('rootx-product-') && !assetFiles.has('assets/' + url)) {
                     return NextResponse.json(
                       { error: `Validation Failed: ${key} section '${secId}' block '${bId}' has invalid image URL scheme (${url}).` },
                       { status: 400 }
@@ -309,10 +316,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 5.5 Remote CDN Leakage Audit
+    const remoteCdnRegex = /(https?:\/\/)?([a-zA-Z0-9-]+\.)*(alicdn\.com|aliexpress\.com|ae-pic|ae01\.alicdn)/i;
+    for (const [key, val] of fileMap.entries()) {
+      if (typeof val === 'string' && remoteCdnRegex.test(val)) {
+        const leak = val.match(remoteCdnRegex);
+        return NextResponse.json(
+          { error: `Validation Failed: Theme file '${key}' contains remote CDN URL leak ('${leak?.[0]}'). All images must be local assets.` },
+          { status: 400 }
+        );
+      }
+    }
+
     // 6. Generate the ZIP file using JSZip
     const zip = new JSZip();
+
+    // Package theme text files
     for (const [key, val] of fileMap.entries()) {
       zip.file(key, val);
+    }
+
+    // Package binary downloaded image assets
+    for (const [assetPath, buffer] of assetFiles.entries()) {
+      if (!buffer || buffer.length === 0) {
+        return NextResponse.json(
+          { error: `Validation Failed: Image asset '${assetPath}' is 0-byte.` },
+          { status: 400 }
+        );
+      }
+      zip.file(assetPath, buffer);
     }
 
     // Generate the zip buffer

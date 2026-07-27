@@ -137,7 +137,7 @@ export function generateCleanHeadlines(
 
   // If raw headline is empty, too long (> 60 chars), or contains supplier terms, generate category headline
   if (!headline || headline.length > 60 || headline.length < 10) {
-    const cat = category.toLowerCase();
+    const cat = (category || '').toLowerCase();
     if (cat.includes('tech')) {
       headline = 'Smarter Technology. Built For Every Day.';
       subheadline = 'Track activity, calls, and daily wellness from one sleek device.';
