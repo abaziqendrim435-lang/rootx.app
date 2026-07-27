@@ -111,6 +111,9 @@ export function runQualityGateCleaningTests() {
   };
 
   const result = runDesignEnginePipeline(rawAliExpressData, rawInput);
+  if (result.qualityGateReport && !result.qualityGateReport.passed) {
+    console.error('Quality Gate Failures:', result.qualityGateReport.failures);
+  }
   assert(Boolean(result.qualityGateReport), 'Quality Gate report generated');
   assert(result.qualityGateReport?.passed === true, 'Quality Gate passed 100% even with raw supplier input');
   assert((result.qualityGateReport?.overallScore ?? 0) >= 85, `Overall score is >= 85 (Got: ${result.qualityGateReport?.overallScore})`);

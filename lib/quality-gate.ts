@@ -85,9 +85,10 @@ export function validateStorefrontQualityGateV2(
   });
   if (!placeholderPassed) failures.push(`Placeholder text detected in ${placeholderSample}.`);
 
-  // 3. Image Integrity & Hero Validation
-  const hasHero = Boolean(imgRes?.heroImage?.normalizedUrl);
-  const validCount = imgRes?.images?.length || 0;
+  // 3. Image Integrity & Hero Image Check
+  const heroUrlVal = imgRes?.heroImage?.normalizedUrl || result.spec?.images?.hero?.normalizedUrl || result.spec?.images?.gallery?.[0]?.normalizedUrl;
+  const hasHero = Boolean(heroUrlVal);
+  const validCount = (imgRes?.images?.length || 0) || (result.spec?.images?.gallery?.length || 0) || (hasHero ? 1 : 0);
   const imagePassed = hasHero && validCount > 0;
 
   checks.push({

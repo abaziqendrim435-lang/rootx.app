@@ -50,12 +50,14 @@ export function runDesignEnginePipeline(
     return obj;
   };
 
+  const enabledSections = spec.sections.filter((sec) => sec.enabled !== false);
+
   const indexTemplateJson = {
-    sections: spec.sections.reduce((acc, sec) => {
+    sections: enabledSections.reduce((acc, sec) => {
       acc[sec.id] = buildTemplateSectionObj(sec.id);
       return acc;
     }, {} as Record<string, unknown>),
-    order: spec.sections.map((sec) => sec.id),
+    order: enabledSections.map((sec) => sec.id),
   };
 
   // Stage 3: Render layout/theme.liquid

@@ -228,24 +228,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Ensure index.json contains required sections
-      const sections = Object.values(indexJson.sections).map((s: any) => (s as any).type);
-      const hasHero = sections.includes('rootx-hero');
-      const hasBenefits = sections.includes('rootx-benefits');
-      const hasSpecs = sections.includes('rootx-specifications');
-      const hasFaq = sections.includes('rootx-faq');
+      // Derive required enabled sections from canonical StorefrontSpec
+      if (designResult.spec) {
+        const indexSectionTypes = Object.values(indexJson.sections).map((s: any) => (s as any).type);
+        const requiredEnabledSections = designResult.spec.sections
+          .filter((sec) => sec.enabled === true && sec.required === true)
+          .map((sec) => sec.type);
 
-      if (!hasHero || !hasBenefits || !hasSpecs || !hasFaq) {
-        const missing = [];
-        if (!hasHero) missing.push('hero section (rootx-hero)');
-        if (!hasBenefits) missing.push('product benefits (rootx-benefits)');
-        if (!hasSpecs) missing.push('specifications (rootx-specifications)');
-        if (!hasFaq) missing.push('FAQ (rootx-faq)');
-
-        return NextResponse.json(
-          { error: `Validation Failed: index.json is missing required homepage sections: ${missing.join(', ')}` },
-          { status: 400 }
+        const missingRequired = requiredEnabledSections.filter(
+          (reqType) => !indexSectionTypes.includes(reqType)
         );
+
+        if (missingRequired.length > 0) {
+          return NextResponse.json(
+            { error: `Validation Failed: index.json is missing required homepage sections for theme '${designResult.spec.archetype}': ${missingRequired.join(', ')}` },
+            { status: 400 }
+          );
+        }
       }
     }
 

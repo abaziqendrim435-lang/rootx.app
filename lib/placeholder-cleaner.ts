@@ -24,7 +24,7 @@ export function hasPlaceholderContent(text: string): boolean {
   return PLACEHOLDER_PATTERNS.some((pat) => pat.test(text));
 }
 
-export function sanitizePlaceholders(gen: WebsiteGeneration, brandName: string): WebsiteGeneration {
+export function sanitizePlaceholders(gen: WebsiteGeneration, brandName: string = 'Brand'): WebsiteGeneration {
   const cleanGen = JSON.parse(JSON.stringify(gen)) as WebsiteGeneration;
 
   const brandSlug = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');

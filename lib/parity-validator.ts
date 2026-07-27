@@ -47,7 +47,7 @@ export function validatePreviewExportParity(
     exportedOrder = indexParsed.order || [];
   } catch {}
 
-  const specOrder = spec.sections.map((s) => s.id);
+  const specOrder = spec.sections.filter((s) => s.enabled !== false).map((s) => s.id);
   const sameOrder = JSON.stringify(specOrder) === JSON.stringify(exportedOrder);
 
   checks.push({

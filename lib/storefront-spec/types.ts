@@ -50,6 +50,7 @@ export interface StorefrontSectionSpec {
   type: string;
   variant: string;
   enabled: boolean;
+  required?: boolean;
   settings: Record<string, string | number | boolean | string[]>;
   blocks?: Record<string, unknown>[];
 }

@@ -70,6 +70,11 @@ export interface ThemeFamilyConfig {
   // Section Sequence (Strictly unique per theme family)
   sectionOrder: string[];
   
+  // Section Requirements & Rules
+  requiredSections: string[];
+  optionalSections: string[];
+  conditionalSections: string[];
+
   // Variants
   heroType: HeroVariantType;
   headerStyle: HeaderVariantType;
@@ -100,6 +105,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-trust-strip'],
+    optionalSections: ['rootx-benefits', 'rootx-product-showcase', 'rootx-gallery', 'rootx-final-cta'],
+    conditionalSections: ['rootx-specifications', 'rootx-faq'],
     heroType: 'dark-tech-split',
     headerStyle: 'compact-tech',
     galleryStyle: 'thumbnail-left',
@@ -138,6 +146,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero'],
+    optionalSections: ['rootx-benefits', 'rootx-gallery', 'rootx-product-showcase', 'rootx-trust-strip', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-faq'],
     heroType: 'asymmetrical-beauty',
     headerStyle: 'editorial-beauty',
     galleryStyle: 'soft-rounded-cards',
@@ -174,6 +185,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-specifications',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-gallery'],
+    optionalSections: ['rootx-product-showcase', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-specifications'],
     heroType: 'full-bleed-editorial',
     headerStyle: 'minimal-luxury',
     galleryStyle: 'full-width-editorial',
@@ -210,6 +224,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-image-story',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-gallery'],
+    optionalSections: ['rootx-product-showcase', 'rootx-benefits', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story'],
     heroType: 'fashion-lookbook',
     headerStyle: 'image-first-fashion',
     galleryStyle: 'horizontal-scroll',
@@ -248,6 +265,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero'],
+    optionalSections: ['rootx-benefits', 'rootx-gallery', 'rootx-trust-strip', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-specifications', 'rootx-faq'],
     heroType: 'warm-lifestyle',
     headerStyle: 'warm-home',
     galleryStyle: 'warm-lifestyle-grid',
@@ -284,6 +304,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-gallery',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-benefits', 'rootx-final-cta'],
+    optionalSections: ['rootx-trust-strip', 'rootx-product-showcase', 'rootx-gallery'],
+    conditionalSections: ['rootx-specifications', 'rootx-faq'],
     heroType: 'fitness-performance',
     headerStyle: 'bold-fitness',
     galleryStyle: 'bold-performance-grid',
@@ -321,6 +344,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero'],
+    optionalSections: ['rootx-benefits', 'rootx-gallery', 'rootx-trust-strip', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-faq'],
     heroType: 'playful-pet',
     headerStyle: 'playful-pet',
     galleryStyle: 'playful-bubbly-grid',
@@ -359,6 +385,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-benefits', 'rootx-faq'],
+    optionalSections: ['rootx-trust-strip', 'rootx-product-showcase', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-specifications'],
     heroType: 'direct-response',
     headerStyle: 'conversion-header',
     galleryStyle: 'conversion-stacked-blocks',
@@ -397,6 +426,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-benefits', 'rootx-faq'],
+    optionalSections: ['rootx-trust-strip', 'rootx-product-showcase', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-specifications'],
     heroType: 'direct-response',
     headerStyle: 'conversion-header',
     galleryStyle: 'conversion-stacked-blocks',
@@ -434,6 +466,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero', 'rootx-gallery'],
+    optionalSections: ['rootx-product-showcase', 'rootx-final-cta'],
+    conditionalSections: ['rootx-specifications', 'rootx-image-story', 'rootx-faq'],
     heroType: 'luxury-closeup',
     headerStyle: 'jewelry-minimal',
     galleryStyle: 'detail-closeup-grid',
@@ -472,6 +507,9 @@ export const THEME_FAMILIES: Record<DesignArchetypeId, ThemeFamilyConfig> = {
       'rootx-faq',
       'rootx-final-cta'
     ],
+    requiredSections: ['rootx-hero'],
+    optionalSections: ['rootx-benefits', 'rootx-gallery', 'rootx-trust-strip', 'rootx-final-cta'],
+    conditionalSections: ['rootx-image-story', 'rootx-specifications', 'rootx-faq'],
     heroType: 'wellness-routine',
     headerStyle: 'wellness-clean',
     galleryStyle: 'swipe-mobile',

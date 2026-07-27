@@ -3,7 +3,7 @@
 // Constructs the single canonical StorefrontSpec object from raw inputs.
 // ============================================================
 
-import type { WebsiteGeneration, WebsiteBuilderInput } from '../website-builder-types';
+import type { WebsiteGeneration, WebsiteBuilderInput, DesignArchetypeId } from '../website-builder-types';
 import type { StorefrontSpec, StorefrontImageAssignments } from './types';
 import { buildCleanBrandProfile } from '../title-cleaner';
 import { sanitizePlaceholders } from '../placeholder-cleaner';
@@ -16,6 +16,8 @@ import { getArchetype } from '../design-engine/archetypes';
 import type { ProductImageLibrary } from '../image-pipeline/types';
 import { createProductImageLibrary, reassignImagesForTheme } from '../image-pipeline';
 
+import { THEME_FAMILIES } from '../design-engine/theme-family-types';
+
 export function buildStorefrontSpec(
   rawGen: WebsiteGeneration,
   input: WebsiteBuilderInput,
@@ -24,22 +26,22 @@ export function buildStorefrontSpec(
   // 1. Clean Title, Brand Name, Hero Headline, and Slogan
   const profile = buildCleanBrandProfile(
     input.businessName,
-    input.businessName,
-    input.preferredStyle || 'modern_commerce',
     rawGen.homepage?.hero?.headline,
-    rawGen.homepage?.hero?.subheadline
+    input.preferredStyle,
+    input.businessType
   );
 
-  // 2. Purge Placeholder Text
+  // 2. Sanitize Placeholders
   const gen = sanitizePlaceholders(rawGen, profile.cleanBrandName);
 
-  // 3. Archetype & Design Token Selection
+  // 3. Category & Design System Detection
   const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText || ''}`;
   const categoryAnalysis = analyzeAndDetectArchetype(textToScan, input.preferredStyle);
-  const archetypeId = categoryAnalysis.selectedArchetype;
+  const archetypeId: DesignArchetypeId = (input.preferredStyle as DesignArchetypeId) || categoryAnalysis.selectedArchetype;
+  const familyConfig = THEME_FAMILIES[archetypeId] || THEME_FAMILIES.modern_tech;
 
-  // 4. Reuse or Create Canonical Product Image Library & Recalculate Theme Role Assignments
-  const imageLibrary = existingImageLibrary || createProductImageLibrary({ gen, input, ecommerce: gen.ecommerce });
+  // 4. Image Pipeline with Persistent Product Image Library
+  const imageLibrary = existingImageLibrary || createProductImageLibrary(gen);
   const themeAssignments = reassignImagesForTheme(imageLibrary, archetypeId);
 
   const images: StorefrontImageAssignments = {
@@ -60,10 +62,17 @@ export function buildStorefrontSpec(
   const sectionPlan = createSectionPlan(archetypeId);
   const archDef = getArchetype(archetypeId);
 
-  // 5. Construct Section Specifications with Multi-Image Gallery Blocks
+  // 5. Content Availability Checks
+  const hasFaqContent = Boolean(gen.faq?.items && gen.faq.items.length > 0);
+  const hasBenefitsContent = Boolean(gen.homepage?.features && gen.homepage.features.length > 0);
+  const hasSpecsContent = Boolean(gen.ecommerce?.specifications && gen.ecommerce.specifications.length > 0);
+  const hasStoryContent = Boolean(gen.about?.content || images.story);
+
+  // 6. Construct Section Specifications with Multi-Image Gallery Blocks
   const galleryList = themeAssignments.productPageGallery && themeAssignments.productPageGallery.length > 0
     ? themeAssignments.productPageGallery
     : (images.hero ? [images.hero] : []);
+  const hasGalleryContent = galleryList.length > 0;
 
   const galleryBlocks = galleryList.map((img, i) => ({
     id: `image_${i + 1}`,
@@ -76,11 +85,38 @@ export function buildStorefrontSpec(
 
   const sections = sectionPlan.sections.map((sec) => {
     const isGallerySection = sec.sectionId === 'rootx-gallery' || sec.sectionId === 'rootx-main-product' || sec.sectionId === 'rootx-hero';
+    
+    let enabled = true;
+    let required = familyConfig.requiredSections.includes(sec.sectionId);
+
+    if (sec.sectionId === 'rootx-faq') {
+      enabled = hasFaqContent;
+      if (!hasFaqContent) required = false;
+    } else if (sec.sectionId === 'rootx-benefits') {
+      enabled = hasBenefitsContent;
+      if (!hasBenefitsContent) required = false;
+    } else if (sec.sectionId === 'rootx-specifications') {
+      enabled = hasSpecsContent;
+      if (!hasSpecsContent) required = false;
+    } else if (sec.sectionId === 'rootx-image-story') {
+      enabled = hasStoryContent;
+      if (!hasStoryContent) required = false;
+    } else if (sec.sectionId === 'rootx-gallery') {
+      enabled = hasGalleryContent;
+      if (!hasGalleryContent) required = false;
+    }
+
+    if (sec.sectionId === 'rootx-hero') {
+      enabled = true;
+      required = true;
+    }
+
     return {
       id: sec.sectionId,
       type: sec.sectionType,
       variant: sec.variantId,
-      enabled: true,
+      enabled,
+      required,
       settings: {
         headline: profile.cleanHeroHeadline,
         subheadline: profile.cleanHeroSubheadline,
