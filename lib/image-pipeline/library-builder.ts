@@ -51,10 +51,7 @@ export function createProductImageLibrary(productData: unknown): ProductImageLib
     } as NormalizedImage);
   });
 
-  // Sort descending by quality score
-  allValidImages.sort((a, b) => b.qualityScore - a.qualityScore);
-
-  // Group candidate categories
+  // Keep allValidImages in exact sequence from source product to preserve image order
   const heroCandidates = allValidImages.filter((img) => img.qualityScore >= 70);
   const galleryCandidates = [...allValidImages];
   const lifestyleCandidates = allValidImages.filter((img) => img.aspectRatio > 1.1 || img.altText.toLowerCase().includes('lifestyle') || img.altText.toLowerCase().includes('model'));

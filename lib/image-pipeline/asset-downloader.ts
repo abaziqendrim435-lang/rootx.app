@@ -46,7 +46,7 @@ export async function downloadAndPackageProductImages(
     totalBytesDownloaded: 0,
   };
 
-  // 1. Gather all unique image candidates across all spec assignments
+  // 1. Gather all unique image candidates across all spec assignments (gallery array first to keep exact sequence)
   const rawCandidateImages: NormalizedImage[] = [];
   const seenUrls = new Set<string>();
 
@@ -57,11 +57,11 @@ export async function downloadAndPackageProductImages(
     rawCandidateImages.push(img);
   };
 
+  (spec.images.gallery || []).forEach(pushIfValid);
   pushIfValid(spec.images.hero);
   pushIfValid(spec.images.featured);
   pushIfValid(spec.images.story);
   pushIfValid(spec.images.finalCta);
-  (spec.images.gallery || []).forEach(pushIfValid);
 
   stats.rawImageCount = rawCandidateImages.length;
 
@@ -225,6 +225,19 @@ export async function downloadAndPackageProductImages(
       blocks: isGallerySec ? galleryAssetBlocks : sec.blocks,
     };
   });
+
+  // Comprehensive URL replacement across product variants and metadata
+  if (updatedSpec.product.variants) {
+    updatedSpec.product.variants = updatedSpec.product.variants.map((v) => {
+      if (v.imageUrl) {
+        const mapped = urlToAssetMap.get(v.imageUrl);
+        if (mapped) {
+          return { ...v, imageUrl: mapped.filename };
+        }
+      }
+      return v;
+    });
+  }
 
   return {
     assetFiles,

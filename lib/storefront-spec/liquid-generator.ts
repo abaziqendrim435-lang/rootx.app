@@ -364,11 +364,11 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         <div style="background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
           ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 420px; object-fit: cover; border-radius: 8px;', 'rx-main-prod-img')}
         </div>
-        <div class="rx-thumbnails-strip" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
+        <div class="rx-thumbnails-strip rx-thumbs-wrapper" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
           {% if section.blocks.size > 0 %}
             {% for block in section.blocks %}
               {% if block.settings.image_url != blank %}
-                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url | asset_url }}')" style="border: 2px solid {% if forloop.first %}#60a5fa{% else %}#1f2937{% endif %}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}#60a5fa{% else %}#1f2937{% endif %}; border-radius: 8px; padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
                   <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
                 </button>
               {% endif %}
@@ -423,11 +423,11 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         <div style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1rem; margin-bottom: 1rem;">
           ${renderAssetImgTag(heroImgAsset, prod.cleanName, 'width: 100%; height: 420px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-main-prod-img')}
         </div>
-        <div class="rx-thumbnails-strip" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
+        <div class="rx-thumbnails-strip rx-thumbs-wrapper" style="display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
           {% if section.blocks.size > 0 %}
             {% for block in section.blocks %}
               {% if block.settings.image_url != blank %}
-                <button type="button" onclick="changeMainProductImg(this, '{{ block.settings.image_url | asset_url }}')" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
+                <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 72px; height: 72px; overflow: hidden; flex-shrink: 0; background: none;">
                   <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
                 </button>
               {% endif %}
@@ -461,7 +461,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 <script>
   function changeMainProductImg(btn, url) {
     var main = document.getElementById('rx-main-prod-img');
-    if (main && url) main.src = url;
+    if (main && url) {
+      document.getElementById('rx-main-prod-img').src = url;
+    }
     var container = btn.parentElement;
     if (container) {
       var btns = container.getElementsByTagName('button');

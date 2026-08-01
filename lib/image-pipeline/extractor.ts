@@ -21,7 +21,10 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       strUrl = url.trim();
     } else if (typeof url === 'object' && url !== null) {
       const obj = url as Record<string, unknown>;
-      strUrl = String(obj.src || obj.url || obj.originalUrl || obj.original || obj.image_url || '').trim();
+      strUrl = String(
+        obj.src || obj.originalSrc || obj.url || obj.originalUrl || obj.original ||
+        obj.image_url || obj.imageUrl || (obj.preview_image as Record<string, unknown>)?.src || ''
+      ).trim();
       altHint = altHint || String(obj.alt || obj.altText || obj.title || '').trim();
     }
 
@@ -44,19 +47,43 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
 
     const record = obj as Record<string, unknown>;
 
-    // Direct image fields
-    const directFields = [
+    // Direct image array fields (processed first to preserve gallery order)
+    const arrayFields = [
       'images', 'productImages', 'gallery', 'galleryImages', 'media',
-      'imageUrls', 'productMainImageUrl', 'productImage', 'product_image',
-      'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image',
-      'supplierImages', 'featuredImage', 'featured_image', 'src', 'url'
+      'imageUrls', 'imagePathList', 'pcDetailUrlList', 'summaryImageList',
+      'summryImageList', 'detailUrlList', 'picList', 'sliderImages',
+      'skuImages', 'imagesPathList', 'product_images', 'supplierImages'
     ];
 
+    // Scalar or single image fields
+    const singleFields = [
+      'productMainImageUrl', 'productImage', 'product_image',
+      'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image',
+      'featuredImage', 'featured_image', 'src', 'url'
+    ];
+
+    const directFields = [...arrayFields, ...singleFields];
+
+    // Process array fields first to establish canonical image sequence
+    for (const key of arrayFields) {
+      if (key in record) {
+        const currentPath = path ? `${path}.${key}` : key;
+        const value = record[key];
+        if (Array.isArray(value)) {
+          value.forEach((item, i) => addCandidate(item, `${currentPath}[${i}]`));
+        } else if (value) {
+          addCandidate(value, currentPath);
+        }
+      }
+    }
+
     for (const key of Object.keys(record)) {
+      if (arrayFields.includes(key)) continue; // Already processed above
+
       const currentPath = path ? `${path}.${key}` : key;
       const value = record[key];
 
-      if (directFields.includes(key)) {
+      if (singleFields.includes(key)) {
         if (Array.isArray(value)) {
           value.forEach((item, i) => addCandidate(item, `${currentPath}[${i}]`));
         } else {

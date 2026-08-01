@@ -9,8 +9,8 @@ export function assignRolesAndFallbacks(
   validImages: NormalizedImage[],
   diagnosticInfo: DiagnosticInfo
 ): ImagePipelineResult {
-  // Sort images by quality score descending
-  const sorted = [...validImages].sort((a, b) => b.qualityScore - a.qualityScore);
+  // Keep validImages in exact sequence from source product to preserve image order
+  const sorted = [...validImages];
 
   const roleMap: Record<ImageRole, number> = {
     hero: 0,
