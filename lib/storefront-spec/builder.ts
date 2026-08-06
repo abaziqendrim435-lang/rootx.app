@@ -37,7 +37,7 @@ export function buildStorefrontSpec(
   // 3. Category & Design System Detection
   const textToScan = `${input.businessType} ${input.brandDescription} ${input.businessName} ${gen.ecommerce?.shippingText || ''}`;
   const categoryAnalysis = analyzeAndDetectArchetype(textToScan, input.preferredStyle);
-  const archetypeId: DesignArchetypeId = (input.preferredStyle as DesignArchetypeId) || categoryAnalysis.selectedArchetype;
+  const archetypeId: DesignArchetypeId = getArchetype(input.preferredStyle || categoryAnalysis.selectedArchetype).id;
   const familyConfig = THEME_FAMILIES[archetypeId] || THEME_FAMILIES.modern_tech;
 
   // 4. Image Pipeline with Persistent Product Image Library
@@ -174,6 +174,12 @@ export function buildStorefrontSpec(
         { icon: '🔒', title: '256-Bit SSL', subtitle: 'Safe checkout' },
       ],
       aboutStory: gen.about?.content,
+      comparison: [
+        { feature: 'Premium Material & Build', us: '✅ Medical-Grade Precision', others: '❌ Cheap Synthetic Blend' },
+        { feature: 'Money-Back Guarantee', us: '✅ 30-Day Full Refund', others: '❌ No Refunds / All Sales Final' },
+        { feature: 'Customer Support', us: '✅ 24/7 Dedicated Support', others: '❌ Automated Bot / No Reply' },
+        { feature: 'Shipping & Tracking', us: '✅ Express Insured Delivery', others: '❌ Uninsured 4-Week Delivery' },
+      ],
     },
     archetype: archetypeId,
     designTokens,

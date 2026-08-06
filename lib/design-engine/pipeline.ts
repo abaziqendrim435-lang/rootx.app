@@ -137,8 +137,56 @@ export function runDesignEnginePipeline(
     { key: 'templates/404.json', value: JSON.stringify(template404Json, null, 2) },
     { key: 'templates/cart.json', value: JSON.stringify(cartTemplateJson, null, 2) },
     ...liquidSections,
-    { key: 'assets/theme.css', value: `/* RootX Pixel Parity Engine V1 — ${archDef.name} */\n${cssVars}` },
-    { key: 'assets/theme.js', value: 'console.log("RootX Pixel Parity Engine Active");' },
+    { key: 'assets/theme.css', value: `/* RootX Pixel Parity Engine V3 — ${archDef.name} */\n${cssVars}` },
+    {
+      key: 'assets/theme.js',
+      value: `(function() {
+  'use strict';
+  document.addEventListener('DOMContentLoaded', function() {
+    // 1. FAQ Accordion Single Open Toggle
+    const faqDetails = document.querySelectorAll('.faq-accordion details');
+    faqDetails.forEach(function(detail) {
+      detail.addEventListener('toggle', function() {
+        if (detail.open) {
+          faqDetails.forEach(function(other) {
+            if (other !== detail && other.open) {
+              other.open = false;
+            }
+          });
+        }
+      });
+    });
+
+    // 2. Scroll Reveal Animations
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('rx-animate-slide');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1 });
+
+      document.querySelectorAll('.rx-card, .trust-strip, .image-story, .comparison-section').forEach(function(el) {
+        observer.observe(el);
+      });
+    }
+
+    // 3. Sticky Header Scroll State
+    const header = document.querySelector('.site-header');
+    if (header) {
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 20) {
+          header.classList.add('is-scrolled');
+        } else {
+          header.classList.remove('is-scrolled');
+        }
+      });
+    }
+  });
+})();`
+    },
     { key: 'config/settings_data.json', value: JSON.stringify(tokensToShopifySettings(spec.designTokens), null, 2) },
   ];
 

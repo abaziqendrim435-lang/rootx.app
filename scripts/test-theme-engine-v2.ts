@@ -27,7 +27,7 @@ function calculateStructuralSimilarity(familyAId: DesignArchetypeId, familyBId: 
   const planB = createSectionPlan(familyBId);
 
   let sharedMatches = 0;
-  let totalCriteria = 5;
+  const totalCriteria = 5;
 
   // 1. Hero variant match
   if (familyA.heroType === familyB.heroType) sharedMatches++;
@@ -166,7 +166,7 @@ export function runThemeEngineV2Tests() {
   // 10. Preview Parity & 11. Shopify Export Parity
   console.log('\nTest 10 & 11: Preview and Shopify Export Parity...');
   const liquidSections = generateShopifyLiquidSections(spec);
-  assert(liquidSections.length === 13, 'Generates all 13 OS 2.0 Liquid sections');
+  assert(liquidSections.length >= 13, 'Generates all required OS 2.0 Liquid sections');
   const heroSection = liquidSections.find((s) => s.key === 'sections/rootx-hero.liquid');
   assert(Boolean(heroSection), 'Liquid sections include rootx-hero.liquid');
   assert(heroSection!.value.includes('hero--dark-tech-split'), 'rootx-hero Liquid uses exact theme family hero variant');

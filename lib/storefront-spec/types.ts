@@ -34,6 +34,7 @@ export interface StorefrontContentSpec {
   faq: { question: string; answer: string }[];
   trustItems: { icon: string; title: string; subtitle: string }[];
   aboutStory?: string;
+  comparison?: { feature: string; us: string; others: string }[];
 }
 
 export interface StorefrontImageAssignments {

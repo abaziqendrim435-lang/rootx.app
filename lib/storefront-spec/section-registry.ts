@@ -15,6 +15,8 @@ export const ROOTX_SECTION_TYPES = {
   IMAGE_STORY: 'rootx-image-story',
   SPECIFICATIONS: 'rootx-specifications',
   FAQ: 'rootx-faq',
+  COMPARISON: 'rootx-comparison',
+  TESTIMONIALS: 'rootx-testimonials',
   FINAL_CTA: 'rootx-final-cta',
   FOOTER: 'rootx-footer',
   MAIN_PRODUCT: 'rootx-main-product',

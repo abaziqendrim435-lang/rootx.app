@@ -103,7 +103,7 @@ async function runCompleteImagePipelineTests() {
   // -------------------------------------------------------------
   console.log('\nTest 4: 8-Image Product — Download, Local Asset Rewrite & Dynamic Gallery...');
   const gen8Images: WebsiteGeneration = {
-    homepage: { hero: { headline: 'Ergonomic Vertical Mouse', subheadline: 'Work painless', ctaButtons: [] }, features: [], socialProof: '' },
+    homepage: { hero: { headline: 'Ergonomic Vertical Mouse', subheadline: 'Work painless', ctaButtons: [], backgroundStyle: 'dark' }, features: [], socialProof: '' },
     about: { title: '', content: '', mission: '', vision: '', values: [] },
     services: { title: '', subtitle: '', services: [] },
     pricing: { title: '', subtitle: '', plans: [] },
@@ -128,7 +128,7 @@ async function runCompleteImagePipelineTests() {
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AQAAGBAQA1/353AAAAAElFTkSuQmCC#7'
       ]
     }
-  };
+  } as unknown as WebsiteGeneration;
 
   const input8: WebsiteBuilderInput = {
     businessName: 'VerticalMouse Co',
@@ -178,7 +178,7 @@ async function runCompleteImagePipelineTests() {
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AQAAGBAQA1/353AAAAAElFTkSuQmCC#12'
       ]
     }
-  };
+  } as unknown as WebsiteGeneration;
 
   const spec12 = buildStorefrontSpec(gen12Images, input8);
   assert(spec12.images.gallery.length === 12, 'StorefrontSpec gallery contains exactly 12 images');

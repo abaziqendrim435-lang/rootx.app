@@ -18,6 +18,8 @@ export function createSectionPlan(archetypeId: DesignArchetypeId): SectionPlan {
     'rootx-image-story': { type: 'rootx-image-story', variant: 'story-split', name: 'RootX Image Story' },
     'rootx-specifications': { type: 'rootx-specifications', variant: 'spec-grid', name: 'RootX Specifications' },
     'rootx-faq': { type: 'rootx-faq', variant: 'accordion', name: 'RootX FAQ' },
+    'rootx-comparison': { type: 'rootx-comparison', variant: 'versus-table', name: 'RootX Comparison' },
+    'rootx-testimonials': { type: 'rootx-testimonials', variant: 'review-grid', name: 'RootX Testimonials' },
     'rootx-final-cta': { type: 'rootx-final-cta', variant: 'banner', name: 'RootX Final CTA' },
   };
 
