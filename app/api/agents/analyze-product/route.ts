@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ProductAnalysis, AIProvider } from '@/lib/website-builder-types';
-import {
-  callWithRetryAndFallback,
-  getAvailableProviders,
-} from '@/lib/ai-providers';
+import { callWithRetryAndFallback, getAvailableProviders } from '@/lib/ai-providers';
+import { fetchAliExpressProductViaApify } from '@/lib/product-import/apify-aliexpress';
 
 // ============================================================
 // POST /api/agents/analyze-product
@@ -522,27 +520,57 @@ export async function POST(req: NextRequest) {
         specifications: body.productData.specifications || [],
       };
     } else {
-      // Fetch the product page
-      console.log(`${LOG} [${requestId}] Fetching URL: ${trimmedUrl}`);
-
-      let pageHtml: string;
-      try {
-        pageHtml = await fetchPageContent(trimmedUrl);
-      } catch (fetchErr) {
-        const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
-        console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
-        return NextResponse.json(
-          { success: false, error: `Could not fetch URL: ${reason}` },
-          { status: 422 }
-        );
+      // Check if URL is AliExpress and try server-side Apify extraction first
+      let apifySuccess = false;
+      if (trimmedUrl.includes('aliexpress.com') && process.env.APIFY_API_TOKEN) {
+        try {
+          console.log(`${LOG} [${requestId}] AliExpress URL detected. Attempting primary Apify extraction...`);
+          const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
+          if (apifyRes.success && apifyRes.product) {
+            console.log(`${LOG} [${requestId}] Primary Apify extraction succeeded for: ${apifyRes.product.title}`);
+            title = apifyRes.product.title;
+            extractedText = `Product Title: ${apifyRes.product.title}\nProduct Price: ${apifyRes.product.price}\nOriginal Price: ${apifyRes.product.originalPrice}\nDiscount: ${apifyRes.product.discount}\nRating: ${apifyRes.product.rating || 'N/A'}\nOrders: ${apifyRes.product.orders || 'N/A'}\nSeller: ${apifyRes.product.seller || 'N/A'}\nShipping: ${apifyRes.product.shipping || 'N/A'}\nDescription:\n${apifyRes.product.description}`;
+            extractedImages = apifyRes.product.images;
+            structured = {
+              title: apifyRes.product.title,
+              description: apifyRes.product.description,
+              images: apifyRes.product.images,
+              price: apifyRes.product.price,
+              rating: apifyRes.product.rating,
+              reviewCount: apifyRes.product.orders,
+              shippingInfo: apifyRes.product.shipping,
+              specifications: apifyRes.product.specifications,
+            };
+            apifySuccess = true;
+          }
+        } catch (apifyErr: any) {
+          console.warn(`${LOG} [${requestId}] Server Apify extraction failed, falling back to HTML fetcher:`, apifyErr.message);
+        }
       }
 
-      // Extract text, images, and structured data
-      const extracted = extractFromHtml(pageHtml);
-      extractedText = extracted.text;
-      title = extracted.title;
-      extractedImages = extracted.images;
-      structured = extracted.structured;
+      if (!apifySuccess) {
+        // Fetch the product page via HTML fetcher
+        console.log(`${LOG} [${requestId}] Fetching URL via HTML scraper: ${trimmedUrl}`);
+
+        let pageHtml: string;
+        try {
+          pageHtml = await fetchPageContent(trimmedUrl);
+        } catch (fetchErr) {
+          const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
+          console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
+          return NextResponse.json(
+            { success: false, error: `Could not fetch URL: ${reason}` },
+            { status: 422 }
+          );
+        }
+
+        // Extract text, images, and structured data
+        const extracted = extractFromHtml(pageHtml);
+        extractedText = extracted.text;
+        title = extracted.title;
+        extractedImages = extracted.images;
+        structured = extracted.structured;
+      }
     }
     console.log(`${LOG} [${requestId}] Extracted ${extractedText.length} chars, ${extractedImages.length} images, title: "${title}"`);
     console.log(`${LOG} [${requestId}] Raw scraper output (first 200 chars): "${extractedText.slice(0, 200).replace(/\n/g, ' ')}..."`);

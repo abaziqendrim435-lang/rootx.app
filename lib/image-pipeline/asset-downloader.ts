@@ -133,7 +133,7 @@ export async function downloadAndPackageProductImages(
       }
 
       // Validate URL scheme & SSRF protection
-      if (!rawUrl.startsWith('https://')) {
+      if (!rawUrl.startsWith('https://') && !rawUrl.startsWith('http://')) {
         throw new Error(`Insecure image URL scheme: ${rawUrl}`);
       }
       if (BLOCKED_IP_REGEX.test(rawUrl)) {
