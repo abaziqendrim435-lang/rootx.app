@@ -23,7 +23,8 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       const obj = url as Record<string, unknown>;
       strUrl = String(
         obj.src || obj.originalSrc || obj.url || obj.originalUrl || obj.original ||
-        obj.image_url || obj.imageUrl || (obj.preview_image as Record<string, unknown>)?.src || ''
+        obj.image_url || obj.imageUrl || obj.fullUrl || obj.link || obj.path ||
+        (obj.preview_image as Record<string, unknown>)?.src || ''
       ).trim();
       altHint = altHint || String(obj.alt || obj.altText || obj.title || '').trim();
     }
@@ -52,14 +53,16 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       'images', 'productImages', 'gallery', 'galleryImages', 'media',
       'imageUrls', 'imagePathList', 'pcDetailUrlList', 'summaryImageList',
       'summryImageList', 'detailUrlList', 'picList', 'sliderImages',
-      'skuImages', 'imagesPathList', 'product_images', 'supplierImages'
+      'skuImages', 'imagesPathList', 'product_images', 'supplierImages',
+      'images_urls', 'photos', 'variant_images', 'pictures'
     ];
 
     // Scalar or single image fields
     const singleFields = [
       'productMainImageUrl', 'productImage', 'product_image',
       'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image',
-      'featuredImage', 'featured_image', 'src', 'url'
+      'featuredImage', 'featured_image', 'src', 'url', 'main_image', 'mainImage',
+      'photo', 'picture'
     ];
 
     const directFields = [...arrayFields, ...singleFields];

@@ -4,8 +4,9 @@
 // Shopify theme assets (`assets/rootx-product-XX.ext`).
 // ============================================================
 
-import type { StorefrontSpec, StorefrontSectionSpec } from '../storefront-spec/types';
+import type { StorefrontSpec } from '../storefront-spec/types';
 import type { NormalizedImage } from './types';
+import { normalizeImageUrl } from './normalizer';
 
 export interface DownloadStats {
   rawImageCount: number;
@@ -29,6 +30,9 @@ const SUPPORTED_MIME_TYPES: Record<string, string> = {
   'image/jpg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/avif': '.avif',
+  'image/svg+xml': '.svg',
 };
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
@@ -46,7 +50,7 @@ export async function downloadAndPackageProductImages(
     totalBytesDownloaded: 0,
   };
 
-  // 1. Gather all unique image candidates across all spec assignments (gallery array first to keep exact sequence)
+  // 1. Gather all unique image candidates across spec assignments, library, and variants
   const rawCandidateImages: NormalizedImage[] = [];
   const seenUrls = new Set<string>();
 
@@ -62,6 +66,28 @@ export async function downloadAndPackageProductImages(
   pushIfValid(spec.images.featured);
   pushIfValid(spec.images.story);
   pushIfValid(spec.images.finalCta);
+  (spec.imageLibrary?.allValidImages || []).forEach(pushIfValid);
+
+  (spec.product.variants || []).forEach((v) => {
+    if (v.imageUrl) {
+      const norm = normalizeImageUrl(v.imageUrl).normalizedUrl;
+      if (norm) {
+        pushIfValid({
+          id: `variant_${v.id || Date.now()}`,
+          originalUrl: v.imageUrl,
+          normalizedUrl: norm,
+          width: 800,
+          height: 800,
+          aspectRatio: 1.0,
+          source: 'remote',
+          altText: v.name || 'Variant',
+          role: 'unassigned',
+          qualityScore: 80,
+          isValid: true,
+        });
+      }
+    }
+  });
 
   stats.rawImageCount = rawCandidateImages.length;
 
@@ -95,6 +121,9 @@ export async function downloadAndPackageProductImages(
         const indexStr = String(downloadedIndex).padStart(2, '0');
         const filename = `rootx-product-${indexStr}${ext}`;
         urlToAssetMap.set(rawUrl, { filename, buffer });
+        if (imgCandidate.originalUrl) {
+          urlToAssetMap.set(imgCandidate.originalUrl, { filename, buffer });
+        }
         assetFiles.set(`assets/${filename}`, buffer);
         stats.generatedAssetFilenames.push(filename);
         stats.totalBytesDownloaded += buffer.length;
@@ -128,19 +157,6 @@ export async function downloadAndPackageProductImages(
         throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
       }
 
-      const contentType = (res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
-      let ext = SUPPORTED_MIME_TYPES[contentType];
-
-      if (!ext) {
-        // Fallback: check extension from URL path
-        if (rawUrl.match(/\.(png)(\?.*)?$/i)) ext = '.png';
-        else if (rawUrl.match(/\.(webp)(\?.*)?$/i)) ext = '.webp';
-        else if (rawUrl.match(/\.(jpg|jpeg)(\?.*)?$/i)) ext = '.jpg';
-        else {
-          throw new Error(`Unsupported image MIME type: '${contentType}'`);
-        }
-      }
-
       const arrayBuffer = await res.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
@@ -151,10 +167,36 @@ export async function downloadAndPackageProductImages(
         throw new Error(`Image size (${Math.round(buffer.length / 1024 / 1024)}MB) exceeds maximum limit of 10MB.`);
       }
 
+      const contentType = (res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
+      let ext = SUPPORTED_MIME_TYPES[contentType];
+
+      if (!ext) {
+        // Fallback 1: check extension from URL path
+        if (rawUrl.match(/\.(png)(\?.*)?$/i)) ext = '.png';
+        else if (rawUrl.match(/\.(webp)(\?.*)?$/i)) ext = '.webp';
+        else if (rawUrl.match(/\.(jpg|jpeg)(\?.*)?$/i)) ext = '.jpg';
+        else if (rawUrl.match(/\.(gif)(\?.*)?$/i)) ext = '.gif';
+        else if (rawUrl.match(/\.(avif)(\?.*)?$/i)) ext = '.avif';
+        else if (rawUrl.match(/\.(svg)(\?.*)?$/i)) ext = '.svg';
+        else if (buffer.length >= 4) {
+          // Fallback 2: magic byte header inspection
+          if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) ext = '.jpg';
+          else if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) ext = '.png';
+          else if (buffer.length >= 12 && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) ext = '.webp';
+          else if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) ext = '.gif';
+          else ext = '.jpg'; // Fallback for non-empty image buffer
+        } else {
+          ext = '.jpg';
+        }
+      }
+
       const indexStr = String(downloadedIndex).padStart(2, '0');
       const filename = `rootx-product-${indexStr}${ext}`;
 
       urlToAssetMap.set(rawUrl, { filename, buffer });
+      if (imgCandidate.originalUrl) {
+        urlToAssetMap.set(imgCandidate.originalUrl, { filename, buffer });
+      }
       assetFiles.set(`assets/${filename}`, buffer);
       stats.generatedAssetFilenames.push(filename);
       stats.totalBytesDownloaded += buffer.length;
@@ -177,7 +219,7 @@ export async function downloadAndPackageProductImages(
 
   const mapImage = (img: NormalizedImage | null): NormalizedImage | null => {
     if (!img) return null;
-    const downloaded = urlToAssetMap.get(img.normalizedUrl);
+    const downloaded = urlToAssetMap.get(img.normalizedUrl) || urlToAssetMap.get(img.originalUrl);
     if (!downloaded) return null; // Exclude failed images
     return {
       ...img,
@@ -201,6 +243,12 @@ export async function downloadAndPackageProductImages(
   }
 
   updatedSpec.images.gallery = downloadedGallery;
+
+  if (updatedSpec.imageLibrary) {
+    updatedSpec.imageLibrary.allValidImages = (updatedSpec.imageLibrary.allValidImages || [])
+      .map(mapImage)
+      .filter((img): img is NormalizedImage => img !== null);
+  }
 
   // 4. Update Section Spec Blocks for local asset settings
   const galleryAssetBlocks = downloadedGallery.map((img, i) => ({
@@ -228,11 +276,15 @@ export async function downloadAndPackageProductImages(
 
   // Comprehensive URL replacement across product variants and metadata
   if (updatedSpec.product.variants) {
+    const heroAsset = updatedSpec.images.hero?.exportedAssetName || updatedSpec.images.hero?.normalizedUrl || '';
     updatedSpec.product.variants = updatedSpec.product.variants.map((v) => {
       if (v.imageUrl) {
-        const mapped = urlToAssetMap.get(v.imageUrl);
+        const norm = normalizeImageUrl(v.imageUrl).normalizedUrl;
+        const mapped = urlToAssetMap.get(v.imageUrl) || urlToAssetMap.get(norm);
         if (mapped) {
           return { ...v, imageUrl: mapped.filename };
+        } else if (heroAsset) {
+          return { ...v, imageUrl: heroAsset };
         }
       }
       return v;

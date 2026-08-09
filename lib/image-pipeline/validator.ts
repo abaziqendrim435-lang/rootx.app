@@ -31,17 +31,17 @@ export function validateImage(url: string, seenUrls: Set<string>): ValidationRes
 
   const clean = url.trim();
 
+  // Duplicate Check
+  if (seenUrls.has(clean)) {
+    return { isValid: false, reason: 'Duplicate image URL' };
+  }
+
   // Allow safe data URIs for manual uploads
   if (clean.startsWith('data:image/')) {
     if (!clean.match(/^data:image\/(jpeg|jpg|png|webp|gif|avif);base64,/i)) {
       return { isValid: false, reason: 'Unsupported or unsafe data URI image format' };
     }
     return { isValid: true };
-  }
-
-  // Duplicate Check
-  if (seenUrls.has(clean)) {
-    return { isValid: false, reason: 'Duplicate image URL' };
   }
 
   // Unsafe Scheme Check

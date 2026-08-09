@@ -17,7 +17,8 @@ export function normalizeImageUrl(rawUrl: string): NormalizedUrlResult {
     return { normalizedUrl: '', source: 'unknown' };
   }
 
-  let url = rawUrl.trim();
+  let url = rawUrl.trim().replace(/[\r\n\t]/g, '');
+  url = url.replace(/&amp;/g, '&');
 
   // Handle data URIs (manual uploads / base64)
   if (url.startsWith('data:image/')) {
