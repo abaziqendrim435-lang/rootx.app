@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAliExpressProductViaApify } from '@/lib/product-import/apify-aliexpress';
+import { buildCachedProductImageLibrary } from '@/lib/image-pipeline';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,20 +42,14 @@ export async function POST(req: NextRequest) {
     // Call server-side Apify Service
     const apifyResult = await fetchAliExpressProductViaApify(targetUrl, { isDirectUrl });
 
-    if (apifyResult.success && apifyResult.product) {
-      return NextResponse.json({
-        success: true,
-        products: [apifyResult.product],
-        trace: apifyResult.trace,
-      });
-    }
+    let finalProduct = apifyResult.product;
+    let isFallback = false;
 
-    // FALLBACK STRATEGY: HTML Scraper Fallback if Apify fails or returns unusable data
-    console.warn('[Apify API Route] Primary Apify extraction failed. Activating Fallback Extractor...', apifyResult.error);
-    apifyResult.trace.apifyRunStatus = 'FALLBACK_ACTIVATED';
+    if (!apifyResult.success || !finalProduct) {
+      // FALLBACK STRATEGY: HTML Scraper Fallback if Apify fails or returns unusable data
+      console.warn('[Apify API Route] Primary Apify extraction failed. Activating Fallback Extractor...', apifyResult.error);
+      apifyResult.trace.apifyRunStatus = 'FALLBACK_ACTIVATED';
 
-    // Execute fallback extraction by scraping URL directly
-    try {
       const fallbackUrl = isDirectUrl ? targetUrl : `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(targetUrl)}.html`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -78,7 +73,7 @@ export async function POST(req: NextRequest) {
         }
 
         const fallbackImages = [...new Set(foundImgs.map((img) => img.replace(/_\d+x\d+\.(jpg|png|jpeg|webp)$/i, '.$1')))];
-        const fallbackProduct = {
+        finalProduct = {
           title: 'Imported AliExpress Product',
           price: '29.99',
           originalPrice: '39.99',
@@ -95,25 +90,58 @@ export async function POST(req: NextRequest) {
           shipping: 'Free Shipping',
           url: fallbackUrl,
         };
-
-        return NextResponse.json({
-          success: true,
-          products: [fallbackProduct],
-          trace: apifyResult.trace,
-          isFallback: true,
-        });
+        isFallback = true;
       }
-    } catch (fallbackErr: any) {
-      console.error('[Apify API Route] Fallback extraction failed:', fallbackErr.message);
     }
 
-    return NextResponse.json(
-      {
-        error: `Failed to scrape AliExpress data. ${apifyResult.error || ''}`,
-        trace: apifyResult.trace,
-      },
-      { status: 502 }
-    );
+    if (!finalProduct) {
+      return NextResponse.json(
+        {
+          error: `Failed to scrape AliExpress product details. ${apifyResult.error || ''}`,
+          trace: apifyResult.trace,
+        },
+        { status: 502 }
+      );
+    }
+
+    // Run Immediate Persistent Image Caching
+    const imageLib = await buildCachedProductImageLibrary(finalProduct);
+    const cachedUrls = imageLib.allValidImages.map((img) => img.cachedUrl || img.normalizedUrl);
+
+    apifyResult.trace.downloadedImageCount = imageLib.cachedImageCount || 0;
+    apifyResult.trace.zipImageCount = imageLib.cachedImageCount || 0;
+    apifyResult.trace.shopifyGalleryCount = imageLib.cachedImageCount || 0;
+
+    // STOP RULE: If cached count === 0, stop generation and return a real error
+    if (imageLib.cachedImageCount === 0 || cachedUrls.length === 0) {
+      console.error('[Apify API Route] STOP RULE ENGAGED: 0 valid images could be cached server-side.');
+      return NextResponse.json(
+        {
+          error: 'Image Caching Failed: 0 valid product images could be cached server-side. Halting generation.',
+          trace: apifyResult.trace,
+          details: {
+            raw: apifyResult.trace.rawImageCount,
+            cached: 0,
+            failed: imageLib.rejectedImages,
+          },
+        },
+        { status: 422 }
+      );
+    }
+
+    const cachedProduct = {
+      ...finalProduct,
+      images: cachedUrls,
+      featuredImage: cachedUrls[0] || null,
+      imageLibrary: imageLib,
+    };
+
+    return NextResponse.json({
+      success: true,
+      products: [cachedProduct],
+      trace: apifyResult.trace,
+      isFallback,
+    });
   } catch (err: any) {
     console.error('[Apify API Route] Fatal error:', err.message);
     return NextResponse.json(

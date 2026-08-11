@@ -8,8 +8,10 @@ import { extractRawImages } from './extractor';
 import { normalizeImageUrl } from './normalizer';
 import { validateImage } from './validator';
 import { scoreImageQuality } from './ranker';
+import { cacheProductImages } from './cache-service';
 
-export function createProductImageLibrary(productData: unknown): ProductImageLibrary {
+export function createProductImageLibrary(productData: unknown, customGenId?: string): ProductImageLibrary {
+  const generationId = customGenId || `gen_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const rawCandidates = extractRawImages(productData);
   const seenUrls = new Set<string>();
   const allValidImages: NormalizedImage[] = [];
@@ -22,7 +24,7 @@ export function createProductImageLibrary(productData: unknown): ProductImageLib
       return;
     }
 
-    const validation = validateImage(normalizedUrl, seenUrls);
+    const validation = validateImage(normalizedUrl, seenUrls, candidate.sourceField);
     if (!validation.isValid) {
       rejectedImages.push({ url: normalizedUrl, reason: validation.reason || 'Failed validation check' });
       return;
@@ -41,6 +43,7 @@ export function createProductImageLibrary(productData: unknown): ProductImageLib
       altText: candidate.altHint || `Product image ${idx + 1}`,
       role: 'unassigned',
       isValid: true,
+      status: 'pending',
     };
 
     const qualityScore = scoreImageQuality(initialImg);
@@ -58,6 +61,7 @@ export function createProductImageLibrary(productData: unknown): ProductImageLib
   const detailCandidates = allValidImages.filter((img) => img.altText.toLowerCase().includes('detail') || img.altText.toLowerCase().includes('spec') || img.altText.toLowerCase().includes('close'));
 
   return {
+    generationId,
     allValidImages,
     heroCandidates: heroCandidates.length > 0 ? heroCandidates : allValidImages,
     galleryCandidates,
@@ -70,5 +74,54 @@ export function createProductImageLibrary(productData: unknown): ProductImageLib
     },
     originalSourceCount: rawCandidates.length,
     validUniqueCount: allValidImages.length,
+    cachedImageCount: 0,
+    failedImageCount: 0,
+  };
+}
+
+export async function buildCachedProductImageLibrary(
+  productData: unknown,
+  customGenId?: string
+): Promise<ProductImageLibrary> {
+  const lib = createProductImageLibrary(productData, customGenId);
+  const genId = lib.generationId || `gen_${Date.now()}`;
+
+  if (lib.allValidImages.length === 0) {
+    return lib;
+  }
+
+  const cacheResult = await cacheProductImages(lib.allValidImages, genId);
+  const cachedMap = new Map<string, NormalizedImage>();
+  cacheResult.cachedImages.forEach((img) => {
+    cachedMap.set(img.normalizedUrl, img);
+    if (img.originalUrl) cachedMap.set(img.originalUrl, img);
+  });
+
+  const updatedValidImages = lib.allValidImages.map((img) => {
+    const cached = cachedMap.get(img.normalizedUrl) || cachedMap.get(img.originalUrl);
+    if (cached) return cached;
+    return {
+      ...img,
+      status: 'failed' as const,
+      isValid: false,
+    };
+  });
+
+  const validOnly = updatedValidImages.filter((img) => img.status === 'cached');
+  const heroCandidates = validOnly.filter((img) => img.qualityScore >= 70);
+
+  return {
+    ...lib,
+    allValidImages: validOnly,
+    heroCandidates: heroCandidates.length > 0 ? heroCandidates : validOnly,
+    galleryCandidates: validOnly,
+    lifestyleCandidates: validOnly,
+    detailCandidates: validOnly,
+    rejectedImages: [
+      ...lib.rejectedImages,
+      ...cacheResult.failedImages.map((f) => ({ url: f.originalUrl, reason: f.reason })),
+    ],
+    cachedImageCount: cacheResult.cachedCount,
+    failedImageCount: cacheResult.failedCount,
   };
 }

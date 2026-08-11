@@ -24,7 +24,18 @@ const FORBIDDEN_EXTENSIONS = [
   '.exe', '.bat', '.cmd', '.vbs', '.ps1', '.json', '.xml'
 ];
 
-export function validateImage(url: string, seenUrls: Set<string>): ValidationResult {
+const SOCIAL_AND_UNRELATED_DOMAINS = [
+  'instagram.com', 'cdninstagram.com', 'fbcdn.net', 'facebook.com',
+  'twitter.com', 'twimg.com', 'pinterest.com', 'tiktok.com',
+  'linkedin.com', 'licdn.com'
+];
+
+const TRACKING_OR_PLACEHOLDER_KEYWORDS = [
+  'pixel', 'tracking', 'avatar', 'spacer', '1x1', 'favicon', 'placeholder',
+  'default-avatar', 'no-image'
+];
+
+export function validateImage(url: string, seenUrls: Set<string>, sourceField?: string): ValidationResult {
   if (!url || typeof url !== 'string' || url.trim().length === 0) {
     return { isValid: false, reason: 'Empty or missing URL' };
   }
@@ -75,6 +86,23 @@ export function validateImage(url: string, seenUrls: Set<string>): ValidationRes
     for (const prefix of FORBIDDEN_IP_PREFIXES) {
       if (hostname.startsWith(prefix)) {
         return { isValid: false, reason: 'Security violation: Private network IP' };
+      }
+    }
+
+    // Social & Unrelated Domain Check
+    for (const dom of SOCIAL_AND_UNRELATED_DOMAINS) {
+      if (hostname === dom || hostname.endsWith('.' + dom)) {
+        console.log(`[Validator Audit] REJECTED social domain (${hostname}) from field "${sourceField || 'unknown'}": ${clean.slice(0, 70)}`);
+        return { isValid: false, reason: `Rejected social network domain (${hostname})` };
+      }
+    }
+
+    // Tracking or Placeholder Keyword Check
+    const fullPathAndQuery = (parsed.pathname + parsed.search).toLowerCase();
+    for (const kw of TRACKING_OR_PLACEHOLDER_KEYWORDS) {
+      if (fullPathAndQuery.includes(kw)) {
+        console.log(`[Validator Audit] REJECTED keyword (${kw}) from field "${sourceField || 'unknown'}": ${clean.slice(0, 70)}`);
+        return { isValid: false, reason: `Rejected tracking or placeholder image keyword (${kw})` };
       }
     }
 

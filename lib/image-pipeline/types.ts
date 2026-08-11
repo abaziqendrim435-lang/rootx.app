@@ -20,6 +20,11 @@ export interface NormalizedImage {
   id: string;
   originalUrl: string;
   normalizedUrl: string;
+  cachedUrl?: string;
+  storagePath?: string;
+  mimeType?: string;
+  byteSize?: number;
+  status?: 'cached' | 'failed' | 'pending';
   exportedAssetName?: string;
   width: number;
   height: number;
@@ -44,6 +49,7 @@ export interface DiagnosticInfo {
 }
 
 export interface ProductImageLibrary {
+  generationId?: string;
   allValidImages: NormalizedImage[];
   heroCandidates: NormalizedImage[];
   galleryCandidates: NormalizedImage[];
@@ -53,6 +59,8 @@ export interface ProductImageLibrary {
   imageMetadata: Record<string, unknown>;
   originalSourceCount: number;
   validUniqueCount: number;
+  cachedImageCount?: number;
+  failedImageCount?: number;
 }
 
 export interface ThemeImageAssignments {

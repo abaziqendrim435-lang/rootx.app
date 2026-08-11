@@ -78,7 +78,7 @@ export function buildStorefrontSpec(
     id: `image_${i + 1}`,
     type: 'image',
     settings: {
-      image_url: img.normalizedUrl,
+      image_url: img.cachedUrl || img.exportedAssetName || img.normalizedUrl,
       alt_text: img.altText || profile.cleanProductName,
     },
   }));

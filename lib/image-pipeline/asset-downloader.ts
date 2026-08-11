@@ -7,6 +7,8 @@
 import type { StorefrontSpec } from '../storefront-spec/types';
 import type { NormalizedImage } from './types';
 import { normalizeImageUrl } from './normalizer';
+import fs from 'fs/promises';
+import path from 'path';
 
 export interface DownloadStats {
   rawImageCount: number;
@@ -102,8 +104,29 @@ export async function downloadAndPackageProductImages(
   // 2. Download and validate each image server-side
   for (const imgCandidate of rawCandidateImages) {
     const rawUrl = imgCandidate.normalizedUrl;
+    const targetCacheUrl = imgCandidate.cachedUrl || rawUrl;
 
     try {
+      // Handle local cached-images disk file directly
+      if (targetCacheUrl.startsWith('/cached-images/')) {
+        const localFilePath = path.join(process.cwd(), 'public', targetCacheUrl.replace(/^\//, ''));
+        const buffer = await fs.readFile(localFilePath);
+        const mimeType = targetCacheUrl.endsWith('.png') ? 'image/png' : targetCacheUrl.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+        const ext = SUPPORTED_MIME_TYPES[mimeType] || '.jpg';
+        const indexStr = String(downloadedIndex).padStart(2, '0');
+        const filename = `rootx-product-${indexStr}${ext}`;
+
+        urlToAssetMap.set(rawUrl, { filename, buffer });
+        if (imgCandidate.originalUrl) urlToAssetMap.set(imgCandidate.originalUrl, { filename, buffer });
+        if (imgCandidate.cachedUrl) urlToAssetMap.set(imgCandidate.cachedUrl, { filename, buffer });
+        assetFiles.set(`assets/${filename}`, buffer);
+        stats.generatedAssetFilenames.push(filename);
+        stats.totalBytesDownloaded += buffer.length;
+        stats.downloadedAssetCount++;
+        downloadedIndex++;
+        continue;
+      }
+
       // Handle base64 data URLs directly (used in offline/test environments)
       if (rawUrl.startsWith('data:image/')) {
         const parts = rawUrl.split(';base64,');
@@ -121,9 +144,8 @@ export async function downloadAndPackageProductImages(
         const indexStr = String(downloadedIndex).padStart(2, '0');
         const filename = `rootx-product-${indexStr}${ext}`;
         urlToAssetMap.set(rawUrl, { filename, buffer });
-        if (imgCandidate.originalUrl) {
-          urlToAssetMap.set(imgCandidate.originalUrl, { filename, buffer });
-        }
+        if (imgCandidate.originalUrl) urlToAssetMap.set(imgCandidate.originalUrl, { filename, buffer });
+        if (imgCandidate.cachedUrl) urlToAssetMap.set(imgCandidate.cachedUrl, { filename, buffer });
         assetFiles.set(`assets/${filename}`, buffer);
         stats.generatedAssetFilenames.push(filename);
         stats.totalBytesDownloaded += buffer.length;
@@ -133,11 +155,12 @@ export async function downloadAndPackageProductImages(
       }
 
       // Validate URL scheme & SSRF protection
-      if (!rawUrl.startsWith('https://') && !rawUrl.startsWith('http://')) {
-        throw new Error(`Insecure image URL scheme: ${rawUrl}`);
+      const fetchUrl = targetCacheUrl.startsWith('http') ? targetCacheUrl : rawUrl;
+      if (!fetchUrl.startsWith('https://') && !fetchUrl.startsWith('http://')) {
+        throw new Error(`Insecure image URL scheme: ${fetchUrl}`);
       }
-      if (BLOCKED_IP_REGEX.test(rawUrl)) {
-        throw new Error(`SSRF Blocked: Private/Localhost image URL detected: ${rawUrl}`);
+      if (BLOCKED_IP_REGEX.test(fetchUrl)) {
+        throw new Error(`SSRF Blocked: Private/Localhost image URL detected: ${fetchUrl}`);
       }
 
       // Fetch server-side with timeout & redirect limit

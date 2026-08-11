@@ -26,6 +26,7 @@ import ModelLogPanel from '@/components/design-engine/ModelLogPanel';
 import ThemeRecommendationPanel from '@/components/design-engine/ThemeRecommendationPanel';
 import ImageDiagnosticsPanel from '@/components/image-pipeline/ImageDiagnosticsPanel';
 import ImageManagerModal from '@/components/image-pipeline/ImageManagerModal';
+import { LiveImageDebugPanel } from '@/components/image-pipeline/LiveImageDebugPanel';
 import type {
   ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
 } from '@/lib/shopify-types';
@@ -4881,6 +4882,16 @@ export default function WebsiteBuilderDemo() {
             {/* ═══════ PREVIEW TAB ═══════ */}
             {activeTab === 'preview' && (
               <div className="flex flex-col gap-6">
+                {/* Live Image Debug Panel */}
+                <LiveImageDebugPanel
+                  productSource={apifySelectedProduct ? 'AliExpress (Apify)' : 'AliExpress'}
+                  imageLibrary={designEngineResult?.imagePipelineResult?.imageLibrary || (result as any)?.imageLibrary}
+                  rawImagesCount={result?.ecommerce?.images?.length || 0}
+                  heroOriginalUrl={result?.ecommerce?.images?.[0]}
+                  heroCachedUrl={result?.ecommerce?.images?.[0]}
+                  isVisible={true}
+                />
+
                 {/* Image Pipeline Diagnostics Panel (Dev Mode) */}
                 {designEngineResult?.imagePipelineResult && (
                   <ImageDiagnosticsPanel

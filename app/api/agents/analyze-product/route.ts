@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { ProductAnalysis, AIProvider } from '@/lib/website-builder-types';
 import { callWithRetryAndFallback, getAvailableProviders } from '@/lib/ai-providers';
 import { fetchAliExpressProductViaApify } from '@/lib/product-import/apify-aliexpress';
+import { buildCachedProductImageLibrary } from '@/lib/image-pipeline';
 
 // ============================================================
 // POST /api/agents/analyze-product
@@ -599,6 +600,11 @@ export async function POST(req: NextRequest) {
     console.log(`${LOG} [${requestId}] Raw AI response:`, JSON.stringify(parsed));
     console.log(`${LOG} [${requestId}] Analysis complete via ${usedProvider}`);
 
+    // Immediate server-side image caching
+    const cachedLib = await buildCachedProductImageLibrary({ images: extractedImages, title });
+    const cachedImages = cachedLib.allValidImages.map((img) => img.cachedUrl || img.normalizedUrl);
+    const finalImages = cachedImages.length > 0 ? cachedImages : extractedImages;
+
     // Merge AI output with pre-extracted structured data
     const analysis: ProductAnalysis = {
       productTitle: (parsed.productTitle as string) || structured.title || title || 'Unknown Product',
@@ -609,7 +615,7 @@ export async function POST(req: NextRequest) {
       category: (parsed.category as string) || structured.category || 'General',
       priceRange: (structured.price ? `${structured.currency || '$'}${structured.price}` : null) || (parsed.priceRange as string) || 'Contact for pricing',
       sourceUrl: trimmedUrl,
-      images: extractedImages,
+      images: finalImages,
       shippingInfo: (parsed.shippingInfo as string) || 'Standard shipping available',
       specifications: (structured.specifications && structured.specifications.length > 0)
         ? (structured.specifications as { label: string; value: string }[])
