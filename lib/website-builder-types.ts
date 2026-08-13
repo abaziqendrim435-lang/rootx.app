@@ -287,6 +287,7 @@ export interface ProductAnalysis {
   analysisId?: string;
   timestamp?: string;
   requestId?: string;
+  diagnostics?: import('./product-import/apify-aliexpress').ProductionDiagnostics;
 }
 
 export interface DropshippingInput {

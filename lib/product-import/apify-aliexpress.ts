@@ -37,6 +37,22 @@ export interface ApifyProductData {
   url: string;
 }
 
+export interface ProductionDiagnostics {
+  requestedProductId: string | null;
+  matchedProductId: string | null;
+  datasetItemCount: number;
+  datasetKeys: string[];
+  rawGalleryCount: number;
+  variantImageCount: number;
+  descriptionImageCount: number;
+  uniqueExtractedCount: number;
+  rawImagesCount?: number;
+  acceptedImagesCount?: number;
+  persistedImagesCount?: number;
+  previewImagesCount?: number;
+  shopifyGalleryImagesCount?: number;
+}
+
 export interface ApifyDebugTrace {
   sourceUrl: string;
   apifyRunStatus: 'SUCCESS' | 'FALLBACK_ACTIVATED' | 'FAILED';
@@ -54,6 +70,7 @@ export interface ApifyDebugTrace {
   mainGalleryCount?: number;
   variantImageCount?: number;
   descriptionImageCount?: number;
+  diagnostics?: ProductionDiagnostics;
   failedImages: Array<{ url: string; reason: string }>;
   failureReasons: string[];
 }
@@ -157,6 +174,55 @@ export function normalizeAliExpressImageUrl(rawUrl: string): string {
   }
 
   return url;
+}
+
+export function extractImagesFromAliExpressHtml(html: string): string[] {
+  const images: string[] = [];
+  const seen = new Set<string>();
+
+  const addImg = (url: string) => {
+    const norm = normalizeAliExpressImageUrl(url);
+    if (!norm) return;
+    if (seen.has(norm)) return;
+    seen.add(norm);
+    images.push(norm);
+  };
+
+  // 1. Scan for imagePathList or pcDetailUrlList or summaryImageList JSON arrays in script blocks
+  const jsonArrayRegex = /"(?:imagePathList|pcDetailUrlList|summaryImageList|summryImageList|images|gallery)"\s*:\s*(\[[^\]]+\])/gi;
+  let arrayMatch: RegExpExecArray | null;
+  while ((arrayMatch = jsonArrayRegex.exec(html)) !== null) {
+    try {
+      const arr = JSON.parse(arrayMatch[1]);
+      if (Array.isArray(arr)) {
+        arr.forEach((item) => {
+          if (typeof item === 'string') addImg(item);
+        });
+      }
+    } catch {
+      const strRegex = /https?:\\?\/\\?\/[a-zA-Z0-9_-]+\.(?:alicdn\.com|aliexpress-media\.com)\\?\/[a-zA-Z0-9_\-\/]+\.(?:jpg|jpeg|png|webp)/gi;
+      let m: RegExpExecArray | null;
+      while ((m = strRegex.exec(arrayMatch[1])) !== null) {
+        addImg(m[0].replace(/\\/g, ''));
+      }
+    }
+  }
+
+  // 2. Scan for skuPropertyImagePath in script blocks
+  const skuImgRegex = /"skuPropertyImagePath"\s*:\s*"([^"]+)"/gi;
+  let skuMatch: RegExpExecArray | null;
+  while ((skuMatch = skuImgRegex.exec(html)) !== null) {
+    addImg(skuMatch[1].replace(/\\/g, ''));
+  }
+
+  // 3. Scan for any alicdn.com image URLs in general HTML / scripts
+  const cdnRegex = /https?:\\?\/\\?\/[a-zA-Z0-9_-]+\.(?:alicdn\.com|aliexpress-media\.com)\\?\/kf\\?\/[a-zA-Z0-9_\-\/]+\.(?:jpg|jpeg|png|webp)/gi;
+  let cdnMatch: RegExpExecArray | null;
+  while ((cdnMatch = cdnRegex.exec(html)) !== null) {
+    addImg(cdnMatch[0].replace(/\\/g, ''));
+  }
+
+  return images;
 }
 
 export function extractAllAliExpressProductImages(rawProduct: Record<string, unknown>): AliExpressExtractionReport {
@@ -494,12 +560,57 @@ export async function fetchAliExpressProductViaApify(
   // Deep canonical image extraction across all dataset product fields
   const report = extractAllAliExpressProductImages(item);
 
+  // Direct product detail page HTML scanning fallback if Apify item returned only 1 image
+  const pageUrl = String(item.url || item.productUrl || targetUrl);
+  if (isDirectUrl && report.images.length <= 1 && pageUrl.startsWith('http')) {
+    try {
+      console.log(`[Apify Service] Scraper returned 1 image. Executing HTML script extraction fallback for: ${pageUrl.slice(0, 80)}...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const htmlRes = await fetch(pageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (htmlRes.ok) {
+        const html = await htmlRes.text();
+        const htmlImgs = extractImagesFromAliExpressHtml(html);
+        if (htmlImgs.length > 0) {
+          console.log(`[Apify Service] HTML script extraction added ${htmlImgs.length} images.`);
+          const combined = [...new Set([...report.images, ...htmlImgs])];
+          report.images = combined;
+          report.stats.uniqueNormalizedCount = combined.length;
+          report.stats.mainGalleryCount = combined.length;
+        }
+      }
+    } catch (htmlErr) {
+      console.warn('[Apify Service] HTML script extraction fallback failed:', htmlErr);
+    }
+  }
+
   trace.rawImageCount = report.stats.rawCandidates;
   trace.normalizedImageCount = report.stats.uniqueNormalizedCount;
   trace.validImageCount = report.stats.uniqueNormalizedCount;
   trace.mainGalleryCount = report.stats.mainGalleryCount;
   trace.variantImageCount = report.stats.variantCount;
   trace.descriptionImageCount = report.stats.descriptionCount;
+
+  // Real production diagnostics object
+  trace.diagnostics = {
+    requestedProductId,
+    matchedProductId: matchRes.selectedResultProductId,
+    datasetItemCount: datasetItems.length,
+    datasetKeys: item ? Object.keys(item) : [],
+    rawGalleryCount: report.stats.mainGalleryCount,
+    variantImageCount: report.stats.variantCount,
+    descriptionImageCount: report.stats.descriptionCount,
+    uniqueExtractedCount: report.images.length,
+  };
 
   console.log(`[Apify Service] Image Extraction Report: rawCandidates=${report.stats.rawCandidates}, mainGallery=${report.stats.mainGalleryCount}, variants=${report.stats.variantCount}, description=${report.stats.descriptionCount}, uniqueNormalized=${report.stats.uniqueNormalizedCount}`);
 
@@ -566,7 +677,7 @@ export async function fetchAliExpressProductViaApify(
     orders,
     seller,
     shipping,
-    url: String(item.url || item.productUrl || targetUrl),
+    url: pageUrl,
   };
 
   return {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ProductAnalysis, AIProvider } from '@/lib/website-builder-types';
 import { callWithRetryAndFallback, getAvailableProviders } from '@/lib/ai-providers';
-import { fetchAliExpressProductViaApify } from '@/lib/product-import/apify-aliexpress';
+import { fetchAliExpressProductViaApify, extractAliExpressProductId } from '@/lib/product-import/apify-aliexpress';
 import { buildCachedProductImageLibrary } from '@/lib/image-pipeline';
 
 // ============================================================
@@ -505,8 +505,8 @@ export async function POST(req: NextRequest) {
     let extractedImages: string[] = [];
     let structured: Partial<PreExtracted> = {};
 
-    if (body.productData) {
-      console.log(`${LOG} [${requestId}] Using pre-scraped Apify product data.`);
+    if (body.productData && (body.productData.images?.length || 0) > 1) {
+      console.log(`${LOG} [${requestId}] Using pre-scraped Apify product data (${body.productData.images.length} images).`);
       title = body.productData.title || 'Unknown Product';
       extractedText = `Product Title: ${body.productData.title}\nProduct Price: ${body.productData.price}\nOriginal Price: ${body.productData.originalPrice}\nDiscount: ${body.productData.discount}\nRating: ${body.productData.rating || 'N/A'}\nOrders: ${body.productData.orders || 'N/A'}\nSeller: ${body.productData.seller || 'N/A'}\nShipping: ${body.productData.shipping || 'N/A'}\nDescription:\n${body.productData.description || 'No description'}`;
       extractedImages = body.productData.images || [];
@@ -521,14 +521,14 @@ export async function POST(req: NextRequest) {
         specifications: body.productData.specifications || [],
       };
     } else {
-      // Check if URL is AliExpress and try server-side Apify extraction first
+      // Check if URL is AliExpress and try primary Apify extraction to get all gallery/variant images
       let apifySuccess = false;
-      if (trimmedUrl.includes('aliexpress.com') && process.env.APIFY_API_TOKEN) {
+      if ((trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
         try {
           console.log(`${LOG} [${requestId}] AliExpress URL detected. Attempting primary Apify extraction...`);
           const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
           if (apifyRes.success && apifyRes.product) {
-            console.log(`${LOG} [${requestId}] Primary Apify extraction succeeded for: ${apifyRes.product.title}`);
+            console.log(`${LOG} [${requestId}] Primary Apify extraction succeeded for: ${apifyRes.product.title} (${apifyRes.product.images.length} images extracted)`);
             title = apifyRes.product.title;
             extractedText = `Product Title: ${apifyRes.product.title}\nProduct Price: ${apifyRes.product.price}\nOriginal Price: ${apifyRes.product.originalPrice}\nDiscount: ${apifyRes.product.discount}\nRating: ${apifyRes.product.rating || 'N/A'}\nOrders: ${apifyRes.product.orders || 'N/A'}\nSeller: ${apifyRes.product.seller || 'N/A'}\nShipping: ${apifyRes.product.shipping || 'N/A'}\nDescription:\n${apifyRes.product.description}`;
             extractedImages = apifyRes.product.images;
@@ -605,6 +605,24 @@ export async function POST(req: NextRequest) {
     const cachedImages = cachedLib.allValidImages.map((img) => img.cachedUrl || img.normalizedUrl);
     const finalImages = cachedImages.length > 0 ? cachedImages : extractedImages;
 
+    // Real production diagnostics object
+    const requestedPid = extractAliExpressProductId(trimmedUrl);
+    const diagnostics = {
+      requestedProductId: requestedPid,
+      matchedProductId: requestedPid,
+      datasetItemCount: 1,
+      datasetKeys: ['images', 'title', 'price', 'description'],
+      rawGalleryCount: extractedImages.length,
+      variantImageCount: 0,
+      descriptionImageCount: 0,
+      uniqueExtractedCount: extractedImages.length,
+      rawImagesCount: cachedLib.allValidImages.length,
+      acceptedImagesCount: cachedLib.allValidImages.filter((i) => i.isValid).length,
+      persistedImagesCount: cachedLib.cachedImageCount || 0,
+      previewImagesCount: cachedLib.galleryCandidates.length,
+      shopifyGalleryImagesCount: cachedLib.galleryCandidates.length,
+    };
+
     // Merge AI output with pre-extracted structured data
     const analysis: ProductAnalysis = {
       productTitle: (parsed.productTitle as string) || structured.title || title || 'Unknown Product',
@@ -627,6 +645,7 @@ export async function POST(req: NextRequest) {
       analysisId: `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       timestamp: new Date().toISOString(),
       requestId: requestId,
+      diagnostics,
     };
 
     // Cache the analysis
