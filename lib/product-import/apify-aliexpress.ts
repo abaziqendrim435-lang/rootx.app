@@ -41,12 +41,19 @@ export interface ApifyDebugTrace {
   sourceUrl: string;
   apifyRunStatus: 'SUCCESS' | 'FALLBACK_ACTIVATED' | 'FAILED';
   actorUsed: string | null;
+  requestedProductId?: string | null;
+  selectedResultProductId?: string | null;
+  matchedProductId?: boolean;
+  datasetItemCount?: number;
   rawImageCount: number;
   normalizedImageCount: number;
   validImageCount: number;
   downloadedImageCount: number;
   zipImageCount: number;
   shopifyGalleryCount: number;
+  mainGalleryCount?: number;
+  variantImageCount?: number;
+  descriptionImageCount?: number;
   failedImages: Array<{ url: string; reason: string }>;
   failureReasons: string[];
 }
@@ -59,6 +66,20 @@ export interface ApifyImportResult {
   isFallback?: boolean;
 }
 
+export interface AliExpressExtractionReport {
+  images: string[];
+  variantImages: string[];
+  mainGallery: string[];
+  descriptionImages: string[];
+  stats: {
+    rawCandidates: number;
+    mainGalleryCount: number;
+    variantCount: number;
+    descriptionCount: number;
+    uniqueNormalizedCount: number;
+  };
+}
+
 const DEFAULT_ACTORS = [
   'devcake~aliexpress-products-scraper',
   'unfenced-group~aliexpress-scraper',
@@ -69,21 +90,36 @@ const DEFAULT_ACTORS = [
 export function getConfiguredActors(): string[] {
   const customActor = process.env.APIFY_ALIEXPRESS_ACTOR_ID?.trim();
   if (customActor) {
-    // Put custom actor first, followed by default actors as backup
     return [customActor, ...DEFAULT_ACTORS.filter((a) => a !== customActor)];
   }
   return DEFAULT_ACTORS;
 }
 
 export function buildActorPayload(actorId: string, targetUrl: string, limit: number, isDirectUrl: boolean, searchQuery: string) {
+  const cleanUrl = targetUrl.trim();
+  const queryStr = (searchQuery || targetUrl).trim();
+
   if (actorId.includes('epctex')) {
-    return isDirectUrl
-      ? { startUrls: [{ url: targetUrl }], maxItems: 1 }
-      : { searchTerms: [searchQuery], maxItems: limit };
+    return {
+      startUrls: [{ url: cleanUrl }],
+      searchTerms: [queryStr],
+      maxItems: limit,
+    };
   }
-  return isDirectUrl
-    ? { startUrls: [{ url: targetUrl }], maxResults: 1 }
-    : { searchQueries: [searchQuery], maxResults: limit };
+
+  return {
+    startUrls: [{ url: cleanUrl }],
+    productUrls: [cleanUrl],
+    searchQueries: [queryStr],
+    maxResults: limit,
+    maxItems: limit,
+  };
+}
+
+export function extractAliExpressProductId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/(?:item\/|_|id=)(\d{10,16})/i) || url.match(/\b(\d{10,16})\b/);
+  return match ? match[1] : null;
 }
 
 export function normalizeAliExpressImageUrl(rawUrl: string): string {
@@ -123,17 +159,244 @@ export function normalizeAliExpressImageUrl(rawUrl: string): string {
   return url;
 }
 
+export function extractAllAliExpressProductImages(rawProduct: Record<string, unknown>): AliExpressExtractionReport {
+  const rawCandidates: string[] = [];
+  const mainGallery: string[] = [];
+  const variantImages: string[] = [];
+  const descriptionImages: string[] = [];
+
+  const addCandidate = (val: unknown, category: 'gallery' | 'variant' | 'description' | 'other' = 'other') => {
+    if (!val) return;
+    let urlStr = '';
+    if (typeof val === 'string') {
+      urlStr = val.trim();
+    } else if (typeof val === 'object' && val !== null) {
+      const obj = val as Record<string, unknown>;
+      urlStr = String(
+        obj.src || obj.originalSrc || obj.url || obj.originalUrl || obj.original ||
+        obj.image_url || obj.imageUrl || obj.fullUrl || obj.link || obj.path ||
+        obj.skuPropertyImagePath || obj.imagePath || ''
+      ).trim();
+    }
+
+    if (urlStr) {
+      rawCandidates.push(urlStr);
+      if (category === 'gallery') mainGallery.push(urlStr);
+      if (category === 'variant') variantImages.push(urlStr);
+      if (category === 'description') descriptionImages.push(urlStr);
+    }
+  };
+
+  // 1. Direct main gallery arrays
+  const mainGalleryFields = [
+    'images', 'productImages', 'gallery', 'galleryImages', 'media',
+    'imageUrls', 'imagePathList', 'pcDetailUrlList', 'summaryImageList',
+    'summryImageList', 'detailUrlList', 'picList', 'sliderImages',
+    'product_images', 'photos', 'pictures', 'itemGallery'
+  ];
+
+  mainGalleryFields.forEach((field) => {
+    const val = rawProduct[field];
+    if (Array.isArray(val)) val.forEach((v) => addCandidate(v, 'gallery'));
+    else if (val) addCandidate(val, 'gallery');
+  });
+
+  // 2. Main single image fields
+  const mainSingleFields = [
+    'productMainImageUrl', 'productImage', 'product_image',
+    'imageUrl', 'image_url', 'image', 'thumbnail', 'featuredImage',
+    'featured_image', 'mainImage', 'main_image', 'src', 'url'
+  ];
+
+  mainSingleFields.forEach((field) => {
+    const val = rawProduct[field];
+    if (val) addCandidate(val, 'gallery');
+  });
+
+  // 3. Variant and SKU images
+  const variantFields = [
+    'variants', 'skus', 'skuImages', 'sku_images', 'skuProperties',
+    'productSKUPropertyList', 'sku_properties', 'skuList'
+  ];
+
+  variantFields.forEach((field) => {
+    const val = rawProduct[field];
+    if (Array.isArray(val)) {
+      val.forEach((item) => {
+        if (typeof item === 'object' && item !== null) {
+          const obj = item as Record<string, unknown>;
+          if (obj.image) addCandidate(obj.image, 'variant');
+          if (obj.imageUrl) addCandidate(obj.imageUrl, 'variant');
+          if (obj.image_url) addCandidate(obj.image_url, 'variant');
+          if (obj.skuImage) addCandidate(obj.skuImage, 'variant');
+          if (obj.skuPropertyImagePath) addCandidate(obj.skuPropertyImagePath, 'variant');
+          if (Array.isArray(obj.skuPropertyValues)) {
+            obj.skuPropertyValues.forEach((spv: unknown) => {
+              if (typeof spv === 'object' && spv !== null) {
+                const spvObj = spv as Record<string, unknown>;
+                if (spvObj.skuPropertyImagePath) addCandidate(spvObj.skuPropertyImagePath, 'variant');
+                if (spvObj.skuImage) addCandidate(spvObj.skuImage, 'variant');
+              }
+            });
+          }
+        } else {
+          addCandidate(item, 'variant');
+        }
+      });
+    }
+  });
+
+  // 4. HTML Description image regex scanner
+  const descText = String(rawProduct.description || rawProduct.descriptionHtml || rawProduct.detail || '');
+  if (descText) {
+    const imgRegex = /https?:\/\/[a-zA-Z0-9_-]+\.alicdn\.com\/[a-zA-Z0-9_\-\/]+\.(?:jpg|jpeg|png|webp)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = imgRegex.exec(descText)) !== null) {
+      addCandidate(m[0], 'description');
+    }
+  }
+
+  // 5. Recursive deep object traversal for remaining uncollected keys
+  function deepTraverse(obj: unknown, depth = 0) {
+    if (!obj || typeof obj !== 'object' || depth > 5) return;
+    if (Array.isArray(obj)) {
+      obj.forEach((item) => deepTraverse(item, depth + 1));
+      return;
+    }
+    const rec = obj as Record<string, unknown>;
+    Object.entries(rec).forEach(([key, val]) => {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey.includes('image') || lowerKey.includes('img') || lowerKey.includes('photo') || lowerKey.includes('pic')) {
+        if (Array.isArray(val)) val.forEach((v) => addCandidate(v, 'other'));
+        else addCandidate(val, 'other');
+      } else if (typeof val === 'object' && val !== null) {
+        deepTraverse(val, depth + 1);
+      }
+    });
+  }
+
+  deepTraverse(rawProduct);
+
+  // 6. Normalize and deduplicate preserving exact first occurrence sequence
+  const normalizedImages: string[] = [];
+  const seen = new Set<string>();
+
+  rawCandidates.forEach((raw) => {
+    const norm = normalizeAliExpressImageUrl(raw);
+    if (!norm) return;
+    if (seen.has(norm)) return;
+    seen.add(norm);
+    normalizedImages.push(norm);
+  });
+
+  const normMain = mainGallery.map(normalizeAliExpressImageUrl).filter((u) => u && seen.has(u));
+  const normVar = variantImages.map(normalizeAliExpressImageUrl).filter((u) => u && seen.has(u));
+  const normDesc = descriptionImages.map(normalizeAliExpressImageUrl).filter((u) => u && seen.has(u));
+
+  return {
+    images: normalizedImages,
+    variantImages: normVar,
+    mainGallery: normMain,
+    descriptionImages: normDesc,
+    stats: {
+      rawCandidates: rawCandidates.length,
+      mainGalleryCount: [...new Set(normMain)].length,
+      variantCount: [...new Set(normVar)].length,
+      descriptionCount: [...new Set(normDesc)].length,
+      uniqueNormalizedCount: normalizedImages.length,
+    },
+  };
+}
+
+export function matchDatasetItemByProductId(
+  datasetItems: Record<string, unknown>[],
+  requestedProductId: string | null
+): {
+  item: Record<string, unknown>;
+  matched: boolean;
+  requestedProductId: string | null;
+  selectedResultProductId: string | null;
+  datasetItemCount: number;
+} {
+  if (datasetItems.length === 0) {
+    return {
+      item: {},
+      matched: false,
+      requestedProductId,
+      selectedResultProductId: null,
+      datasetItemCount: 0,
+    };
+  }
+
+  if (requestedProductId) {
+    for (const candidate of datasetItems) {
+      const idsToTest = [
+        String(candidate.id || ''),
+        String(candidate.productId || ''),
+        String(candidate.itemId || ''),
+        String(candidate.product_id || ''),
+        String(candidate.item_id || ''),
+        String(candidate.url || ''),
+        String(candidate.productUrl || ''),
+        String(candidate.link || ''),
+      ];
+
+      for (const idStr of idsToTest) {
+        if (idStr.includes(requestedProductId)) {
+          const foundId = extractAliExpressProductId(idStr) || requestedProductId;
+          return {
+            item: candidate,
+            matched: true,
+            requestedProductId,
+            selectedResultProductId: foundId,
+            datasetItemCount: datasetItems.length,
+          };
+        }
+      }
+    }
+  }
+
+  // Fallback: If no exact product ID match, select item with highest image count
+  let bestItem = datasetItems[0];
+  let maxImgCount = -1;
+
+  datasetItems.forEach((candidate) => {
+    const extracted = extractAllAliExpressProductImages(candidate);
+    if (extracted.images.length > maxImgCount) {
+      maxImgCount = extracted.images.length;
+      bestItem = candidate;
+    }
+  });
+
+  const selectedId = extractAliExpressProductId(
+    String(bestItem.id || bestItem.productId || bestItem.itemId || bestItem.url || bestItem.productUrl || '')
+  );
+
+  return {
+    item: bestItem,
+    matched: false,
+    requestedProductId,
+    selectedResultProductId: selectedId,
+    datasetItemCount: datasetItems.length,
+  };
+}
+
 export async function fetchAliExpressProductViaApify(
   targetUrlOrQuery: string,
   options?: { isDirectUrl?: boolean }
 ): Promise<ApifyImportResult> {
   const isDirectUrl = options?.isDirectUrl ?? (targetUrlOrQuery.startsWith('http://') || targetUrlOrQuery.startsWith('https://'));
   const targetUrl = isDirectUrl ? targetUrlOrQuery.trim() : `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(targetUrlOrQuery.trim())}.html`;
+  const requestedProductId = extractAliExpressProductId(targetUrl);
 
   const trace: ApifyDebugTrace = {
     sourceUrl: targetUrl,
     apifyRunStatus: 'FAILED',
     actorUsed: null,
+    requestedProductId,
+    selectedResultProductId: null,
+    matchedProductId: false,
+    datasetItemCount: 0,
     rawImageCount: 0,
     normalizedImageCount: 0,
     validImageCount: 0,
@@ -199,8 +462,17 @@ export async function fetchAliExpressProductViaApify(
     };
   }
 
-  // Parse the primary item from Apify dataset
-  const item = datasetItems[0];
+  // Exact Product ID Matcher
+  const matchRes = matchDatasetItemByProductId(datasetItems, requestedProductId);
+  const item = matchRes.item;
+
+  trace.requestedProductId = matchRes.requestedProductId;
+  trace.selectedResultProductId = matchRes.selectedResultProductId;
+  trace.matchedProductId = matchRes.matched;
+  trace.datasetItemCount = matchRes.datasetItemCount;
+
+  console.log(`[Apify Service] Product ID Matcher: requested="${requestedProductId}", selected="${matchRes.selectedResultProductId}", matched=${matchRes.matched}, datasetItemCount=${matchRes.datasetItemCount}`);
+
   const title = String(item.title || item.productTitle || item.name || item.subject || 'Imported Product').trim();
 
   // Price parsing
@@ -219,38 +491,19 @@ export async function fetchAliExpressProductViaApify(
 
   const discount = String(item.priceDiscount || item.discount || item.discountPercentage || '');
 
-  // Raw Image Extraction across all candidate fields
-  const rawImageCandidates: string[] = [];
-  const variantImages: string[] = [];
+  // Deep canonical image extraction across all dataset product fields
+  const report = extractAllAliExpressProductImages(item);
 
-  const addRawImg = (val: unknown, isVariant = false) => {
-    if (!val) return;
-    let str = '';
-    if (typeof val === 'string') str = val.trim();
-    else if (typeof val === 'object' && val !== null) {
-      const obj = val as Record<string, unknown>;
-      str = String(obj.src || obj.originalSrc || obj.url || obj.originalUrl || obj.image_url || obj.imageUrl || obj.fullUrl || obj.link || '').trim();
-    }
-    if (str) {
-      rawImageCandidates.push(str);
-      if (isVariant) variantImages.push(str);
-    }
-  };
+  trace.rawImageCount = report.stats.rawCandidates;
+  trace.normalizedImageCount = report.stats.uniqueNormalizedCount;
+  trace.validImageCount = report.stats.uniqueNormalizedCount;
+  trace.mainGalleryCount = report.stats.mainGalleryCount;
+  trace.variantImageCount = report.stats.variantCount;
+  trace.descriptionImageCount = report.stats.descriptionCount;
 
-  const imageFields = [
-    'images', 'productImages', 'gallery', 'galleryImages', 'media',
-    'imageUrls', 'productMainImageUrl', 'productImage', 'product_image',
-    'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image',
-    'pcDetailUrlList', 'summaryImageList', 'detailUrlList', 'picList'
-  ];
+  console.log(`[Apify Service] Image Extraction Report: rawCandidates=${report.stats.rawCandidates}, mainGallery=${report.stats.mainGalleryCount}, variants=${report.stats.variantCount}, description=${report.stats.descriptionCount}, uniqueNormalized=${report.stats.uniqueNormalizedCount}`);
 
-  imageFields.forEach((field) => {
-    const val = item[field];
-    if (Array.isArray(val)) val.forEach((v) => addRawImg(v));
-    else if (val) addRawImg(val);
-  });
-
-  // Extract variant images
+  // Extract structured variants
   const variants: ApifyVariant[] = [];
   if (Array.isArray(item.variants)) {
     item.variants.forEach((v: Record<string, unknown>, idx: number) => {
@@ -258,9 +511,9 @@ export async function fetchAliExpressProductViaApify(
       const vPrice = v.price ? String(v.price) : price;
       const vSku = v.sku ? String(v.sku) : `SKU-${idx + 1}`;
       let vImg = '';
-      if (v.image) { addRawImg(v.image, true); vImg = String(v.image); }
-      if (v.imageUrl) { addRawImg(v.imageUrl, true); vImg = String(v.imageUrl); }
-      if (v.image_url) { addRawImg(v.image_url, true); vImg = String(v.image_url); }
+      if (v.image) vImg = String(v.image);
+      else if (v.imageUrl) vImg = String(v.imageUrl);
+      else if (v.image_url) vImg = String(v.image_url);
       variants.push({
         id: `var-${idx + 1}`,
         name: vName,
@@ -270,26 +523,6 @@ export async function fetchAliExpressProductViaApify(
       });
     });
   }
-
-  trace.rawImageCount = rawImageCandidates.length;
-
-  // Normalize image URLs and deduplicate PRESERVING ORIGINAL ORDER
-  const normalizedImages: string[] = [];
-  const seenUrls = new Set<string>();
-
-  rawImageCandidates.forEach((raw) => {
-    const norm = normalizeAliExpressImageUrl(raw);
-    if (!norm) {
-      trace.failedImages.push({ url: raw, reason: 'Empty or invalid URL format' });
-      return;
-    }
-    if (seenUrls.has(norm)) return; // Duplicate check preserving first occurrence order
-    seenUrls.add(norm);
-    normalizedImages.push(norm);
-  });
-
-  trace.normalizedImageCount = normalizedImages.length;
-  trace.validImageCount = normalizedImages.length;
 
   // Specifications
   let specifications: ApifySpecification[] = [];
@@ -324,9 +557,9 @@ export async function fetchAliExpressProductViaApify(
     discount,
     description,
     descriptionHtml: String(item.descriptionHtml || ''),
-    images: normalizedImages,
-    featuredImage: normalizedImages.length > 0 ? normalizedImages[0] : null,
-    variantImages: variantImages.map(normalizeAliExpressImageUrl).filter(Boolean),
+    images: report.images, // Full normalized images list
+    featuredImage: report.images.length > 0 ? report.images[0] : null,
+    variantImages: report.variantImages,
     variants,
     specifications,
     rating,

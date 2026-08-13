@@ -203,7 +203,7 @@ You MUST respond with a JSON object using exactly this structure:
       { "name": "Color", "values": ["Black", "Silver"] },
       { "name": "Size", "values": ["Default"] }
     ],
-    "images": ["Pick 2-4 exact URLs from the Available Product Images list above"],
+    "images": ["Include all exact URLs from the Available Product Images list above in their original order"],
     "trustBadges": ["30-Day Money-Back Guarantee", "100% Secure Checkout", "Worldwide Tracked Shipping", "Premium Product Guarantee"],
     "shippingText": "Dispatched in 24-48 hours. Estimated delivery: 7-12 business days with full online tracking.",
     "featureSections": [

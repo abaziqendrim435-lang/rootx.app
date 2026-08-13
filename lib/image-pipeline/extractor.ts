@@ -11,7 +11,7 @@ export interface ExtractedRawImage {
 
 export function extractRawImages(data: unknown): ExtractedRawImage[] {
   const extracted: ExtractedRawImage[] = [];
-  const visitedUrls = new Set<string>();
+  const seenUrls = new Set<string>();
 
   function addCandidate(url: unknown, fieldName: string, altHint?: string) {
     if (!url) return;
@@ -24,12 +24,14 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       strUrl = String(
         obj.src || obj.originalSrc || obj.url || obj.originalUrl || obj.original ||
         obj.image_url || obj.imageUrl || obj.fullUrl || obj.link || obj.path ||
+        obj.skuPropertyImagePath || obj.imagePath ||
         (obj.preview_image as Record<string, unknown>)?.src || ''
       ).trim();
       altHint = altHint || String(obj.alt || obj.altText || obj.title || '').trim();
     }
 
-    if (strUrl) {
+    if (strUrl && !seenUrls.has(strUrl)) {
+      seenUrls.add(strUrl);
       extracted.push({
         rawUrl: strUrl,
         sourceField: fieldName,
@@ -54,7 +56,7 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       'imageUrls', 'imagePathList', 'pcDetailUrlList', 'summaryImageList',
       'summryImageList', 'detailUrlList', 'picList', 'sliderImages',
       'skuImages', 'imagesPathList', 'product_images', 'supplierImages',
-      'images_urls', 'photos', 'variant_images', 'pictures'
+      'images_urls', 'photos', 'variant_images', 'pictures', 'itemGallery'
     ];
 
     // Scalar or single image fields
@@ -64,8 +66,6 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
       'featuredImage', 'featured_image', 'src', 'url', 'main_image', 'mainImage',
       'photo', 'picture'
     ];
-
-    const directFields = [...arrayFields, ...singleFields];
 
     // Process array fields first to establish canonical image sequence
     for (const key of arrayFields) {
@@ -92,16 +92,32 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
         } else {
           addCandidate(value, currentPath);
         }
+      } else if ((key === 'description' || key === 'descriptionHtml' || key === 'detail') && typeof value === 'string') {
+        const imgRegex = /https?:\/\/[a-zA-Z0-9_-]+\.alicdn\.com\/[a-zA-Z0-9_\-\/]+\.(?:jpg|jpeg|png|webp)/gi;
+        let m: RegExpExecArray | null;
+        let i = 0;
+        while ((m = imgRegex.exec(value)) !== null) {
+          addCandidate(m[0], `${currentPath}.regex[${i++}]`);
+        }
       } else if (key === 'featureSections' && Array.isArray(value)) {
         value.forEach((sec: Record<string, unknown>, i) => {
           if (sec.imageUrl) addCandidate(sec.imageUrl, `${currentPath}[${i}].imageUrl`, String(sec.title || ''));
         });
-      } else if (key === 'variants' && Array.isArray(value)) {
+      } else if ((key === 'variants' || key === 'skus' || key === 'productSKUPropertyList' || key === 'skuProperties') && Array.isArray(value)) {
         value.forEach((v: Record<string, unknown>, i) => {
-          if (v.image) addCandidate(v.image, `${currentPath}[${i}].image`);
-          if (v.imageUrl) addCandidate(v.imageUrl, `${currentPath}[${i}].imageUrl`);
-          if (v.image_url) addCandidate(v.image_url, `${currentPath}[${i}].image_url`);
-          if (v.src) addCandidate(v.src, `${currentPath}[${i}].src`);
+          if (typeof v === 'object' && v !== null) {
+            if (v.image) addCandidate(v.image, `${currentPath}[${i}].image`);
+            if (v.imageUrl) addCandidate(v.imageUrl, `${currentPath}[${i}].imageUrl`);
+            if (v.image_url) addCandidate(v.image_url, `${currentPath}[${i}].image_url`);
+            if (v.src) addCandidate(v.src, `${currentPath}[${i}].src`);
+            if (v.skuImage) addCandidate(v.skuImage, `${currentPath}[${i}].skuImage`);
+            if (v.skuPropertyImagePath) addCandidate(v.skuPropertyImagePath, `${currentPath}[${i}].skuPropertyImagePath`);
+            if (Array.isArray(v.skuPropertyValues)) {
+              v.skuPropertyValues.forEach((spv: Record<string, unknown>, j) => {
+                if (spv.skuPropertyImagePath) addCandidate(spv.skuPropertyImagePath, `${currentPath}[${i}].skuPropertyValues[${j}].skuPropertyImagePath`);
+              });
+            }
+          }
         });
       } else if (typeof value === 'object' && value !== null && !currentPath.includes('__')) {
         // Deep nested traversal up to 5 levels
