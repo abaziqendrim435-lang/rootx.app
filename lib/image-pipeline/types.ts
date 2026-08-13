@@ -22,9 +22,10 @@ export interface NormalizedImage {
   normalizedUrl: string;
   cachedUrl?: string;
   storagePath?: string;
+  publicUrl?: string;
   mimeType?: string;
   byteSize?: number;
-  status?: 'cached' | 'failed' | 'pending';
+  status?: 'cached' | 'failed' | 'pending' | 'ready';
   exportedAssetName?: string;
   width: number;
   height: number;

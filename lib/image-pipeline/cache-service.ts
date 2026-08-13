@@ -101,6 +101,7 @@ export async function cacheSingleImage(
     const storagePath = `${generationId}/${filename}`;
 
     let cachedUrl = '';
+    let publicUrl = '';
 
     // Attempt Supabase Storage Upload if configured
     if (supabase) {
@@ -117,6 +118,7 @@ export async function cacheSingleImage(
             .from(BUCKET_NAME)
             .getPublicUrl(storagePath);
           if (publicData?.publicUrl) {
+            publicUrl = publicData.publicUrl;
             cachedUrl = publicData.publicUrl;
           }
         } else {
@@ -143,12 +145,24 @@ export async function cacheSingleImage(
       }
     }
 
-    console.log(`[Cache Service] Successfully cached image ${indexStr}: ${cachedUrl}`);
+    const fullStoragePath = `${BUCKET_NAME}/${storagePath}`;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[Cache Service] Cached image trace:`, {
+        originalUrl: img.originalUrl || rawUrl,
+        cachedUrl,
+        storagePath: fullStoragePath,
+        publicUrl: publicUrl || cachedUrl,
+        mimeType,
+        status: 'cached',
+      });
+    }
 
     return {
       ...img,
       cachedUrl,
-      storagePath: `${BUCKET_NAME}/${storagePath}`,
+      publicUrl: publicUrl || (cachedUrl.startsWith('http') ? cachedUrl : undefined),
+      storagePath: fullStoragePath,
       mimeType,
       byteSize: buffer.length,
       status: 'cached',

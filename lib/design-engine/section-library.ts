@@ -6,6 +6,7 @@
 
 import type { WebsiteGeneration, WebsiteBuilderInput } from '../website-builder-types';
 import { buildCleanBrandProfile } from '../title-cleaner';
+import { resolveRenderableImage } from '../image-pipeline';
 
 export interface SectionVariantDefinition {
   id: string;
@@ -54,10 +55,10 @@ const productHeroVariants: SectionVariantDefinition[] = [
       );
 
       const imgRes = (gen as unknown as { imagePipelineResult?: import('../image-pipeline/types').ImagePipelineResult }).imagePipelineResult;
-      const heroUrl = imgRes?.heroImage?.normalizedUrl || gen.ecommerce?.images?.[0] || '';
+      const heroUrl = resolveRenderableImage(imgRes?.heroImage) || resolveRenderableImage(gen.ecommerce?.images?.[0]) || '';
       const galleryUrls = imgRes?.galleryImages?.length 
-        ? imgRes.galleryImages.map(g => g.normalizedUrl)
-        : (gen.ecommerce?.images || []);
+        ? imgRes.galleryImages.map(g => resolveRenderableImage(g))
+        : (gen.ecommerce?.images?.map(i => resolveRenderableImage(i)) || []);
 
       return `
 <section class="hero-section hero--product-split section" data-section-id="{{ section.id }}" style="padding: 4rem 0; background: var(--color-surface); border-bottom: 1px solid var(--color-border);">
@@ -119,7 +120,7 @@ const productHeroVariants: SectionVariantDefinition[] = [
       );
 
       const imgRes = (gen as unknown as { imagePipelineResult?: import('../image-pipeline/types').ImagePipelineResult }).imagePipelineResult;
-      const heroUrl = imgRes?.heroImage?.normalizedUrl || gen.ecommerce?.images?.[0] || '';
+      const heroUrl = resolveRenderableImage(imgRes?.heroImage) || resolveRenderableImage(gen.ecommerce?.images?.[0]) || '';
 
       return `
 <section class="hero-section hero--editorial section" data-section-id="{{ section.id }}" style="padding: 5rem 0; background: var(--color-surface);">
@@ -155,7 +156,7 @@ const productHeroVariants: SectionVariantDefinition[] = [
       );
 
       const imgRes = (gen as unknown as { imagePipelineResult?: import('../image-pipeline/types').ImagePipelineResult }).imagePipelineResult;
-      const heroUrl = imgRes?.heroImage?.normalizedUrl || gen.ecommerce?.images?.[0] || '';
+      const heroUrl = resolveRenderableImage(imgRes?.heroImage) || resolveRenderableImage(gen.ecommerce?.images?.[0]) || '';
 
       return `
 <section class="hero-section hero--full-bleed" data-section-id="{{ section.id }}" style="position:relative; background: #000; color:#fff; padding: 7rem 0 6rem; overflow:hidden;">
@@ -187,7 +188,7 @@ const productHeroVariants: SectionVariantDefinition[] = [
       );
 
       const imgRes = (gen as unknown as { imagePipelineResult?: import('../image-pipeline/types').ImagePipelineResult }).imagePipelineResult;
-      const heroUrl = imgRes?.heroImage?.normalizedUrl || gen.ecommerce?.images?.[0] || '';
+      const heroUrl = resolveRenderableImage(imgRes?.heroImage) || resolveRenderableImage(gen.ecommerce?.images?.[0]) || '';
 
       return `
 <section class="hero-section hero--minimal section" data-section-id="{{ section.id }}" style="padding: 4.5rem 0; background: var(--color-background);">

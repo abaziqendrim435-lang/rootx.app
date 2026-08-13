@@ -31,7 +31,7 @@ export const LiveImageDebugPanel: React.FC<LiveImageDebugPanelProps> = ({
   const rejectedImages = imageLibrary?.rejectedImages || [];
   
   const acceptedCount = validImages.length;
-  const cachedCount = imageLibrary?.cachedImageCount ?? validImages.filter((img) => img.status === 'cached' || Boolean(img.cachedUrl)).length;
+  const cachedCount = imageLibrary?.cachedImageCount ?? validImages.filter((img) => img.status === 'cached' || img.status === 'ready' || Boolean(img.cachedUrl || img.publicUrl)).length;
   const failedCount = (imageLibrary?.failedImageCount ?? 0) + rejectedImages.length;
 
   let heroDomain = 'none';
@@ -105,12 +105,12 @@ export const LiveImageDebugPanel: React.FC<LiveImageDebugPanelProps> = ({
             <span
               key={img.id || idx}
               className={`px-2 py-0.5 rounded text-[11px] border ${
-                img.cachedUrl || img.status === 'cached'
+                img.publicUrl || img.cachedUrl || img.status === 'cached' || img.status === 'ready'
                   ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
                   : 'bg-rose-950/60 border-rose-800 text-rose-300'
               }`}
             >
-              {idx + 1} {img.cachedUrl || img.status === 'cached' ? 'cached ✅' : 'failed ❌'}
+              {idx + 1} {img.publicUrl || img.cachedUrl || img.status === 'cached' || img.status === 'ready' ? 'cached ✅' : 'failed ❌'}
             </span>
           ))}
         </div>

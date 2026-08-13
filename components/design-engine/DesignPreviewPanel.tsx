@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { DesignEngineResult } from '@/lib/website-builder-types';
+import { resolveRenderableImage } from '@/lib/image-pipeline';
 import { Monitor, Smartphone, Layers, Palette, Type, Image as ImageIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -28,7 +29,7 @@ export default function DesignPreviewPanel({ result }: Props) {
 
   // Hero image resolution
   const imgPipeline = result.imagePipelineResult;
-  const heroUrl = imgPipeline?.heroImage?.normalizedUrl || imgPipeline?.images?.[0]?.normalizedUrl || '';
+  const heroUrl = resolveRenderableImage(imgPipeline?.heroImage) || resolveRenderableImage(imgPipeline?.images?.[0]) || '';
   const validImagesCount = imgPipeline?.images?.length || 0;
   const totalExtractedCount = imgPipeline?.diagnosticInfo?.totalExtracted || 0;
 

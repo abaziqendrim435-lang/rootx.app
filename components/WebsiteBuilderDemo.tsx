@@ -2518,11 +2518,14 @@ export default function WebsiteBuilderDemo() {
   useEffect(() => {
     if (result) {
       try {
-        const engineRes = generateShopifyThemeV2(result, input);
+        const existingLib = (result as any)?.imageLibrary || (result as any)?.spec?.imageLibrary;
+        const engineRes = generateShopifyThemeV2(result, input, existingLib);
         setDesignEngineResult(engineRes);
       } catch (err) {
         console.error('Design Engine execution failed:', err);
       }
+    } else {
+      setDesignEngineResult(null);
     }
   }, [result, input]);
 
@@ -2975,6 +2978,7 @@ export default function WebsiteBuilderDemo() {
     setProductAnalysis(null);
     setProductUrl('');
     setResult(null);
+    setDesignEngineResult(null);
     setStatus('idle');
     setErrorMsg('');
     setApifyQuery('');

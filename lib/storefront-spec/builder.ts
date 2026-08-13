@@ -14,7 +14,7 @@ import { createSectionPlan } from '../design-engine/section-sequencer';
 import { getArchetype } from '../design-engine/archetypes';
 
 import type { ProductImageLibrary } from '../image-pipeline/types';
-import { createProductImageLibrary, reassignImagesForTheme } from '../image-pipeline';
+import { createProductImageLibrary, reassignImagesForTheme, resolveRenderableImage } from '../image-pipeline';
 
 import { THEME_FAMILIES } from '../design-engine/theme-family-types';
 
@@ -78,7 +78,7 @@ export function buildStorefrontSpec(
     id: `image_${i + 1}`,
     type: 'image',
     settings: {
-      image_url: img.cachedUrl || img.exportedAssetName || img.normalizedUrl,
+      image_url: resolveRenderableImage(img),
       alt_text: img.altText || profile.cleanProductName,
     },
   }));
@@ -122,7 +122,7 @@ export function buildStorefrontSpec(
         subheadline: profile.cleanHeroSubheadline,
         cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
         cta_url: '/cart/add',
-        hero_image: images.hero?.normalizedUrl || '',
+        hero_image: resolveRenderableImage(images.hero),
       },
       blocks: isGallerySection ? galleryBlocks : undefined,
     };
