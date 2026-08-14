@@ -1,13 +1,32 @@
 // ============================================================
 // RootX — Real AliExpress Product Pipeline Image Trace Verification
-// Tests exact loss-free preservation across all pipeline stages.
+// Tests exact loss-free preservation across all pipeline stages for real production products.
 // ============================================================
 
+import fs from 'fs';
+import path from 'path';
+
+// Load environment variables if available
+if (fs.existsSync('.env.local')) {
+  const envText = fs.readFileSync('.env.local', 'utf8');
+  envText.split('\n').forEach((line) => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      const key = match[1];
+      let value = match[2] || '';
+      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+      if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+      process.env[key] = value;
+    }
+  });
+}
+
 import {
+  fetchAliExpressProductViaApify,
   extractAllAliExpressProductImages,
-  normalizeAliExpressImageUrl,
+  extractAllProductImages,
 } from '../lib/product-import/apify-aliexpress';
-import { createProductImageLibrary, buildCachedProductImageLibrary } from '../lib/image-pipeline/library-builder';
+import { buildCachedProductImageLibrary } from '../lib/image-pipeline/library-builder';
 import { buildStorefrontSpec } from '../lib/storefront-spec/builder';
 import { runDesignEnginePipeline } from '../lib/design-engine/pipeline';
 import type { WebsiteGeneration, WebsiteBuilderInput } from '../lib/website-builder-types';
@@ -20,108 +39,51 @@ function assert(condition: boolean, message: string) {
   console.log(`  ✓ PASS: ${message}`);
 }
 
-const sampleDataUris = [
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==#img1',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==#img2',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+A8AAQUBAScY420AAAAASUVORK5CYII=#img3',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQAAGBAQA1/353AAAAAElFTkSuQmCC#img4',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==#img5',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==#img6',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+A8AAQUBAScY420AAAAASUVORK5CYII=#img7',
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQAAGBAQA1/353AAAAAElFTkSuQmCC#img8',
-];
-
 export async function runRealProductFullPipelineAudit() {
   console.log('\n================================================================================');
-  console.log('  ROOTX REAL ALIEXPRESS PRODUCT PIPELINE AUDIT');
+  console.log('  ROOTX REAL PRODUCTION ALIEXPRESS PRODUCT PIPELINE AUDIT');
   console.log('================================================================================\n');
 
-  // Step 1: Real Multi-Image AliExpress Raw Product Payload
-  const rawAliExpressProduct = {
-    productId: '1005006034177437',
-    title: 'Precision Ergonomic Wireless Mechanical Keyboard',
-    productMainImageUrl: 'https://ae01.alicdn.com/kf/main_01.jpg',
-    images: [
-      '//ae01.alicdn.com/kf/gallery_01.jpg_640x640.jpg',
-      'https://ae01.alicdn.com/kf/gallery_02.jpg_Q90.jpg',
-      'https://ae01.alicdn.com/kf/gallery_03.jpg',
-      'https://ae01.alicdn.com/kf/gallery_04.jpg',
-    ],
-    productSKUPropertyList: [
-      {
-        skuPropertyValues: [
-          { skuPropertyImagePath: 'https://ae01.alicdn.com/kf/variant_black.jpg' },
-          { skuPropertyImagePath: 'https://ae01.alicdn.com/kf/variant_white.jpg' },
-        ],
-      },
-    ],
-    descriptionHtml: `
-      <div>
-        <img src="https://ae01.alicdn.com/kf/desc_01.jpg" />
-      </div>
-    `,
-  };
+  const realProductUrl = 'https://www.aliexpress.com/item/3256810034178226.html';
+  console.log(`Target Real AliExpress Product URL: ${realProductUrl}`);
 
-  // Step 2: Canonical extractAllAliExpressProductImages Deep Extraction
-  const extractionReport = extractAllAliExpressProductImages(rawAliExpressProduct);
+  // Step 1: Live Apify Fetch for Real Product
+  const apifyResult = await fetchAliExpressProductViaApify(realProductUrl, { isDirectUrl: true });
+  assert(apifyResult.success, 'Apify product extraction returned success: true.');
+  assert(apifyResult.product !== null, 'Apify returned a non-null product object.');
 
-  const sourceGalleryCount = extractionReport.stats.mainGalleryCount;
-  const variantImageCount = extractionReport.stats.variantCount;
-  const descriptionImageCount = extractionReport.stats.descriptionCount;
-  const uniqueExtractedImages = extractionReport.stats.uniqueNormalizedCount;
+  const product = apifyResult.product!;
+  const rawImageCount = apifyResult.trace.rawImageCount;
+  const extractedImageCount = product.images.length;
+  const normalizedImageCount = apifyResult.trace.normalizedImageCount;
 
-  console.log(`Source Gallery Count:      ${sourceGalleryCount}`);
-  console.log(`Variant Image Count:       ${variantImageCount}`);
-  console.log(`Description Image Count:   ${descriptionImageCount}`);
-  console.log(`Unique Extracted Images:   ${uniqueExtractedImages}`);
+  console.log(`\n1. APIFY_RAW_IMAGE_COUNT:    ${rawImageCount}`);
+  console.log(`2. EXTRACTED_IMAGE_COUNT:    ${extractedImageCount}`);
+  console.log(`3. NORMALIZED_IMAGE_COUNT:   ${normalizedImageCount}`);
 
-  assert(sourceGalleryCount === 5, 'Source Gallery Count equals 5.');
-  assert(variantImageCount === 2, 'Variant Image Count equals 2.');
-  assert(descriptionImageCount === 1, 'Description Image Count equals 1.');
-  assert(uniqueExtractedImages === 8, 'Unique Extracted Images equals 8.');
+  assert(extractedImageCount > 1, `Real product contains multiple images (got ${extractedImageCount}).`);
 
-  // Step 3: ProductData & ProductImageLibrary Construction
-  const mockProductData = {
-    title: rawAliExpressProduct.title,
-    price: '49.99',
-    originalPrice: '69.99',
-    discount: '30%',
-    description: 'Ergonomic wireless keyboard.',
-    images: sampleDataUris, // 7 unique sample URIs representing the 7 extracted images
-    featuredImage: sampleDataUris[0],
-    variantImages: sampleDataUris.slice(4, 6),
-    variants: [
-      { name: 'Black', price: '49.99', imageUrl: sampleDataUris[4] },
-      { name: 'White', price: '49.99', imageUrl: sampleDataUris[5] },
-    ],
-    specifications: [],
-    rating: 4.9,
-    orders: 340,
-    seller: 'AliExpress Direct',
-    shipping: 'Free Shipping',
-    url: 'https://www.aliexpress.com/item/1005006034177437.html',
-  };
+  // Step 2: Build Cached Product Image Library
+  const imageLib = await buildCachedProductImageLibrary(product);
+  const pipelineRawCount = imageLib.allValidImages.length;
+  const acceptedImageCount = imageLib.allValidImages.filter((i) => i.isValid).length;
+  const cachedImageCount = imageLib.cachedImageCount || 0;
+  const previewImageCount = imageLib.galleryCandidates.length;
 
-  const imageLib = await buildCachedProductImageLibrary(mockProductData);
+  console.log(`4. PIPELINE_RAW_IMAGE_COUNT: ${pipelineRawCount}`);
+  console.log(`5. ACCEPTED_IMAGE_COUNT:     ${acceptedImageCount}`);
+  console.log(`6. CACHED_IMAGE_COUNT:       ${cachedImageCount}`);
+  console.log(`7. PREVIEW_IMAGE_COUNT:      ${previewImageCount}`);
 
-  const rootXRawImages = imageLib.allValidImages.length;
-  const acceptedImages = imageLib.allValidImages.filter((i) => i.isValid).length;
-  const persistedImages = imageLib.cachedImageCount || 0;
-  const previewImages = imageLib.galleryCandidates.length;
+  assert(pipelineRawCount > 1, `PIPELINE_RAW_IMAGE_COUNT > 1 (got ${pipelineRawCount}).`);
+  assert(pipelineRawCount === extractedImageCount, `Pipeline raw count (${pipelineRawCount}) equals extracted count (${extractedImageCount}).`);
+  assert(acceptedImageCount === extractedImageCount, `Accepted image count (${acceptedImageCount}) equals extracted count (${extractedImageCount}).`);
+  assert(cachedImageCount === extractedImageCount, `Cached image count (${cachedImageCount}) equals extracted count (${extractedImageCount}).`);
+  assert(previewImageCount === extractedImageCount, `Preview image count (${previewImageCount}) equals extracted count (${extractedImageCount}).`);
 
-  console.log(`RootX Raw Images:          ${rootXRawImages}`);
-  console.log(`Accepted Images:           ${acceptedImages}`);
-  console.log(`Persisted Images:          ${persistedImages}`);
-  console.log(`Preview Images:            ${previewImages}`);
-
-  assert(rootXRawImages === uniqueExtractedImages, `RootX Raw Images (${rootXRawImages}) === Unique Extracted Images (${uniqueExtractedImages}).`);
-  assert(acceptedImages === uniqueExtractedImages, `Accepted Images (${acceptedImages}) === Unique Extracted Images (${uniqueExtractedImages}).`);
-  assert(persistedImages === uniqueExtractedImages, `Persisted Images (${persistedImages}) === Unique Extracted Images (${uniqueExtractedImages}).`);
-  assert(previewImages === uniqueExtractedImages, `Preview Images (${previewImages}) === Unique Extracted Images (${uniqueExtractedImages}).`);
-
-  // Step 4: StorefrontSpec & Shopify Theme Pipeline
+  // Step 3: StorefrontSpec & Shopify Theme Engine Pipeline
   const mockGenInput: WebsiteGeneration = {
-    homepage: { hero: { headline: mockProductData.title, subheadline: '', ctaButtons: [], backgroundStyle: 'dark' }, features: [], socialProof: '' },
+    homepage: { hero: { headline: product.title, subheadline: '', ctaButtons: [], backgroundStyle: 'dark' }, features: [], socialProof: '' },
     about: { title: '', content: '', mission: '', vision: '', values: [] },
     services: { title: '', subtitle: '', services: [] },
     pricing: { title: '', subtitle: '', plans: [] },
@@ -129,24 +91,24 @@ export async function runRealProductFullPipelineAudit() {
     testimonials: { title: '', subtitle: '', testimonials: [] },
     contact: { title: '', subtitle: '', formFields: [], email: '', phone: '', address: '' },
     footer: { copyright: '', columns: [], socialLinks: [], tagline: '' },
-    seo: { title: mockProductData.title, metaDescription: '', keywords: [], ogTitle: '', ogDescription: '', ogImagePrompt: '', canonicalUrl: '', structuredData: '' },
+    seo: { title: product.title, metaDescription: '', keywords: [], ogTitle: '', ogDescription: '', ogImagePrompt: '', canonicalUrl: '', structuredData: '' },
     branding: { colorPalette: [], typography: { heading: 'Inter', body: 'Inter', accent: 'Inter', googleFontsUrl: '' }, iconSuggestions: [], logoDescription: '' },
     marketing: { googleAdsHeadlines: [], googleAdsDescriptions: [], facebookAdCopy: '', instagramCaption: '', linkedInPost: '', twitterPost: '', emailCampaign: { subject: '', preheader: '', body: '', cta: '' } },
     ecommerce: {
-      price: mockProductData.price,
-      shippingText: mockProductData.shipping,
+      price: product.price,
+      shippingText: product.shipping,
       images: imageLib.allValidImages.map((i) => i.cachedUrl || i.normalizedUrl),
     },
   } as unknown as WebsiteGeneration;
 
   const mockBuilderInput: WebsiteBuilderInput = {
-    businessName: 'KeebStore',
+    businessName: 'AttackSharkStore',
     businessType: 'Keyboards',
     targetAudience: 'Gamers',
-    brandDescription: 'Custom keyboards',
+    brandDescription: 'Wireless Gaming Keyboards',
     preferredStyle: 'modern_tech',
-    primaryColor: '#3b82f6',
-    secondaryColor: '#1d4ed8',
+    primaryColor: '#6366f1',
+    secondaryColor: '#06b6d4',
     language: 'en',
     country: 'US',
   };
@@ -158,18 +120,18 @@ export async function runRealProductFullPipelineAudit() {
   assert(indexJsonFile !== undefined, 'Shopify templates/index.json file created.');
 
   const indexJsonData = JSON.parse(indexJsonFile!.value);
-  const shopifyGalleryImages = indexJsonData.sections?.['rootx-gallery']?.block_order?.length || 0;
+  const shopifyGalleryCount = indexJsonData.sections?.['rootx-gallery']?.block_order?.length || 0;
 
-  console.log(`Shopify Gallery Images:    ${shopifyGalleryImages}`);
+  console.log(`8. SHOPIFY_IMAGE_COUNT:      ${shopifyGalleryCount}`);
 
-  assert(shopifyGalleryImages === uniqueExtractedImages, `Shopify Gallery Images (${shopifyGalleryImages}) === Unique Extracted Images (${uniqueExtractedImages}).`);
+  assert(shopifyGalleryCount === extractedImageCount, `Shopify gallery image count (${shopifyGalleryCount}) equals extracted count (${extractedImageCount}).`);
 
   console.log('\n================================================================================');
-  console.log(' 🎉 METRICS AUDIT PASSED WITH 100% PARITY & ZERO IMAGE LOSS!');
+  console.log(` 🎉 AUDIT PASSED WITH 100% PARITY! (${extractedImageCount} images preserved across all 8 stages)`);
   console.log('================================================================================\n');
 }
 
 runRealProductFullPipelineAudit().catch((err) => {
-  console.error(err);
+  console.error('❌ Audit Failed with Error:', err);
   process.exit(1);
 });

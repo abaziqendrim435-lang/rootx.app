@@ -98,8 +98,8 @@ export interface AliExpressExtractionReport {
 }
 
 const DEFAULT_ACTORS = [
-  'devcake~aliexpress-products-scraper',
   'unfenced-group~aliexpress-scraper',
+  'devcake~aliexpress-products-scraper',
   'cryptosignals~aliexpress-scraper',
   'epctex~aliexpress-scraper',
 ];
@@ -124,6 +124,15 @@ export function buildActorPayload(actorId: string, targetUrl: string, limit: num
     };
   }
 
+  if (isDirectUrl) {
+    return {
+      startUrls: [{ url: cleanUrl }],
+      productUrls: [cleanUrl],
+      maxResults: limit,
+      maxItems: limit,
+    };
+  }
+
   return {
     startUrls: [{ url: cleanUrl }],
     productUrls: [cleanUrl],
@@ -139,6 +148,40 @@ export function extractAliExpressProductId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+export function isValidImageUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.trim().toLowerCase();
+  if (clean.length < 5) return false;
+
+  // Base64 image URIs are valid
+  if (clean.startsWith('data:image/')) return true;
+
+  // REJECT Webpage HTML URLs
+  if (clean.includes('/item/') || clean.includes('/w/wholesale') || clean.endsWith('.html') || clean.endsWith('.htm') || clean.includes('.html?')) {
+    return false;
+  }
+
+  // Reject tracking / placeholders / tiny icons
+  if (
+    clean.includes('tracking') ||
+    clean.includes('pixel') ||
+    clean.includes('spacer') ||
+    clean.includes('1x1') ||
+    clean.includes('blank.gif') ||
+    clean.includes('avatar')
+  ) {
+    return false;
+  }
+
+  const isUrlScheme = clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('//');
+  if (!isUrlScheme) return false;
+
+  const hasImageExt = /\.(jpg|jpeg|png|webp|gif|svg)(\?|#|$)/i.test(clean);
+  const isCdnPath = (clean.includes('alicdn.com') || clean.includes('aliexpress-media.com') || clean.includes('aliexpress')) && (clean.includes('/kf/') || clean.includes('/g/') || clean.includes('/item/'));
+
+  return hasImageExt || isCdnPath;
+}
+
 export function normalizeAliExpressImageUrl(rawUrl: string): string {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
   let url = rawUrl.trim().replace(/[\r\n\t]/g, '').replace(/&amp;/g, '&');
@@ -146,11 +189,13 @@ export function normalizeAliExpressImageUrl(rawUrl: string): string {
   // Protocol relative fix
   if (url.startsWith('//')) {
     url = `https:${url}`;
-  } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+  } else if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:image/')) {
     if (!url.startsWith('/')) {
       url = `https://${url}`;
     }
   }
+
+  if (!isValidImageUrl(url)) return '';
 
   if (url.includes('alicdn.com') || url.includes('aliexpress')) {
     // Strip query / sizing parameters appended after valid image extensions (e.g. .jpg_640x640.jpg -> .jpg)
@@ -164,13 +209,15 @@ export function normalizeAliExpressImageUrl(rawUrl: string): string {
 
   url = url.replace(/\.(jpg|jpeg|png|webp)\.(jpg|jpeg|png|webp)$/gi, '.$1');
 
-  try {
-    const parsed = new URL(url);
-    const paramsToStrip = ['_t', 'utm_source', 'utm_medium', 'utm_campaign', 'spm', 'scm'];
-    paramsToStrip.forEach((p) => parsed.searchParams.delete(p));
-    url = parsed.toString();
-  } catch {
-    url = url.replace(/([?&])(_t|spm|scm|utm_[^=]+)=[^&]*&?/gi, '$1').replace(/[?&]$/, '');
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const parsed = new URL(url);
+      const paramsToStrip = ['_t', 'utm_source', 'utm_medium', 'utm_campaign', 'spm', 'scm'];
+      paramsToStrip.forEach((p) => parsed.searchParams.delete(p));
+      url = parsed.toString();
+    } catch {
+      url = url.replace(/([?&])(_t|spm|scm|utm_[^=]+)=[^&]*&?/gi, '$1').replace(/[?&]$/, '');
+    }
   }
 
   return url;
@@ -239,13 +286,12 @@ export function extractAllAliExpressProductImages(rawProduct: Record<string, unk
     } else if (typeof val === 'object' && val !== null) {
       const obj = val as Record<string, unknown>;
       urlStr = String(
-        obj.src || obj.originalSrc || obj.url || obj.originalUrl || obj.original ||
-        obj.image_url || obj.imageUrl || obj.fullUrl || obj.link || obj.path ||
-        obj.skuPropertyImagePath || obj.imagePath || ''
+        obj.src || obj.originalSrc || obj.imageUrl || obj.image_url || obj.originalUrl || obj.original ||
+        obj.fullUrl || obj.link || obj.path || obj.skuPropertyImagePath || obj.imagePath || obj.image || ''
       ).trim();
     }
 
-    if (urlStr) {
+    if (urlStr && isValidImageUrl(urlStr)) {
       rawCandidates.push(urlStr);
       if (category === 'gallery') mainGallery.push(urlStr);
       if (category === 'variant') variantImages.push(urlStr);
@@ -267,11 +313,11 @@ export function extractAllAliExpressProductImages(rawProduct: Record<string, unk
     else if (val) addCandidate(val, 'gallery');
   });
 
-  // 2. Main single image fields
+  // 2. Main single image fields (OMIT webpage 'url' / 'productUrl')
   const mainSingleFields = [
     'productMainImageUrl', 'productImage', 'product_image',
     'imageUrl', 'image_url', 'image', 'thumbnail', 'featuredImage',
-    'featured_image', 'mainImage', 'main_image', 'src', 'url'
+    'featured_image', 'mainImage', 'main_image', 'src'
   ];
 
   mainSingleFields.forEach((field) => {
@@ -332,7 +378,11 @@ export function extractAllAliExpressProductImages(rawProduct: Record<string, unk
     const rec = obj as Record<string, unknown>;
     Object.entries(rec).forEach(([key, val]) => {
       const lowerKey = key.toLowerCase();
-      if (lowerKey.includes('image') || lowerKey.includes('img') || lowerKey.includes('photo') || lowerKey.includes('pic')) {
+      // Omit keys like 'url', 'producturl', 'pageurl'
+      if (lowerKey === 'url' || lowerKey === 'producturl' || lowerKey === 'pageurl' || lowerKey === 'itemurl' || lowerKey === 'link') {
+        return;
+      }
+      if (lowerKey.includes('image') || lowerKey.includes('img') || lowerKey.includes('photo') || lowerKey.includes('pic') || lowerKey.includes('media') || lowerKey.includes('gallery') || lowerKey.includes('sku')) {
         if (Array.isArray(val)) val.forEach((v) => addCandidate(v, 'other'));
         else addCandidate(val, 'other');
       } else if (typeof val === 'object' && val !== null) {
@@ -373,6 +423,8 @@ export function extractAllAliExpressProductImages(rawProduct: Record<string, unk
     },
   };
 }
+
+export const extractAllProductImages = extractAllAliExpressProductImages;
 
 export function matchDatasetItemByProductId(
   datasetItems: Record<string, unknown>[],
@@ -560,18 +612,31 @@ export async function fetchAliExpressProductViaApify(
   // Deep canonical image extraction across all dataset product fields
   const report = extractAllAliExpressProductImages(item);
 
-  // Direct product detail page HTML scanning fallback if Apify item returned only 1 image
+  // 1. Scan raw dataset item JSON for embedded script/gallery image strings
+  try {
+    const itemJsonStr = JSON.stringify(item);
+    const rawEmbeddedImgs = extractImagesFromAliExpressHtml(itemJsonStr);
+    if (rawEmbeddedImgs.length > 0) {
+      const combined = [...new Set([...report.images, ...rawEmbeddedImgs])];
+      report.images = combined;
+      report.stats.uniqueNormalizedCount = combined.length;
+      report.stats.mainGalleryCount = combined.length;
+    }
+  } catch { /* ignore JSON stringify errors */ }
+
+  // 2. Direct product detail page HTML scanning fallback if Apify item returned <= 1 image
   const pageUrl = String(item.url || item.productUrl || targetUrl);
-  if (isDirectUrl && report.images.length <= 1 && pageUrl.startsWith('http')) {
+  if (report.images.length <= 1 && pageUrl.startsWith('http')) {
     try {
-      console.log(`[Apify Service] Scraper returned 1 image. Executing HTML script extraction fallback for: ${pageUrl.slice(0, 80)}...`);
+      console.log(`[Apify Service] Scraper item has <= 1 image. Executing HTML script extraction fallback for: ${pageUrl.slice(0, 80)}...`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const htmlRes = await fetch(pageUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
         signal: controller.signal,
       });
@@ -593,12 +658,20 @@ export async function fetchAliExpressProductViaApify(
     }
   }
 
-  trace.rawImageCount = report.stats.rawCandidates;
+  trace.rawImageCount = report.stats.rawCandidates > 0 ? report.stats.rawCandidates : report.images.length;
   trace.normalizedImageCount = report.stats.uniqueNormalizedCount;
   trace.validImageCount = report.stats.uniqueNormalizedCount;
   trace.mainGalleryCount = report.stats.mainGalleryCount;
   trace.variantImageCount = report.stats.variantCount;
   trace.descriptionImageCount = report.stats.descriptionCount;
+
+  // HARD PRODUCTION ASSERTION:
+  // If the product payload/page contains >1 valid unique product images, but validImageCount === 1, throw a detailed diagnostic error.
+  if (report.images.length > 1 && trace.validImageCount === 1) {
+    throw new Error(
+      `[PRODUCTION HARD ASSERTION FAILED] Selected product payload contains ${report.images.length} valid unique product images, but PIPELINE_RAW_IMAGE_COUNT is 1.`
+    );
+  }
 
   // Real production diagnostics object
   trace.diagnostics = {

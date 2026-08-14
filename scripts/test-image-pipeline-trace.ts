@@ -108,7 +108,7 @@ export async function runImagePipelineTraceTest() {
   // -------------------------------------------------------------
   const rawExtracted = extractRawImages(genInput);
   console.log(`[Stage 1] Extracted ${rawExtracted.length} raw image candidates from input product.`);
-  assert(rawExtracted.length === 10, 'Stage 1: Raw source extraction extracted 10 candidate items.');
+  assert(rawExtracted.length === 9, 'Stage 1: Raw source extraction extracted 9 unique candidate items.');
 
   // -------------------------------------------------------------
   // STAGE 2 & 3: Normalization, Validation, and Library Construction
@@ -117,7 +117,7 @@ export async function runImagePipelineTraceTest() {
   const validCount = imageLibrary.allValidImages.length;
   console.log(`[Stage 2 & 3] Normalized & validated: ${validCount} valid unique images, ${imageLibrary.rejectedImages.length} rejected.`);
   assert(validCount === 6, 'Stage 3: Exactly 6 valid unique images passed normalization & security checks.');
-  assert(imageLibrary.rejectedImages.length === 4, 'Stage 3: Exactly 4 invalid/duplicate images were logged as rejected.');
+  assert(imageLibrary.rejectedImages.length === 3, 'Stage 3: Exactly 3 invalid/duplicate images were logged as rejected.');
 
   // -------------------------------------------------------------
   // STAGE 4 & 5: StorefrontSpec & Server-Side Asset Downloading

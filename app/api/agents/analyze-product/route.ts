@@ -505,8 +505,8 @@ export async function POST(req: NextRequest) {
     let extractedImages: string[] = [];
     let structured: Partial<PreExtracted> = {};
 
-    if (body.productData && (body.productData.images?.length || 0) > 1) {
-      console.log(`${LOG} [${requestId}] Using pre-scraped Apify product data (${body.productData.images.length} images).`);
+    if (body.productData) {
+      console.log(`${LOG} [${requestId}] Using pre-scraped Apify product data (${body.productData.images?.length || 0} images).`);
       title = body.productData.title || 'Unknown Product';
       extractedText = `Product Title: ${body.productData.title}\nProduct Price: ${body.productData.price}\nOriginal Price: ${body.productData.originalPrice}\nDiscount: ${body.productData.discount}\nRating: ${body.productData.rating || 'N/A'}\nOrders: ${body.productData.orders || 'N/A'}\nSeller: ${body.productData.seller || 'N/A'}\nShipping: ${body.productData.shipping || 'N/A'}\nDescription:\n${body.productData.description || 'No description'}`;
       extractedImages = body.productData.images || [];
@@ -520,57 +520,61 @@ export async function POST(req: NextRequest) {
         shippingInfo: body.productData.shipping,
         specifications: body.productData.specifications || [],
       };
-    } else {
-      // Check if URL is AliExpress and try primary Apify extraction to get all gallery/variant images
-      let apifySuccess = false;
-      if ((trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
-        try {
-          console.log(`${LOG} [${requestId}] AliExpress URL detected. Attempting primary Apify extraction...`);
-          const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
-          if (apifyRes.success && apifyRes.product) {
-            console.log(`${LOG} [${requestId}] Primary Apify extraction succeeded for: ${apifyRes.product.title} (${apifyRes.product.images.length} images extracted)`);
-            title = apifyRes.product.title;
+    }
+
+    // If extracted images count is <= 1 and URL is AliExpress, trigger primary Apify direct extraction for multi-image gallery
+    let apifySuccess = false;
+    if (extractedImages.length <= 1 && (trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
+      try {
+        console.log(`${LOG} [${requestId}] Extracted image count is ${extractedImages.length}. Triggering primary Apify direct extraction for full gallery...`);
+        const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
+        if (apifyRes.success && apifyRes.product && apifyRes.product.images.length > 0) {
+          console.log(`${LOG} [${requestId}] Primary Apify direct extraction succeeded for: ${apifyRes.product.title} (${apifyRes.product.images.length} images extracted)`);
+          if (!title || title === 'Unknown Product') title = apifyRes.product.title;
+          if (!extractedText || extractedText.length < 50) {
             extractedText = `Product Title: ${apifyRes.product.title}\nProduct Price: ${apifyRes.product.price}\nOriginal Price: ${apifyRes.product.originalPrice}\nDiscount: ${apifyRes.product.discount}\nRating: ${apifyRes.product.rating || 'N/A'}\nOrders: ${apifyRes.product.orders || 'N/A'}\nSeller: ${apifyRes.product.seller || 'N/A'}\nShipping: ${apifyRes.product.shipping || 'N/A'}\nDescription:\n${apifyRes.product.description}`;
-            extractedImages = apifyRes.product.images;
-            structured = {
-              title: apifyRes.product.title,
-              description: apifyRes.product.description,
-              images: apifyRes.product.images,
-              price: apifyRes.product.price,
-              rating: apifyRes.product.rating,
-              reviewCount: apifyRes.product.orders,
-              shippingInfo: apifyRes.product.shipping,
-              specifications: apifyRes.product.specifications,
-            };
-            apifySuccess = true;
           }
-        } catch (apifyErr: any) {
-          console.warn(`${LOG} [${requestId}] Server Apify extraction failed, falling back to HTML fetcher:`, apifyErr.message);
+          extractedImages = [...new Set([...extractedImages, ...apifyRes.product.images])];
+          structured = {
+            title: title || apifyRes.product.title,
+            description: structured.description || apifyRes.product.description,
+            images: extractedImages,
+            price: structured.price || apifyRes.product.price,
+            rating: structured.rating ?? apifyRes.product.rating,
+            reviewCount: structured.reviewCount ?? apifyRes.product.orders,
+            shippingInfo: structured.shippingInfo || apifyRes.product.shipping,
+            specifications: (structured.specifications && structured.specifications.length > 0) ? structured.specifications : apifyRes.product.specifications,
+          };
+          apifySuccess = true;
         }
+      } catch (apifyErr: any) {
+        console.warn(`${LOG} [${requestId}] Server Apify extraction failed, falling back to HTML fetcher:`, apifyErr.message);
       }
+    }
 
-      if (!apifySuccess) {
-        // Fetch the product page via HTML fetcher
-        console.log(`${LOG} [${requestId}] Fetching URL via HTML scraper: ${trimmedUrl}`);
+    if (extractedImages.length <= 1 && !apifySuccess) {
+      // Fetch the product page via HTML fetcher
+      console.log(`${LOG} [${requestId}] Fetching URL via HTML scraper for multi-image fallback: ${trimmedUrl}`);
 
-        let pageHtml: string;
-        try {
-          pageHtml = await fetchPageContent(trimmedUrl);
-        } catch (fetchErr) {
-          const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
-          console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
+      let pageHtml: string;
+      try {
+        pageHtml = await fetchPageContent(trimmedUrl);
+        const extracted = extractFromHtml(pageHtml);
+        if (!extractedText) extractedText = extracted.text;
+        if (!title) title = extracted.title;
+        if (extracted.images.length > 0) {
+          extractedImages = [...new Set([...extractedImages, ...extracted.images])];
+          structured.images = extractedImages;
+        }
+      } catch (fetchErr) {
+        const reason = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
+        console.error(`${LOG} [${requestId}] Fetch failed: ${reason}`);
+        if (extractedImages.length === 0) {
           return NextResponse.json(
             { success: false, error: `Could not fetch URL: ${reason}` },
             { status: 422 }
           );
         }
-
-        // Extract text, images, and structured data
-        const extracted = extractFromHtml(pageHtml);
-        extractedText = extracted.text;
-        title = extracted.title;
-        extractedImages = extracted.images;
-        structured = extracted.structured;
       }
     }
     console.log(`${LOG} [${requestId}] Extracted ${extractedText.length} chars, ${extractedImages.length} images, title: "${title}"`);
@@ -604,6 +608,14 @@ export async function POST(req: NextRequest) {
     const cachedLib = await buildCachedProductImageLibrary({ images: extractedImages, title });
     const cachedImages = cachedLib.allValidImages.map((img) => img.cachedUrl || img.normalizedUrl);
     const finalImages = cachedImages.length > 0 ? cachedImages : extractedImages;
+
+    // HARD PRODUCTION ASSERTION:
+    // If the product payload/page contains >1 valid unique product images, but PIPELINE_RAW_IMAGE_COUNT is 1, throw error!
+    if (extractedImages.length > 1 && cachedLib.allValidImages.length === 1) {
+      throw new Error(
+        `[PRODUCTION HARD ASSERTION FAILED] Product page/payload contains ${extractedImages.length} valid unique product images, but PIPELINE_RAW_IMAGE_COUNT reached the pipeline with only 1 image.`
+      );
+    }
 
     // Real production diagnostics object
     const requestedPid = extractAliExpressProductId(trimmedUrl);
