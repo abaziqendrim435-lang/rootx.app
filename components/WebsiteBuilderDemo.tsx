@@ -748,6 +748,10 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
     </section>
   `;
 
+  const allImages = (eco.images && eco.images.length > 0)
+    ? eco.images.filter(Boolean)
+    : ((result as any).imageLibrary?.allValidImages?.map((img: any) => img.cachedUrl || img.publicUrl || img.normalizedUrl).filter(Boolean) || []);
+
   const renderFeatures = () => `
     ${eco.featureSections && eco.featureSections.length > 0 ? `
     <section id="features" class="section section-alt">
@@ -756,17 +760,22 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
         <p class="section-subtitle">${result.homepage.socialProof}</p>
         
         <div class="feature-showcase">
-          ${eco.featureSections.map((f, i) => `
+          ${eco.featureSections.map((f, i) => {
+            const featImg = f.imageUrl || (allImages.length > i + 1 ? allImages[i + 1] : '');
+            return `
             <div class="spotlight-row ${i % 2 === 1 ? 'reverse' : ''}">
+              ${featImg ? `
               <div class="spotlight-image">
-                <img src="${f.imageUrl || mainImage}" alt="${f.title}" />
+                <img src="${featImg}" alt="${f.title}" />
               </div>
+              ` : ''}
               <div class="spotlight-text">
                 <h3>${f.title}</h3>
                 <p>${f.description}</p>
               </div>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
       </div>
     </section>

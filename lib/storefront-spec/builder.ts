@@ -111,6 +111,13 @@ export function buildStorefrontSpec(
       required = true;
     }
 
+    const sectionImageMap: Record<string, string> = {
+      'rootx-hero': resolveRenderableImage(images.hero),
+      'rootx-image-story': resolveRenderableImage(images.story),
+      'rootx-product-showcase': resolveRenderableImage(images.featured || images.story),
+      'rootx-final-cta': resolveRenderableImage(images.finalCta),
+    };
+
     return {
       id: sec.sectionId,
       type: sec.sectionType,
@@ -122,7 +129,8 @@ export function buildStorefrontSpec(
         subheadline: profile.cleanHeroSubheadline,
         cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
         cta_url: '/cart/add',
-        hero_image: resolveRenderableImage(images.hero),
+        hero_image: sectionImageMap[sec.sectionId] || resolveRenderableImage(images.hero),
+        section_image: sectionImageMap[sec.sectionId] || '',
       },
       blocks: isGallerySection ? galleryBlocks : undefined,
     };

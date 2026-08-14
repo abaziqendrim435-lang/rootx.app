@@ -37,11 +37,11 @@ export function reassignImagesForTheme(
     if (detail) heroImage = detail;
   }
 
-  // 2. Select Story & Featured Images
+  // 2. Select Story, Featured, & Final CTA Images (Distinct Image per Section Role)
   const availableForStory = valid.filter((img) => img.normalizedUrl !== heroImage.normalizedUrl);
-  const storyImage = availableForStory.length > 0 ? availableForStory[0] : heroImage;
-  const featuredImage = heroImage;
-  const finalCtaImage = availableForStory.length > 1 ? availableForStory[1] : heroImage;
+  const storyImage = availableForStory.length > 0 ? availableForStory[0] : heroImage; // image[1]
+  const featuredImage = availableForStory.length > 1 ? availableForStory[1] : (availableForStory[0] || heroImage); // image[2]
+  const finalCtaImage = availableForStory.length > 2 ? availableForStory[availableForStory.length - 1] : (availableForStory[1] || heroImage); // image[N-1]
 
   // 3. Product Page & Storefront Gallery (Preserve ALL valid images without artificial capping)
   // Ensure hero image is first, followed by all remaining unique images
