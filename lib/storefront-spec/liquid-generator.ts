@@ -148,7 +148,12 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     
     <div style="position: relative;">
       <div class="rx-glass-card rx-img-zoom-wrap" style="padding: 1.25rem; background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(59, 130, 246, 0.2); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-        ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 460px; object-fit: cover; border-radius: var(--rx-radius-md); display: block;', 'rx-hero-img')}
+        {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
+        {% if hero_media %}
+          {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 460px; object-fit: cover; border-radius: var(--rx-radius-md); display: block;', loading: 'lazy' }}
+        {% else %}
+          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 460px; object-fit: cover; border-radius: var(--rx-radius-md); display: block;', 'rx-hero-img')}
+        {% endif %}
       </div>
       <div class="rx-floating-card" style="bottom: 20px; left: -20px; background: #1f2937; border-color: #374151; color: #fff;">
         <span style="font-size: 1.5rem;">★</span>
@@ -183,7 +188,12 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     
     <div style="position: relative;">
       <div class="rx-img-zoom-wrap" style="border-radius: 240px 240px 30px 30px; box-shadow: var(--rx-shadow-lg); border: 4px solid #ffffff;">
-        ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 520px; object-fit: cover; display: block;', 'rx-hero-img')}
+        {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
+        {% if hero_media %}
+          {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 520px; object-fit: cover; display: block;', loading: 'lazy' }}
+        {% else %}
+          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 520px; object-fit: cover; display: block;', 'rx-hero-img')}
+        {% endif %}
       </div>
     </div>
   </div>
@@ -197,7 +207,12 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <p style="font-size: var(--rx-font-lg); color: var(--rx-muted); max-width: 650px; margin: 0 auto 3rem; line-height: var(--rx-lh-relaxed);">${esc(content.heroSubheadline)}</p>
     
     <div class="rx-img-zoom-wrap" style="margin: 0 auto 3.5rem; max-width: 800px; border-radius: var(--rx-radius-sm); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">
-      ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 480px; object-fit: cover; display: block;', 'rx-hero-img')}
+      {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
+      {% if hero_media %}
+        {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 480px; object-fit: cover; display: block;', loading: 'lazy' }}
+      {% else %}
+        ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 480px; object-fit: cover; display: block;', 'rx-hero-img')}
+      {% endif %}
     </div>
     
     <form action="/cart/add" method="post">
@@ -236,7 +251,12 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       
       <div style="position: relative;">
         <div class="rx-card rx-img-zoom-wrap" style="padding: 1.25rem; background: var(--rx-background);">
-          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 440px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-hero-img')}
+          {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
+          {% if hero_media %}
+            {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 440px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', loading: 'lazy' }}
+          {% else %}
+            ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 440px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-hero-img')}
+          {% endif %}
         </div>
         <div class="rx-floating-card" style="top: 20px; right: -15px;">
           <span style="font-size: 1.4rem;">🚚</span>
@@ -263,26 +283,51 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     </div>
     <div style="display: grid; grid-template-columns: 130px 1fr; gap: 2rem; align-items: start;">
       <div style="display: flex; flex-direction: column; gap: 1rem;">
-        {% if section.blocks.size > 0 %}
-          {% for block in section.blocks %}
-            {% if block.settings.image_url != blank %}
-              <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
-                <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+        {% assign thumb_left_count = 0 %}
+        {% if product.media.size > 0 %}
+          {% for media in product.media %}
+            {% if media.media_type == 'image' %}
+              {% assign thumb_left_count = thumb_left_count | plus: 1 %}
+              <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ media | image_url: width: 1200 }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
+                {{ media | image_url: width: 300 | image_tag: alt: 'Thumb', style: 'width: 100%; height: 100%; object-fit: cover;' }}
               </button>
             {% endif %}
           {% endfor %}
-        {% else %}
-          ${galleryList.map((img, i) => {
-            const assetStr = img.exportedAssetName || img.normalizedUrl;
-            return `
-            <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${resolveAssetUrlExpression(assetStr)}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
-              ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
-            </button>`;
-          }).join('')}
+        {% elsif product.images.size > 0 %}
+          {% for image in product.images %}
+            {% assign thumb_left_count = thumb_left_count | plus: 1 %}
+            <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ image | image_url: width: 1200 }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
+              {{ image | image_url: width: 300 | image_tag: alt: 'Thumb', style: 'width: 100%; height: 100%; object-fit: cover;' }}
+            </button>
+          {% endfor %}
+        {% endif %}
+        {% if thumb_left_count == 0 %}
+          {% if section.blocks.size > 0 %}
+            {% for block in section.blocks %}
+              {% if block.settings.image_url != blank %}
+                <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
+                  <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+                </button>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            ${galleryList.map((img, i) => {
+              const assetStr = img.exportedAssetName || img.normalizedUrl;
+              return `
+              <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${resolveAssetUrlExpression(assetStr)}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
+                ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
+              </button>`;
+            }).join('')}
+          {% endif %}
         {% endif %}
       </div>
       <div class="rx-img-zoom-wrap" style="border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg);">
-        ${renderAssetImgTag(activeHeroImg, 'Main View', 'width: 100%; height: 540px; object-fit: cover; display: block;', 'rx-left-gallery-main')}
+        {% assign main_left_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
+        {% if main_left_media %}
+          {{ main_left_media | image_url: width: 1200 | image_tag: class: 'rx-left-gallery-main', id: 'rx-left-gallery-main', alt: 'Main View', style: 'width: 100%; height: 540px; object-fit: cover; display: block;' }}
+        {% else %}
+          ${renderAssetImgTag(activeHeroImg, 'Main View', 'width: 100%; height: 540px; object-fit: cover; display: block;', 'rx-left-gallery-main')}
+        {% endif %}
       </div>
     </div>
   </div>
@@ -296,22 +341,42 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       <p style="color: var(--rx-muted); font-size: var(--rx-font-base);">Explore the craftsmanship and design details</p>
     </div>
     <div class="gallery-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.75rem;">
-      {% if section.blocks.size > 0 %}
-        {% for block in section.blocks %}
-          {% if block.settings.image_url != blank %}
+      {% assign gallery_media_rendered = 0 %}
+      {% if product.media.size > 0 %}
+        {% for media in product.media %}
+          {% if media.media_type == 'image' %}
+            {% assign gallery_media_rendered = gallery_media_rendered | plus: 1 %}
             <div class="rx-card rx-img-zoom-wrap" style="padding: 0; aspect-ratio: 1/1;">
-              <img src="{{ block.settings.image_url | asset_url }}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
+              {{ media | image_url: width: 1200 | image_tag: alt: product.title, style: 'width: 100%; height: 100%; object-fit: cover; display: block;', loading: 'lazy' }}
             </div>
           {% endif %}
         {% endfor %}
-      {% else %}
-        ${galleryList.map((img) => {
-          const assetStr = img.exportedAssetName || img.normalizedUrl;
-          return `
+      {% elsif product.images.size > 0 %}
+        {% for image in product.images %}
+          {% assign gallery_media_rendered = gallery_media_rendered | plus: 1 %}
           <div class="rx-card rx-img-zoom-wrap" style="padding: 0; aspect-ratio: 1/1;">
-            ${renderAssetImgTag(assetStr, prod.cleanName, 'width: 100%; height: 100%; object-fit: cover; display: block;')}
-          </div>`;
-        }).join('')}
+            {{ image | image_url: width: 1200 | image_tag: alt: product.title, style: 'width: 100%; height: 100%; object-fit: cover; display: block;', loading: 'lazy' }}
+          </div>
+        {% endfor %}
+      {% endif %}
+      {% if gallery_media_rendered == 0 %}
+        {% if section.blocks.size > 0 %}
+          {% for block in section.blocks %}
+            {% if block.settings.image_url != blank %}
+              <div class="rx-card rx-img-zoom-wrap" style="padding: 0; aspect-ratio: 1/1;">
+                <img src="{{ block.settings.image_url | asset_url }}" alt="${esc(prod.cleanName)}" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy" />
+              </div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          ${galleryList.map((img) => {
+            const assetStr = img.exportedAssetName || img.normalizedUrl;
+            return `
+            <div class="rx-card rx-img-zoom-wrap" style="padding: 0; aspect-ratio: 1/1;">
+              ${renderAssetImgTag(assetStr, prod.cleanName, 'width: 100%; height: 100%; object-fit: cover; display: block;')}
+            </div>`;
+          }).join('')}
+        {% endif %}
       {% endif %}
     </div>
   </div>
@@ -324,26 +389,53 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   <div class="container">
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 4rem; align-items: start;">
       <div>
-        <div class="rx-img-zoom-wrap" style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--rx-shadow-sm);">
-          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 460px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-main-prod-img')}
-        </div>
+        {% assign main_prod_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
+        {% if main_prod_media %}
+          <div class="rx-img-zoom-wrap" style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--rx-shadow-sm);">
+            {{ main_prod_media | image_url: width: 1200 | image_tag: class: 'rx-main-prod-img', id: 'rx-main-prod-img', alt: product.title, style: 'width: 100%; height: 460px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', loading: 'lazy' }}
+          </div>
+        {% else %}
+          <div class="rx-img-zoom-wrap" style="background: var(--rx-background); border: 1px solid var(--rx-border); border-radius: var(--rx-radius-lg); padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--rx-shadow-sm);">
+            ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 460px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-main-prod-img')}
+          </div>
+        {% endif %}
         <div class="rx-thumbnails-strip rx-thumbs-wrapper" style="display: flex; gap: 0.85rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: thin;">
-          {% if section.blocks.size > 0 %}
-            {% for block in section.blocks %}
-              {% if block.settings.image_url != blank %}
-                <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 76px; height: 76px; overflow: hidden; flex-shrink: 0; background: none;">
-                  <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+          {% assign thumb_main_media_found = false %}
+          {% if product.media.size > 0 %}
+            {% for media in product.media %}
+              {% if media.media_type == 'image' %}
+                {% assign thumb_main_media_found = true %}
+                <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ media | image_url: width: 1200 }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 76px; height: 76px; overflow: hidden; flex-shrink: 0; background: none;">
+                  {{ media | image_url: width: 150 | image_tag: alt: product.title, style: 'width: 100%; height: 100%; object-fit: cover;', loading: 'lazy' }}
                 </button>
               {% endif %}
             {% endfor %}
-          {% else %}
-            ${galleryList.map((img, i) => {
-              const assetStr = img.exportedAssetName || img.normalizedUrl;
-              return `
-              <button type="button" onclick="changeMainProductImg(this, '${resolveAssetUrlExpression(assetStr)}')" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 76px; height: 76px; overflow: hidden; flex-shrink: 0; background: none;">
-                ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
-              </button>`;
-            }).join('')}
+          {% elsif product.images.size > 0 %}
+            {% for image in product.images %}
+              {% assign thumb_main_media_found = true %}
+              <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ image | image_url: width: 1200 }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 76px; height: 76px; overflow: hidden; flex-shrink: 0; background: none;">
+                {{ image | image_url: width: 150 | image_tag: alt: product.title, style: 'width: 100%; height: 100%; object-fit: cover;', loading: 'lazy' }}
+              </button>
+            {% endfor %}
+          {% endif %}
+          {% if thumb_main_media_found == false %}
+            {% if section.blocks.size > 0 %}
+              {% for block in section.blocks %}
+                {% if block.settings.image_url != blank %}
+                  <button type="button" onclick="document.getElementById('rx-main-prod-img').src='{{ block.settings.image_url | asset_url }}'" style="border: 2px solid {% if forloop.first %}var(--rx-primary){% else %}var(--rx-border){% endif %}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 76px; height: 76px; overflow: hidden; flex-shrink: 0; background: none;">
+                    <img src="{{ block.settings.image_url | asset_url }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;" />
+                  </button>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              ${galleryList.map((img, i) => {
+                const assetStr = img.exportedAssetName || img.normalizedUrl;
+                return `
+                <button type="button" onclick="changeMainProductImg(this, '${resolveAssetUrlExpression(assetStr)}')" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; width: 76px; height: 76px; overflow: hidden; flex-shrink: 0; background: none;">
+                  ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
+                </button>`;
+              }).join('')}
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -389,6 +481,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     btn.style.borderColor = 'var(--rx-primary)';
   }
 </script>`;
+
 
   return [
     // 1. rootx-announcement-bar.liquid
@@ -506,7 +599,14 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       <span class="rx-badge-pill" style="margin-bottom: 1rem;">CRAFTSMANSHIP & DESIGN</span>
       <h2 style="font-size: var(--rx-font-3xl); font-family: var(--rx-heading-font); color: var(--rx-text); margin: 0 0 1rem;">${esc(prod.cleanName)}</h2>
       <p style="color: var(--rx-muted); font-size: var(--rx-font-lg); line-height: var(--rx-lh-relaxed); margin: 0 auto 2rem;">${esc(prod.shortDescription)}</p>
-      ${showcaseImgAsset ? `<div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">${renderAssetImgTag(showcaseImgAsset, prod.cleanName, 'width: 100%; height: 380px; object-fit: cover; display: block;')}</div>` : ''}
+      {% assign showcase_media = product.images[2] | default: product.images[1] | default: product.featured_image | default: product.media[0] %}
+      {% if showcase_media %}
+        <div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">
+          {{ showcase_media | image_url: width: 1200 | image_tag: alt: product.title, style: 'width: 100%; height: 380px; object-fit: cover; display: block;', loading: 'lazy' }}
+        </div>
+      {% elsif showcaseImgAsset != blank %}
+        <div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">${renderAssetImgTag(showcaseImgAsset, prod.cleanName, 'width: 100%; height: 380px; object-fit: cover; display: block;')}</div>
+      {% endif %}
       <form action="/cart/add" method="post">
         <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
         <button type="submit" class="btn btn-primary" style="padding: 0 3rem; height: 54px; font-size: 1.05rem;">Get Yours Today — $${esc(prod.price)} &rarr;</button>
@@ -565,7 +665,16 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         </div>
       </div>
       <div>
-        ${storyImgAsset ? `<div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">${renderAssetImgTag(storyImgAsset, 'Story', 'width: 100%; height: 440px; object-fit: cover; display: block;')}</div>` : ''}
+        {% assign story_media = product.images[1] | default: product.featured_image | default: product.media[0] %}
+        {% if story_media %}
+          <div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">
+            {{ story_media | image_url: width: 1200 | image_tag: alt: 'Story', style: 'width: 100%; height: 440px; object-fit: cover; display: block;', loading: 'lazy' }}
+          </div>
+        {% elsif storyImgAsset != blank %}
+          <div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">
+            ${renderAssetImgTag(storyImgAsset, 'Story', 'width: 100%; height: 440px; object-fit: cover; display: block;')}
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -577,6 +686,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 }
 {% endschema %}`,
     },
+
 
     // 9. rootx-specifications.liquid
     {

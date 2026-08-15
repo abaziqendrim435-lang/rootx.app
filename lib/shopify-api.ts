@@ -257,3 +257,193 @@ export async function shopifyFetch<T = Record<string, unknown>>(
 
   return (await res.json()) as T;
 }
+
+/**
+ * Execute a GraphQL query or mutation against the Shopify Admin API.
+ */
+export async function shopifyGraphQL<T = Record<string, unknown>>(
+  storeDomain: string,
+  accessToken: string,
+  query: string,
+  variables?: Record<string, unknown>
+): Promise<T> {
+  const url = `https://${storeDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+
+  const headers: Record<string, string> = {
+    'X-Shopify-Access-Token': accessToken,
+    'Content-Type': 'application/json',
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query, variables }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '(no body)');
+    throw new Error(`Shopify GraphQL API returned ${res.status}: ${text}`);
+  }
+
+  const json = await res.json();
+
+  if (json.errors && json.errors.length > 0) {
+    const msg = json.errors.map((e: { message: string }) => e.message).join('; ');
+    throw new Error(`Shopify GraphQL errors: ${msg}`);
+  }
+
+  return json.data as T;
+}
+
+export interface ShopifyMediaNode {
+  id: string;
+  mediaContentType: string;
+  image?: {
+    id: string;
+    url: string;
+    altText?: string | null;
+  };
+}
+
+export interface ShopifyProductMediaResult {
+  productId: string;
+  mediaCreatedCount: number;
+  productImagesCount: number;
+  mediaNodes: ShopifyMediaNode[];
+}
+
+/**
+ * Uploads all valid product image URLs to Shopify Product Media using GraphQL `productCreateMedia`
+ * or `productUpdate`, then queries the product again to verify shopifyProduct.media.nodes.length > 1
+ * and records every MediaImage ID / CDN URL.
+ */
+export async function syncProductImagesToShopifyMedia(
+  storeDomain: string,
+  accessToken: string,
+  productId: number | string,
+  imageUrls: string[]
+): Promise<ShopifyProductMediaResult> {
+  const gid = String(productId).startsWith('gid://')
+    ? String(productId)
+    : `gid://shopify/Product/${productId}`;
+
+  if (imageUrls && imageUrls.length > 0) {
+    const mediaInput = imageUrls.map((url, idx) => ({
+      originalSource: url,
+      mediaContentType: 'IMAGE',
+      alt: `Product Image ${idx + 1}`,
+    }));
+
+    const createMediaMutation = `
+      mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+        productCreateMedia(productId: $productId, media: $media) {
+          media {
+            id
+            mediaContentType
+            ... on MediaImage {
+              id
+              image {
+                id
+                url
+                altText
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    try {
+      const res = await shopifyGraphQL<{
+        productCreateMedia?: {
+          media?: ShopifyMediaNode[];
+          userErrors?: Array<{ field: string[]; message: string }>;
+        };
+      }>(storeDomain, accessToken, createMediaMutation, {
+        productId: gid,
+        media: mediaInput,
+      });
+
+      if (res?.productCreateMedia?.userErrors && res.productCreateMedia.userErrors.length > 0) {
+        console.warn(
+          '[/api/shopify/media] productCreateMedia userErrors:',
+          res.productCreateMedia.userErrors
+        );
+      }
+    } catch (err) {
+      console.warn('[/api/shopify/media] productCreateMedia GraphQL call failed, trying productUpdate media:', err);
+      const updateMutation = `
+        mutation productUpdate($input: ProductInput!, $media: [CreateMediaInput!]) {
+          productUpdate(input: $input, media: $media) {
+            product {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `;
+      await shopifyGraphQL(storeDomain, accessToken, updateMutation, {
+        input: { id: gid },
+        media: mediaInput,
+      });
+    }
+  }
+
+  // Query product media back via GraphQL to verify nodes and record MediaImage IDs & CDN URLs
+  const queryMedia = `
+    query getProductMedia($id: ID!) {
+      product(id: $id) {
+        id
+        title
+        images(first: 250) {
+          nodes {
+            id
+            url
+            altText
+          }
+        }
+        media(first: 250) {
+          nodes {
+            id
+            mediaContentType
+            ... on MediaImage {
+              id
+              image {
+                id
+                url
+                altText
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const data = await shopifyGraphQL<{
+    product: {
+      id: string;
+      title: string;
+      images?: { nodes: Array<{ id: string; url: string; altText?: string }> };
+      media?: { nodes: ShopifyMediaNode[] };
+    };
+  }>(storeDomain, accessToken, queryMedia, { id: gid });
+
+  const mediaNodes = data.product?.media?.nodes || [];
+  const productImagesCount = data.product?.images?.nodes?.length || 0;
+
+  return {
+    productId: gid,
+    mediaCreatedCount: mediaNodes.length,
+    productImagesCount: productImagesCount || mediaNodes.length,
+    mediaNodes,
+  };
+}
+
