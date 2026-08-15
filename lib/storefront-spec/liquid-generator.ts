@@ -43,6 +43,20 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const showcaseImgAsset = spec.images.featured?.exportedAssetName || spec.images.featured?.normalizedUrl || (galleryList[2] ? (galleryList[2].exportedAssetName || galleryList[2].normalizedUrl) : storyImgAsset);
   const finalCtaImgAsset = spec.images.finalCta?.exportedAssetName || spec.images.finalCta?.normalizedUrl || storyImgAsset;
 
+  // ── DIAGNOSTIC: Log image assignment per section ──────────────────
+  console.log('[Liquid Generator] Image Assignment Diagnostics:', {
+    PRODUCT_IMAGES_COUNT: galleryList.length,
+    UNIQUE_IMAGES_AVAILABLE: new Set(galleryList.map(img => img.exportedAssetName || img.normalizedUrl)).size,
+    HERO_IMAGE: activeHeroImg?.slice(0, 60),
+    STORY_IMAGE: storyImgAsset?.slice(0, 60),
+    SHOWCASE_IMAGE: showcaseImgAsset?.slice(0, 60),
+    FINAL_CTA_IMAGE: finalCtaImgAsset?.slice(0, 60),
+    GALLERY_IMAGE_COUNT: galleryList.length,
+    HERO_STORY_SAME: activeHeroImg === storyImgAsset,
+    HERO_SHOWCASE_SAME: activeHeroImg === showcaseImgAsset,
+    STORY_SHOWCASE_SAME: storyImgAsset === showcaseImgAsset,
+  });
+
   const familyConfig = THEME_FAMILIES[spec.archetype] || THEME_FAMILIES.modern_tech;
   const heroSection = spec.sections.find(s => s.id === ROOTX_SECTION_TYPES.HERO);
   const heroVariant = heroSection?.variant || familyConfig.heroType;
@@ -604,7 +618,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         <div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">
           {{ showcase_media | image_url: width: 1200 | image_tag: alt: product.title, style: 'width: 100%; height: 380px; object-fit: cover; display: block;', loading: 'lazy' }}
         </div>
-      {% elsif showcaseImgAsset != blank %}
+      {% else %}
         <div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">${renderAssetImgTag(showcaseImgAsset, prod.cleanName, 'width: 100%; height: 380px; object-fit: cover; display: block;')}</div>
       {% endif %}
       <form action="/cart/add" method="post">
@@ -670,7 +684,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
           <div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">
             {{ story_media | image_url: width: 1200 | image_tag: alt: 'Story', style: 'width: 100%; height: 440px; object-fit: cover; display: block;', loading: 'lazy' }}
           </div>
-        {% elsif storyImgAsset != blank %}
+        {% else %}
           <div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">
             ${renderAssetImgTag(storyImgAsset, 'Story', 'width: 100%; height: 440px; object-fit: cover; display: block;')}
           </div>

@@ -65,6 +65,24 @@ export function buildStorefrontSpec(
     hasSingleImageFallback: themeAssignments.hasSingleImageFallback,
   };
 
+  // ── DIAGNOSTIC: Trace image assignments at spec construction ──────
+  const heroUrl = images.hero?.normalizedUrl || 'NONE';
+  const storyUrl = images.story?.normalizedUrl || 'NONE';
+  const featuredUrl = images.featured?.normalizedUrl || 'NONE';
+  const ctaUrl = images.finalCta?.normalizedUrl || 'NONE';
+  const uniqueUrls = new Set([heroUrl, storyUrl, featuredUrl, ctaUrl].filter(u => u !== 'NONE'));
+  console.log('[StorefrontSpec Builder] IMAGE ASSIGNMENT DIAGNOSTICS:', {
+    IMAGE_LIBRARY_TOTAL: imageLibrary.allValidImages.length,
+    GALLERY_SIZE: images.gallery.length,
+    PRODUCT_PAGE_GALLERY_SIZE: themeAssignments.productPageGallery?.length || 0,
+    HERO: heroUrl.slice(0, 60),
+    STORY: storyUrl.slice(0, 60),
+    FEATURED: featuredUrl.slice(0, 60),
+    FINAL_CTA: ctaUrl.slice(0, 60),
+    UNIQUE_SECTION_IMAGES: uniqueUrls.size,
+    HAS_SINGLE_FALLBACK: images.hasSingleImageFallback,
+  });
+
   const designTokens = generateDesignTokens(
     archetypeId,
     input.primaryColor,
