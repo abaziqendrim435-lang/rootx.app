@@ -670,13 +670,13 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
         <div class="hero-grid">
           <div class="gallery-container">
             <div class="main-image-box">
-              <img id="main-product-img" src="${mainImage}" alt="${title}" />
+              <img id="main-product-img" src="${mainImage}" alt="${title}" referrerpolicy="no-referrer" />
             </div>
             ${eco.images && eco.images.length > 1 ? `
             <div class="thumbnails">
               ${eco.images.map((img, i) => `
                 <div class="thumbnail ${i === 0 ? 'active' : ''}" onclick="changeMainImage(this, '${img}')">
-                  <img src="${img}" alt="Thumb ${i + 1}" />
+                  <img src="${img}" alt="Thumb ${i + 1}" referrerpolicy="no-referrer" />
                 </div>
               `).join('')}
             </div>
@@ -766,7 +766,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
             <div class="spotlight-row ${i % 2 === 1 ? 'reverse' : ''}">
               ${featImg ? `
               <div class="spotlight-image">
-                <img src="${featImg}" alt="${f.title}" />
+                <img src="${featImg}" alt="${f.title}" referrerpolicy="no-referrer" />
               </div>
               ` : ''}
               <div class="spotlight-text">
@@ -1562,7 +1562,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
       <div class="sticky-bar-content">
         <div class="sticky-product-details">
           <div class="sticky-thumb">
-            <img src="${mainImage}" alt="${title}" />
+            <img src="${mainImage}" alt="${title}" referrerpolicy="no-referrer" />
           </div>
           <div>
             <p class="sticky-title">${title}</p>

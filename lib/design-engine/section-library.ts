@@ -87,14 +87,14 @@ const productHeroVariants: SectionVariantDefinition[] = [
       <div class="hero-split-media">
         <div class="main-img-card" style="background:var(--color-background); border:1px solid var(--color-border); border-radius:var(--radius-large); padding:1.25rem; overflow:hidden; box-shadow:var(--shadow-medium);">
           ${heroUrl 
-            ? `<img id="HeroMainImg" src="${heroUrl}" alt="${esc(profile.cleanProductName)}" loading="lazy" onerror="this.style.display='none';" style="width:100%; height:auto; border-radius:var(--radius-medium); object-fit:cover;" />`
+            ? `<img id="HeroMainImg" src="${heroUrl}" alt="${esc(profile.cleanProductName)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';" style="width:100%; height:auto; border-radius:var(--radius-medium); object-fit:cover;" />`
             : `<div style="padding:4rem 2rem; text-align:center; background:var(--color-surface); border-radius:var(--radius-medium); color:var(--color-muted);">[No Product Photo Available]</div>`
           }
         </div>
         ${
           galleryUrls.length > 1
             ? `<div class="thumb-row" style="display:flex; gap:0.75rem; margin-top:1rem;">
-                ${galleryUrls.slice(0, 5).map((img) => `<img src="${img}" style="width:65px; height:65px; object-fit:cover; border-radius:var(--radius-small); border:1px solid var(--color-border); cursor:pointer;" onclick="document.getElementById('HeroMainImg').src='${img}';" />`).join('')}
+                ${galleryUrls.slice(0, 5).map((img) => `<img src="${img}" referrerpolicy="no-referrer" style="width:65px; height:65px; object-fit:cover; border-radius:var(--radius-small); border:1px solid var(--color-border); cursor:pointer;" onclick="document.getElementById('HeroMainImg').src='${img}';" />`).join('')}
               </div>`
             : ''
         }
@@ -134,7 +134,7 @@ const productHeroVariants: SectionVariantDefinition[] = [
       </form>
     </div>
     <div style="border-radius:var(--radius-large); overflow:hidden; border:1px solid var(--color-border); box-shadow:var(--shadow-large); max-width:960px; margin:0 auto;">
-      ${heroUrl ? `<img src="${heroUrl}" alt="${esc(profile.cleanProductName)}" loading="lazy" style="width:100%; height:auto; display:block; object-fit:cover;" />` : ''}
+      ${heroUrl ? `<img src="${heroUrl}" alt="${esc(profile.cleanProductName)}" loading="lazy" referrerpolicy="no-referrer" style="width:100%; height:auto; display:block; object-fit:cover;" />` : ''}
     </div>
   </div>
 </section>`;
@@ -203,7 +203,7 @@ const productHeroVariants: SectionVariantDefinition[] = [
         </form>
       </div>
       <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-large); padding:1rem; overflow:hidden;">
-        ${heroUrl ? `<img src="${heroUrl}" alt="${esc(profile.cleanProductName)}" loading="lazy" style="width:100%; height:auto; border-radius:var(--radius-medium); object-fit:cover;" />` : ''}
+        ${heroUrl ? `<img src="${heroUrl}" alt="${esc(profile.cleanProductName)}" loading="lazy" referrerpolicy="no-referrer" style="width:100%; height:auto; border-radius:var(--radius-medium); object-fit:cover;" />` : ''}
       </div>
     </div>
   </div>

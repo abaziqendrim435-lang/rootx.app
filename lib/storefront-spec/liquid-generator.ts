@@ -21,7 +21,7 @@ function renderAssetImgTag(assetNameOrUrl: string, alt: string, style: string, i
   if (!assetNameOrUrl) return '';
   const idAttr = id ? `id="${id}" ` : '';
   if (assetNameOrUrl.startsWith('http://') || assetNameOrUrl.startsWith('https://')) {
-    return `<img ${idAttr}src="${assetNameOrUrl}" alt="${esc(alt)}" style="${style}" loading="lazy" />`;
+    return `<img ${idAttr}src="${assetNameOrUrl}" alt="${esc(alt)}" style="${style}" loading="lazy" referrerpolicy="no-referrer" />`;
   }
   return `<img ${idAttr}src="{{ '${assetNameOrUrl}' | asset_url }}" alt="${esc(alt)}" style="${style}" loading="lazy" />`;
 }
