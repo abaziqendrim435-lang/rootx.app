@@ -56,6 +56,11 @@ export function validateImage(url: string, seenUrls: Set<string>, sourceField?: 
     return { isValid: true };
   }
 
+  // Allow internal RootX cached images
+  if (clean.startsWith('/cached-images/') || clean.startsWith('cached-images/')) {
+    return { isValid: true };
+  }
+
   // Unsafe Scheme Check
   const lower = clean.toLowerCase();
   if (

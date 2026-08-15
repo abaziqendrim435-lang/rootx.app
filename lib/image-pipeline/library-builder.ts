@@ -98,6 +98,15 @@ export async function buildCachedProductImageLibrary(
   });
 
   const updatedValidImages = lib.allValidImages.map((img) => {
+    if (img.normalizedUrl.startsWith('/cached-images/') || img.originalUrl?.startsWith('/cached-images/')) {
+      return {
+        ...img,
+        cachedUrl: img.normalizedUrl,
+        publicUrl: img.normalizedUrl,
+        status: 'cached' as const,
+        isValid: true,
+      };
+    }
     const cached = cachedMap.get(img.normalizedUrl) || cachedMap.get(img.originalUrl);
     if (cached) return cached;
     return {

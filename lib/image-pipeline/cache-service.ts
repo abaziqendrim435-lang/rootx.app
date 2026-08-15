@@ -62,6 +62,32 @@ export async function cacheSingleImage(
     let buffer: Buffer;
     let headerMime = 'image/jpeg';
 
+    if (rawUrl.startsWith('/cached-images/') || rawUrl.startsWith('cached-images/')) {
+      const cleanPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+      let byteSize = 800;
+      let mimeType = cleanPath.endsWith('.avif') ? 'image/avif' : cleanPath.endsWith('.webp') ? 'image/webp' : cleanPath.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      if (typeof window === 'undefined') {
+        try {
+          const fsMod = await import('fs/promises');
+          const pathMod = await import('path');
+          const localFilePath = pathMod.join(process.cwd(), 'public', cleanPath.replace(/^\//, ''));
+          const stat = await fsMod.stat(localFilePath);
+          byteSize = stat.size;
+        } catch {
+          // File path registered in memory
+        }
+      }
+      return {
+        ...img,
+        cachedUrl: cleanPath,
+        publicUrl: cleanPath,
+        mimeType,
+        byteSize,
+        status: 'cached',
+        isValid: true,
+      };
+    }
+
     if (rawUrl.startsWith('data:image/')) {
       const parts = rawUrl.split(';base64,');
       if (parts.length !== 2) throw new Error('Invalid base64 data URI format');
