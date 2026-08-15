@@ -86,7 +86,12 @@ export function reassignImagesForTheme(
     };
   }
 
-  // 1. Select Hero Image (from AI index/ID if available, else theme heuristic)
+  // 1. Deduplicate valid candidates by unique ID & URL
+  const uniqueValid = valid.filter((img, idx, arr) => 
+    arr.findIndex((x) => x.id === img.id || (x.normalizedUrl && x.normalizedUrl === img.normalizedUrl)) === idx
+  );
+
+  // 2. Select Hero Image (from AI index/ID if available, else first unique image)
   let heroImage: NormalizedImage | null = null;
   if (aiSelections?.heroImageIndex !== undefined || aiSelections?.heroImageId) {
     heroImage = resolveImageFromLibrary(
@@ -98,39 +103,44 @@ export function reassignImagesForTheme(
   }
 
   if (!heroImage) {
-    heroImage = valid[0];
-    if (archetypeId === 'soft_beauty' || archetypeId === 'clean_wellness') {
-      const lifestyle = imageLibrary.lifestyleCandidates.find((img) => img.id !== heroImage?.id);
-      if (lifestyle) heroImage = lifestyle;
-    } else if (archetypeId === 'premium_jewelry') {
-      const detail = imageLibrary.detailCandidates.find((img) => img.id !== heroImage?.id);
-      if (detail) heroImage = detail;
-    }
+    heroImage = uniqueValid[0] || null;
   }
 
-  // 2. Select Story, Featured, & Final CTA Images (Ensure every visual section gets an image from ProductImageLibrary)
-  const availableForStory = valid.filter((img) => img.id !== heroImage?.id);
+  // 3. Deterministically allocate Story Image (Must be DIFFERENT from Hero if uniqueValid.length > 1)
+  let storyImage: NormalizedImage | null = null;
+  if (aiSelections?.storyImageIndex !== undefined && aiSelections.storyImageIndex > 0 && uniqueValid[aiSelections.storyImageIndex]) {
+    const candidate = uniqueValid[aiSelections.storyImageIndex];
+    if (candidate.id !== heroImage?.id) {
+      storyImage = candidate;
+    }
+  }
+  if (!storyImage) {
+    storyImage = uniqueValid.length > 1 ? (uniqueValid.find(img => img.id !== heroImage?.id) || uniqueValid[1]) : heroImage;
+  }
 
-  const storyImage = resolveImageFromLibrary(
-    imageLibrary,
-    aiSelections?.storyImageIndex ?? aiSelections?.storyImageId,
-    availableForStory.length > 0 ? valid.indexOf(availableForStory[0]) : 0,
-    rejectedExternalUrls
-  ) || valid[1] || heroImage;
+  // 4. Deterministically allocate Featured / Showcase Image (Must be DIFFERENT from Hero & Story if uniqueValid.length > 2)
+  let featuredImage: NormalizedImage | null = null;
+  if (aiSelections?.featuredImageIndex !== undefined && uniqueValid[aiSelections.featuredImageIndex]) {
+    const candidate = uniqueValid[aiSelections.featuredImageIndex];
+    if (candidate.id !== heroImage?.id && candidate.id !== storyImage?.id) {
+      featuredImage = candidate;
+    }
+  }
+  if (!featuredImage) {
+    featuredImage = uniqueValid.length > 2 ? (uniqueValid.find(img => img.id !== heroImage?.id && img.id !== storyImage?.id) || uniqueValid[2]) : (uniqueValid.length > 1 ? storyImage : heroImage);
+  }
 
-  const featuredImage = resolveImageFromLibrary(
-    imageLibrary,
-    aiSelections?.featuredImageIndex ?? aiSelections?.featuredImageId,
-    availableForStory.length > 1 ? valid.indexOf(availableForStory[1]) : 0,
-    rejectedExternalUrls
-  ) || valid[2] || storyImage || heroImage;
-
-  const finalCtaImage = resolveImageFromLibrary(
-    imageLibrary,
-    aiSelections?.finalCtaImageIndex ?? aiSelections?.finalCtaImageId,
-    availableForStory.length > 2 ? valid.indexOf(availableForStory[availableForStory.length - 1]) : 0,
-    rejectedExternalUrls
-  ) || valid[3] || storyImage || heroImage;
+  // 5. Deterministically allocate Final CTA Image (Must be DIFFERENT if uniqueValid.length > 3)
+  let finalCtaImage: NormalizedImage | null = null;
+  if (aiSelections?.finalCtaImageIndex !== undefined && uniqueValid[aiSelections.finalCtaImageIndex]) {
+    const candidate = uniqueValid[aiSelections.finalCtaImageIndex];
+    if (candidate.id !== heroImage?.id && candidate.id !== storyImage?.id && candidate.id !== featuredImage?.id) {
+      finalCtaImage = candidate;
+    }
+  }
+  if (!finalCtaImage) {
+    finalCtaImage = uniqueValid.length > 3 ? (uniqueValid.find(img => img.id !== heroImage?.id && img.id !== storyImage?.id && img.id !== featuredImage?.id) || uniqueValid[3]) : storyImage;
+  }
 
   // 3. Product Page & Storefront Gallery (Render ALL valid ProductImageLibrary images dynamically)
   let galleryImages: NormalizedImage[] = [];

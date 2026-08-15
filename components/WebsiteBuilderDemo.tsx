@@ -761,7 +761,7 @@ function generateEcommerceHtml(result: WebsiteGeneration, input: WebsiteBuilderI
         
         <div class="feature-showcase">
           ${eco.featureSections.map((f, i) => {
-            const featImg = f.imageUrl || (allImages.length > i + 1 ? allImages[i + 1] : '');
+            const featImg = (f.imageUrl && f.imageUrl !== allImages[0]) ? f.imageUrl : (allImages.length > i + 1 ? allImages[i + 1] : (allImages[i % allImages.length] || ''));
             return `
             <div class="spotlight-row ${i % 2 === 1 ? 'reverse' : ''}">
               ${featImg ? `

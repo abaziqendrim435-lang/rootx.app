@@ -164,12 +164,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     
     <div style="position: relative;">
       <div class="rx-glass-card rx-img-zoom-wrap" style="padding: 1.25rem; background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(59, 130, 246, 0.2); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-        {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
-        {% if hero_media %}
-          {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 460px; object-fit: cover; border-radius: var(--rx-radius-md); display: block;', loading: 'lazy' }}
-        {% else %}
-          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 460px; object-fit: cover; border-radius: var(--rx-radius-md); display: block;', 'rx-hero-img')}
-        {% endif %}
+        ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 460px; object-fit: cover; border-radius: var(--rx-radius-md); display: block;', 'rx-hero-img')}
       </div>
       <div class="rx-floating-card" style="bottom: 20px; left: -20px; background: #1f2937; border-color: #374151; color: #fff;">
         <span style="font-size: 1.5rem;">★</span>
@@ -204,12 +199,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     
     <div style="position: relative;">
       <div class="rx-img-zoom-wrap" style="border-radius: 240px 240px 30px 30px; box-shadow: var(--rx-shadow-lg); border: 4px solid #ffffff;">
-        {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
-        {% if hero_media %}
-          {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 520px; object-fit: cover; display: block;', loading: 'lazy' }}
-        {% else %}
-          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 520px; object-fit: cover; display: block;', 'rx-hero-img')}
-        {% endif %}
+        ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 520px; object-fit: cover; display: block;', 'rx-hero-img')}
       </div>
     </div>
   </div>
@@ -223,12 +213,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <p style="font-size: var(--rx-font-lg); color: var(--rx-muted); max-width: 650px; margin: 0 auto 3rem; line-height: var(--rx-lh-relaxed);">${esc(content.heroSubheadline)}</p>
     
     <div class="rx-img-zoom-wrap" style="margin: 0 auto 3.5rem; max-width: 800px; border-radius: var(--rx-radius-sm); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">
-      {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
-      {% if hero_media %}
-        {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 480px; object-fit: cover; display: block;', loading: 'lazy' }}
-      {% else %}
-        ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 480px; object-fit: cover; display: block;', 'rx-hero-img')}
-      {% endif %}
+      ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 480px; object-fit: cover; display: block;', 'rx-hero-img')}
     </div>
     
     <form action="/cart/add" method="post">
@@ -267,12 +252,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       
       <div style="position: relative;">
         <div class="rx-card rx-img-zoom-wrap" style="padding: 1.25rem; background: var(--rx-background);">
-          {% assign hero_media = product.featured_image | default: product.media[0] | default: product.images[0] %}
-          {% if hero_media %}
-            {{ hero_media | image_url: width: 1200 | image_tag: class: 'rx-hero-img', id: 'rx-hero-img', alt: product.title, style: 'width: 100%; height: 440px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', loading: 'lazy' }}
-          {% else %}
-            ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 440px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-hero-img')}
-          {% endif %}
+          ${renderAssetImgTag(activeHeroImg, prod.cleanName, 'width: 100%; height: 440px; border-radius: var(--rx-radius-md); object-fit: cover; display: block;', 'rx-hero-img')}
         </div>
         <div class="rx-floating-card" style="top: 20px; right: -15px;">
           <span style="font-size: 1.4rem;">🚚</span>

@@ -22,11 +22,11 @@ export default function DesignPreviewPanel({ result }: Props) {
   const pipelineImages = imgPipeline?.images || [];
   const allImages = (specImages.length > 0 ? specImages : pipelineImages).map((i) => resolveRenderableImage(i)).filter(Boolean);
 
-  const rawHeroUrl = resolveRenderableImage(imgPipeline?.heroImage) || allImages[0] || '';
+  const rawHeroUrl = resolveRenderableImage(result.spec?.images?.hero) || resolveRenderableImage(imgPipeline?.heroImage) || allImages[0] || '';
   const heroUrl = (rawHeroUrl.includes('youtube.com') || rawHeroUrl.includes('youtu.be') || rawHeroUrl.includes('instagram.com') || rawHeroUrl.includes('facebook.com'))
     ? (allImages.find((u) => !u.includes('youtube.com') && !u.includes('instagram.com')) || '')
     : rawHeroUrl;
-  const validImagesCount = allImages.length || imgPipeline?.images?.length || 0;
+  const validImagesCount = allImages.length || result.spec?.imageLibrary?.allValidImages?.length || imgPipeline?.images?.length || 0;
   const totalExtractedCount = imgPipeline?.diagnosticInfo?.totalExtracted || 0;
 
   // Render liquid section templates into clean, fully-evaluated preview HTML body

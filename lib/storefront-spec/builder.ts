@@ -144,7 +144,7 @@ export function buildStorefrontSpec(
     const heroImageResolved = resolveRenderableImage(images.hero) || resolveRenderableImage(galleryList[0]);
     const storyImageResolved = resolveRenderableImage(images.story) || resolveRenderableImage(galleryList[1] || galleryList[0]);
     const showcaseImageResolved = resolveRenderableImage(images.featured) || resolveRenderableImage(galleryList[2] || galleryList[1] || galleryList[0]);
-    const finalCtaImageResolved = resolveRenderableImage(images.finalCta) || storyImageResolved;
+    const finalCtaImageResolved = resolveRenderableImage(images.finalCta) || resolveRenderableImage(galleryList[3] || galleryList[2] || galleryList[0]);
 
     const sectionImageMap: Record<string, string> = {
       'rootx-hero': heroImageResolved,
