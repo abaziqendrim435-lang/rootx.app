@@ -42,7 +42,19 @@ export function buildStorefrontSpec(
 
   // 4. Image Pipeline with Persistent Product Image Library
   const imageLibrary = existingImageLibrary || createProductImageLibrary(gen);
-  const themeAssignments = reassignImagesForTheme(imageLibrary, archetypeId);
+  const rawSelections = (gen.ecommerce as any)?.aiImageSelections || (gen as any)?.aiImageSelections || (gen as any)?.imageSelections;
+  const aiSelections = {
+    heroImageIndex: rawSelections?.heroImageIndex ?? (gen.ecommerce as any)?.heroImageIndex ?? (gen as any)?.heroImageIndex,
+    heroImageId: rawSelections?.heroImageId ?? (gen.ecommerce as any)?.heroImageId ?? (gen as any)?.heroImageId,
+    storyImageIndex: rawSelections?.storyImageIndex ?? (gen.ecommerce as any)?.storyImageIndex ?? (gen as any)?.storyImageIndex,
+    storyImageId: rawSelections?.storyImageId ?? (gen.ecommerce as any)?.storyImageId ?? (gen as any)?.storyImageId,
+    featuredImageIndex: rawSelections?.featuredImageIndex ?? (gen.ecommerce as any)?.featuredImageIndex ?? (gen as any)?.featuredImageIndex,
+    featuredImageId: rawSelections?.featuredImageId ?? (gen.ecommerce as any)?.featuredImageId ?? (gen as any)?.featuredImageId,
+    galleryImageIndexes: rawSelections?.galleryImageIndexes ?? (gen.ecommerce as any)?.galleryImageIndexes ?? (gen as any)?.galleryImageIndexes,
+    finalCtaImageIndex: rawSelections?.finalCtaImageIndex ?? (gen.ecommerce as any)?.finalCtaImageIndex ?? (gen as any)?.finalCtaImageIndex,
+  };
+
+  const themeAssignments = reassignImagesForTheme(imageLibrary, archetypeId, aiSelections);
 
   const images: StorefrontImageAssignments = {
     hero: themeAssignments.hero,

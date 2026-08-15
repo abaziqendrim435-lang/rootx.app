@@ -3,22 +3,11 @@
 import React, { useState } from 'react';
 import type { DesignEngineResult } from '@/lib/website-builder-types';
 import { resolveRenderableImage } from '@/lib/image-pipeline';
+import { renderLiquidForPreview } from '@/lib/storefront-spec/liquid-preview-processor';
 import { Monitor, Smartphone, Layers, Palette, Type, Image as ImageIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   result: DesignEngineResult;
-}
-
-function stripLiquidDirectives(liquidStr: string): string {
-  if (!liquidStr) return '';
-  return liquidStr
-    .replace(/{%\s*schema\s*%}[\s\S]*?{%\s*endschema\s*%}/gi, '')
-    .replace(/{%\s*if[\s\S]*?{%\s*endif\s*%}/gi, '')
-    .replace(/{%\s*[\s\S]*?%\s*}/g, '')
-    .replace(/\{\{\s*section\.settings\.headline\s*\}\}/g, 'Premium Collection')
-    .replace(/\{\{\s*section\.settings\.subheadline\s*\}\}/g, 'Engineered for exceptional daily performance.')
-    .replace(/\{\{\s*section\.settings\.cta_url\s*\}\}/g, '#')
-    .replace(/\{\{\s*[\s\S]*?\s*\}\}/g, '');
 }
 
 export default function DesignPreviewPanel({ result }: Props) {
@@ -27,14 +16,29 @@ export default function DesignPreviewPanel({ result }: Props) {
   const themeCss = result.files.find((f) => f.key === 'assets/theme.css')?.value || '';
   const sectionFiles = result.files.filter((f) => f.key.startsWith('sections/'));
 
-  // Hero image resolution
+  // Collect all assigned product images for preview evaluation
   const imgPipeline = result.imagePipelineResult;
-  const heroUrl = resolveRenderableImage(imgPipeline?.heroImage) || resolveRenderableImage(imgPipeline?.images?.[0]) || '';
-  const validImagesCount = imgPipeline?.images?.length || 0;
+  const specImages = result.spec?.images?.library || result.spec?.images?.gallery || [];
+  const pipelineImages = imgPipeline?.images || [];
+  const allImages = (specImages.length > 0 ? specImages : pipelineImages).map((i) => resolveRenderableImage(i)).filter(Boolean);
+
+  const rawHeroUrl = resolveRenderableImage(imgPipeline?.heroImage) || allImages[0] || '';
+  const heroUrl = (rawHeroUrl.includes('youtube.com') || rawHeroUrl.includes('youtu.be') || rawHeroUrl.includes('instagram.com') || rawHeroUrl.includes('facebook.com'))
+    ? (allImages.find((u) => !u.includes('youtube.com') && !u.includes('instagram.com')) || '')
+    : rawHeroUrl;
+  const validImagesCount = allImages.length || imgPipeline?.images?.length || 0;
   const totalExtractedCount = imgPipeline?.diagnosticInfo?.totalExtracted || 0;
 
-  // Render liquid section templates into clean HTML body
-  const renderedSectionsHtml = sectionFiles.map((sf) => stripLiquidDirectives(sf.value)).join('\n');
+  // Render liquid section templates into clean, fully-evaluated preview HTML body
+  const renderedSectionsHtml = sectionFiles
+    .map((sf) =>
+      renderLiquidForPreview(sf.value, {
+        images: allImages,
+        heroImage: heroUrl,
+        brandName: result.brandName,
+      })
+    )
+    .join('\n');
 
   // Generate full interactive preview HTML document
   const previewHtml = `<!doctype html>

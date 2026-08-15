@@ -61,5 +61,24 @@ export function sanitizePlaceholders(gen: WebsiteGeneration, brandName: string =
     cleanGen.about.content = cleanGen.about.content?.replace(/talk about your brand/gi, `${brandName} was established to bring premium quality and accessible innovation to customers worldwide.`);
   }
 
+  // 5. Sanitize Image Fields — purge any forbidden external URLs (e.g. youtube.com, instagram.com, facebook.com)
+  const isForbidden = (url: unknown): boolean => {
+    if (!url || typeof url !== 'string') return false;
+    const lower = url.toLowerCase();
+    return lower.includes('youtube.com') || lower.includes('youtu.be') || lower.includes('instagram.com') || lower.includes('facebook.com') || lower.includes('fbcdn.net') || lower.includes('tiktok.com');
+  };
+
+  if (cleanGen.ecommerce) {
+    if (Array.isArray(cleanGen.ecommerce.images)) {
+      cleanGen.ecommerce.images = cleanGen.ecommerce.images.filter((img) => !isForbidden(img));
+    }
+    if (Array.isArray(cleanGen.ecommerce.featureSections)) {
+      cleanGen.ecommerce.featureSections = cleanGen.ecommerce.featureSections.map((sec) => ({
+        ...sec,
+        imageUrl: isForbidden((sec as any).imageUrl) ? '' : (sec as any).imageUrl,
+      }));
+    }
+  }
+
   return cleanGen;
 }

@@ -66,8 +66,20 @@ Secondary Color: ${input.secondaryColor}
 Language: ${input.language || 'English'}
 Country: ${input.country || 'US'}
 
-Available Product Images (Use these EXACT URLs for image inputs):
-${imageUrlList.map((url, i) => `[Image ${i + 1}] ${url}`).join('\n')}
+ProductImageLibrary Available Image Indexes:
+${imageUrlList.map((_, i) => `[Image Index ${i} / ID: product-image-${i}]`).join('\n')}
+
+CRITICAL RULE FOR IMAGES:
+AI must NEVER generate, invent, search for, or return image URLs.
+AI must return 0-based integer indexes selected exclusively from the ProductImageLibrary above.
+Return selected image indexes under "aiImageSelections" inside the "ecommerce" block using this exact structure:
+"aiImageSelections": {
+  "heroImageIndex": 0,
+  "storyImageIndex": 1,
+  "featuredImageIndex": 1,
+  "galleryImageIndexes": [0, 1, 2, 3],
+  "finalCtaImageIndex": 2
+}
 
 You MUST respond with a JSON object using exactly this structure:
 {
@@ -203,19 +215,25 @@ You MUST respond with a JSON object using exactly this structure:
       { "name": "Color", "values": ["Black", "Silver"] },
       { "name": "Size", "values": ["Default"] }
     ],
-    "images": ["Include all exact URLs from the Available Product Images list above in their original order"],
+    "aiImageSelections": {
+      "heroImageIndex": 0,
+      "storyImageIndex": 1,
+      "featuredImageIndex": 1,
+      "galleryImageIndexes": [0, 1, 2, 3],
+      "finalCtaImageIndex": 2
+    },
     "trustBadges": ["30-Day Money-Back Guarantee", "100% Secure Checkout", "Worldwide Tracked Shipping", "Premium Product Guarantee"],
     "shippingText": "Dispatched in 24-48 hours. Estimated delivery: 7-12 business days with full online tracking.",
     "featureSections": [
       {
         "title": "A headline spotlighting a key product benefit",
         "description": "3-4 sentences of persuasive product copywriting centered around this benefit.",
-        "imageUrl": "Use one exact URL from the Available Product Images list above"
+        "imageIndex": 0
       },
       {
         "title": "Another benefit-driven feature spotlight",
         "description": "3-4 sentences explaining another crucial use case or technical advantage.",
-        "imageUrl": "Use a different exact URL from the Available Product Images list above"
+        "imageIndex": 1
       }
     ],
     "specifications": [
@@ -659,18 +677,25 @@ function getMockDropshippingResponse(analysis: ProductAnalysis, input: Dropshipp
         { name: 'Size', values: ['Default'] }
       ],
       images: productImages,
+      aiImageSelections: {
+        heroImageIndex: 0,
+        storyImageIndex: 1,
+        featuredImageIndex: 1,
+        galleryImageIndexes: [0, 1],
+        finalCtaImageIndex: 0,
+      },
       trustBadges: ['30-Day Money-Back Guarantee', '100% Secure Checkout', 'Worldwide Tracked Shipping', 'Premium Product Guarantee'],
       shippingText: `Dispatched in 24-48 hours. ${shippingInfo}.`,
       featureSections: [
         {
           title: `Why the ${product} is a Game Changer`,
           description: `Engineered for performance and built using state-of-the-art technology, the ${product} solves your daily challenges effortlessly. Experience unparalleled quality that visually stands out and keeps performing day in and day out.`,
-          imageUrl: productImages[0] || ''
+          imageIndex: 0
         },
         {
           title: 'Premium Materials, Built for Durability',
           description: `Featuring a sleek design combined with rugged construction, the ${product} is made from premium zinc alloy materials designed to withstand everyday drops and wear. Take it anywhere knowing your data and hardware is secure.`,
-          imageUrl: productImages[1] || productImages[0] || ''
+          imageIndex: 1
         }
       ],
       specifications: analysis.specifications.length > 0 ? analysis.specifications : [

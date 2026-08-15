@@ -64,6 +64,18 @@ export interface ProductImageLibrary {
   failedImageCount?: number;
 }
 
+export interface AIImageSelections {
+  heroImageIndex?: number;
+  heroImageId?: string;
+  storyImageIndex?: number;
+  storyImageId?: string;
+  featuredImageIndex?: number;
+  featuredImageId?: string;
+  galleryImageIndexes?: number[];
+  finalCtaImageIndex?: number;
+  finalCtaImageId?: string;
+}
+
 export interface ThemeImageAssignments {
   hero: NormalizedImage | null;
   featured: NormalizedImage | null;
@@ -72,6 +84,9 @@ export interface ThemeImageAssignments {
   finalCta: NormalizedImage | null;
   productPageGallery: NormalizedImage[];
   hasSingleImageFallback: boolean;
+  aiSelections?: AIImageSelections;
+  externalUrlsRejectedCount?: number;
+  rejectedExternalUrls?: string[];
 }
 
 export interface ImagePipelineResult {
@@ -87,3 +102,4 @@ export interface ImagePipelineResult {
   diagnosticInfo: DiagnosticInfo;
   imageLibrary?: ProductImageLibrary;
 }
+

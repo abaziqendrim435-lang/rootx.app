@@ -25,9 +25,10 @@ const FORBIDDEN_EXTENSIONS = [
 ];
 
 const SOCIAL_AND_UNRELATED_DOMAINS = [
-  'instagram.com', 'cdninstagram.com', 'fbcdn.net', 'facebook.com',
-  'twitter.com', 'twimg.com', 'pinterest.com', 'tiktok.com',
-  'linkedin.com', 'licdn.com'
+  'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'm.youtube.com',
+  'instagram.com', 'cdninstagram.com', 'fbcdn.net', 'facebook.com', 'fb.com',
+  'twitter.com', 'twimg.com', 't.co', 'x.com', 'pinterest.com', 'tiktok.com',
+  'linkedin.com', 'licdn.com', 'vimeo.com', 'dailymotion.com'
 ];
 
 const TRACKING_OR_PLACEHOLDER_KEYWORDS = [
@@ -119,3 +120,38 @@ export function validateImage(url: string, seenUrls: Set<string>, sourceField?: 
 
   return { isValid: true };
 }
+
+/**
+ * Checks if a given URL string is explicitly forbidden (e.g. YouTube, Instagram, Facebook) or invalid.
+ */
+export function isForbiddenOrExternalUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return true;
+  const lower = url.trim().toLowerCase();
+
+  for (const dom of SOCIAL_AND_UNRELATED_DOMAINS) {
+    if (lower.includes(dom)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Validates whether a candidate image URL is present inside the given ProductImageLibrary.
+ */
+export function isAllowedProductLibraryImage(
+  url: string,
+  imageLibrary?: { allValidImages?: Array<{ originalUrl?: string; normalizedUrl?: string; cachedUrl?: string; publicUrl?: string; id?: string }> }
+): boolean {
+  if (!url || isForbiddenOrExternalUrl(url)) return false;
+  if (!imageLibrary?.allValidImages || imageLibrary.allValidImages.length === 0) return false;
+
+  const clean = url.trim();
+  return imageLibrary.allValidImages.some((img) =>
+    img.id === clean ||
+    img.originalUrl === clean ||
+    img.normalizedUrl === clean ||
+    img.cachedUrl === clean ||
+    img.publicUrl === clean
+  );
+}
+
