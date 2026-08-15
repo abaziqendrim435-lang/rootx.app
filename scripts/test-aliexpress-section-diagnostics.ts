@@ -40,8 +40,8 @@ async function runDiagnostics() {
   console.log(`ProductImageLibrary count: ${imageLibrary.allValidImages.length}`);
 
   const spec = buildStorefrontSpec(
-    { preferredStyle: 'modern_tech', primaryColor: '#3b82f6', secondaryColor: '#1e40af' },
     mockAliExpressGeneration as any,
+    { preferredStyle: 'modern_tech', primaryColor: '#3b82f6', secondaryColor: '#1e40af' } as any,
     imageLibrary
   );
 
@@ -115,8 +115,8 @@ async function runDiagnostics() {
   };
   const base64Lib = createProductImageLibrary(base64AliExpressGen as any);
   const base64Spec = buildStorefrontSpec(
-    { preferredStyle: 'modern_tech', primaryColor: '#3b82f6', secondaryColor: '#1e40af' },
     base64AliExpressGen as any,
+    { preferredStyle: 'modern_tech', primaryColor: '#3b82f6', secondaryColor: '#1e40af' } as any,
     base64Lib
   );
 

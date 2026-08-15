@@ -53,7 +53,7 @@ async function runTests() {
   console.log('AI image selections:', JSON.stringify(aiSelectionsWithYoutube));
 
   // 5. Reassign images for theme
-  const themeAssignments = reassignImagesForTheme(library, 'modern_commerce', aiSelectionsWithYoutube);
+  const themeAssignments = reassignImagesForTheme(library, 'modern_tech', aiSelectionsWithYoutube);
 
   const resolvedHero = resolveRenderableImage(themeAssignments.hero);
   const resolvedGallery = themeAssignments.gallery.map((img) => resolveRenderableImage(img));
@@ -95,13 +95,13 @@ async function runTests() {
   const mockInput = {
     businessName: 'DriveTech',
     businessType: 'Electronics',
-    preferredStyle: 'modern_commerce',
+    preferredStyle: 'modern_tech',
   } as any;
 
   const spec = buildStorefrontSpec(mockGen, mockInput, library);
 
   const heroSection = spec.sections.find((s) => s.id === 'rootx-hero');
-  const heroSectionImage = heroSection?.settings?.hero_image || '';
+  const heroSectionImage = String(heroSection?.settings?.hero_image || '');
   console.log(`StorefrontSpec rootx-hero image setting: ${heroSectionImage}`);
 
   assert(!heroSectionImage.includes('youtube.com'), 'StorefrontSpec hero image must not be youtube.com');

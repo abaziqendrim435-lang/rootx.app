@@ -8,6 +8,9 @@
 export interface LiquidPreviewOptions {
   images?: string[];
   heroImage?: string;
+  storyImage?: string;
+  featuredImage?: string;
+  finalCtaImage?: string;
   headline?: string;
   subheadline?: string;
   brandName?: string;

@@ -4,9 +4,6 @@
 // for the selected theme family without discarding any valid images.
 // ============================================================
 
-import type { ProductImageLibrary, ThemeImageAssignments, NormalizedImage } from './types';
-import type { DesignArchetypeId } from '../website-builder-types';
-
 import type { ProductImageLibrary, ThemeImageAssignments, NormalizedImage, AIImageSelections } from './types';
 import type { DesignArchetypeId } from '../website-builder-types';
 import { isForbiddenOrExternalUrl } from './validator';

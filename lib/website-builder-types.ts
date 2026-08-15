@@ -209,7 +209,8 @@ export interface EcommerceProductVariant {
 export interface EcommerceFeatureSection {
   title: string;
   description: string;
-  imageUrl: string;
+  imageUrl?: string;
+  imageIndex?: number;
 }
 
 export interface EcommerceReview {
@@ -237,6 +238,7 @@ export interface EcommerceData {
   stickyAddToCartText: string;
   preferredStyle?: PreferredStyle;
   sectionOrder?: string[];
+  aiImageSelections?: import('./image-pipeline/types').AIImageSelections;
 }
 
 // ── Full Generation Response ───────────────────────────────────

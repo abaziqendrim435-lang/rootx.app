@@ -18,7 +18,7 @@ export default function DesignPreviewPanel({ result }: Props) {
 
   // Collect all assigned product images for preview evaluation
   const imgPipeline = result.imagePipelineResult;
-  const specImages = result.spec?.images?.library || result.spec?.images?.gallery || [];
+  const specImages = result.spec?.imageLibrary?.allValidImages || result.spec?.images?.gallery || [];
   const pipelineImages = imgPipeline?.images || [];
   const allImages = (specImages.length > 0 ? specImages : pipelineImages).map((i) => resolveRenderableImage(i)).filter(Boolean);
 
