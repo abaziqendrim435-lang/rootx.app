@@ -10,6 +10,8 @@ import type { StorefrontSpec } from './types';
 import { ROOTX_SECTION_TYPES, getSectionFileName } from './section-registry';
 import { THEME_FAMILIES } from '../design-engine/theme-family-types';
 
+import { resolveRenderableImage } from '../image-pipeline/resolve-image';
+
 function esc(str: string): string {
   if (!str) return '';
   return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -36,12 +38,12 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const brand = spec.brand;
   const prod = spec.product;
   const content = spec.content;
-  const galleryList = spec.images.gallery.filter((img) => Boolean(img.exportedAssetName || img.normalizedUrl));
-  const heroImgAsset = spec.images.hero?.exportedAssetName || spec.images.hero?.normalizedUrl || (galleryList[0] ? (galleryList[0].exportedAssetName || galleryList[0].normalizedUrl) : '');
-  const activeHeroImg = heroImgAsset || (galleryList[0] ? (galleryList[0].exportedAssetName || galleryList[0].normalizedUrl) : '');
-  const storyImgAsset = spec.images.story?.exportedAssetName || spec.images.story?.normalizedUrl || (galleryList[1] ? (galleryList[1].exportedAssetName || galleryList[1].normalizedUrl) : activeHeroImg);
-  const showcaseImgAsset = spec.images.featured?.exportedAssetName || spec.images.featured?.normalizedUrl || (galleryList[2] ? (galleryList[2].exportedAssetName || galleryList[2].normalizedUrl) : storyImgAsset);
-  const finalCtaImgAsset = spec.images.finalCta?.exportedAssetName || spec.images.finalCta?.normalizedUrl || storyImgAsset;
+  const galleryList = spec.images.gallery.filter((img) => Boolean(resolveRenderableImage(img)));
+  const heroImgAsset = resolveRenderableImage(spec.images.hero) || resolveRenderableImage(galleryList[0]);
+  const activeHeroImg = heroImgAsset || resolveRenderableImage(galleryList[0]);
+  const storyImgAsset = resolveRenderableImage(spec.images.story) || resolveRenderableImage(galleryList[1] || galleryList[0]);
+  const showcaseImgAsset = resolveRenderableImage(spec.images.featured) || resolveRenderableImage(galleryList[2] || galleryList[1] || galleryList[0]);
+  const finalCtaImgAsset = resolveRenderableImage(spec.images.finalCta) || storyImgAsset;
 
   // ── DIAGNOSTIC: Log image assignment per section ──────────────────
   console.log('[Liquid Generator] Image Assignment Diagnostics:', {

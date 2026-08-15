@@ -19,26 +19,38 @@ export function resolveRenderableImage(
   if (!image) return '';
 
   if (typeof image === 'string') {
-    return image.trim();
+    const trimmed = image.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image/')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/cached-images/') || trimmed.startsWith('cached-images/')) {
+      return ''; // Ignore relative cached paths in favor of public HTTP URLs
+    }
+    return trimmed;
   }
 
-  if (image.publicUrl && image.publicUrl.trim().length > 0) {
+  // 1. Persistent Public HTTP URL (e.g. Supabase Storage CDN)
+  if (image.publicUrl && (image.publicUrl.startsWith('http://') || image.publicUrl.startsWith('https://'))) {
     return image.publicUrl.trim();
   }
 
-  if (image.cachedUrl && image.cachedUrl.trim().length > 0) {
+  // 2. Persistent Cached HTTP URL
+  if (image.cachedUrl && (image.cachedUrl.startsWith('http://') || image.cachedUrl.startsWith('https://'))) {
     return image.cachedUrl.trim();
   }
 
-  if (image.exportedAssetName && image.exportedAssetName.trim().length > 0) {
+  // 3. Local packaged Shopify theme asset name (for ZIP exports e.g. rootx-product-01.jpg)
+  if (image.exportedAssetName && image.exportedAssetName.trim().length > 0 && !image.exportedAssetName.startsWith('/')) {
     return image.exportedAssetName.trim();
   }
 
-  if (image.normalizedUrl && image.normalizedUrl.trim().length > 0) {
+  // 4. Cleaned Supplier CDN URL (e.g. https://ae01.alicdn.com/kf/...)
+  if (image.normalizedUrl && (image.normalizedUrl.startsWith('http://') || image.normalizedUrl.startsWith('https://') || image.normalizedUrl.startsWith('data:image/'))) {
     return image.normalizedUrl.trim();
   }
 
-  if (image.originalUrl && image.originalUrl.trim().length > 0) {
+  // 5. Raw Supplier URL Fallback
+  if (image.originalUrl && (image.originalUrl.startsWith('http://') || image.originalUrl.startsWith('https://') || image.originalUrl.startsWith('data:image/'))) {
     return image.originalUrl.trim();
   }
 
