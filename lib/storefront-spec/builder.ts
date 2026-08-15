@@ -123,11 +123,16 @@ export function buildStorefrontSpec(
       required = true;
     }
 
+    const heroImageResolved = resolveRenderableImage(images.hero) || resolveRenderableImage(galleryList[0]);
+    const storyImageResolved = resolveRenderableImage(images.story) || resolveRenderableImage(galleryList[1] || galleryList[0]);
+    const showcaseImageResolved = resolveRenderableImage(images.featured) || resolveRenderableImage(galleryList[2] || galleryList[1] || galleryList[0]);
+    const finalCtaImageResolved = resolveRenderableImage(images.finalCta) || storyImageResolved;
+
     const sectionImageMap: Record<string, string> = {
-      'rootx-hero': resolveRenderableImage(images.hero),
-      'rootx-image-story': resolveRenderableImage(images.story),
-      'rootx-product-showcase': resolveRenderableImage(images.featured || images.story),
-      'rootx-final-cta': resolveRenderableImage(images.finalCta),
+      'rootx-hero': heroImageResolved,
+      'rootx-image-story': storyImageResolved,
+      'rootx-product-showcase': showcaseImageResolved,
+      'rootx-final-cta': finalCtaImageResolved,
     };
 
     return {
@@ -141,8 +146,8 @@ export function buildStorefrontSpec(
         subheadline: profile.cleanHeroSubheadline,
         cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
         cta_url: '/cart/add',
-        hero_image: sectionImageMap[sec.sectionId] || resolveRenderableImage(images.hero),
-        section_image: sectionImageMap[sec.sectionId] || '',
+        hero_image: sectionImageMap[sec.sectionId] || heroImageResolved,
+        section_image: sectionImageMap[sec.sectionId] || storyImageResolved,
       },
       blocks: isGallerySection ? galleryBlocks : undefined,
     };

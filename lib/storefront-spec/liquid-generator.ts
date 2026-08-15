@@ -36,17 +36,18 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const brand = spec.brand;
   const prod = spec.product;
   const content = spec.content;
-  const heroImgAsset = spec.images.hero?.exportedAssetName || spec.images.hero?.normalizedUrl || spec.images.gallery[0]?.exportedAssetName || spec.images.gallery[0]?.normalizedUrl || '';
-  const storyImgAsset = spec.images.story?.exportedAssetName || spec.images.story?.normalizedUrl || '';
+  const galleryList = spec.images.gallery.filter((img) => Boolean(img.exportedAssetName || img.normalizedUrl));
+  const heroImgAsset = spec.images.hero?.exportedAssetName || spec.images.hero?.normalizedUrl || (galleryList[0] ? (galleryList[0].exportedAssetName || galleryList[0].normalizedUrl) : '');
+  const activeHeroImg = heroImgAsset || (galleryList[0] ? (galleryList[0].exportedAssetName || galleryList[0].normalizedUrl) : '');
+  const storyImgAsset = spec.images.story?.exportedAssetName || spec.images.story?.normalizedUrl || (galleryList[1] ? (galleryList[1].exportedAssetName || galleryList[1].normalizedUrl) : activeHeroImg);
+  const showcaseImgAsset = spec.images.featured?.exportedAssetName || spec.images.featured?.normalizedUrl || (galleryList[2] ? (galleryList[2].exportedAssetName || galleryList[2].normalizedUrl) : storyImgAsset);
+  const finalCtaImgAsset = spec.images.finalCta?.exportedAssetName || spec.images.finalCta?.normalizedUrl || storyImgAsset;
 
   const familyConfig = THEME_FAMILIES[spec.archetype] || THEME_FAMILIES.modern_tech;
   const heroSection = spec.sections.find(s => s.id === ROOTX_SECTION_TYPES.HERO);
   const heroVariant = heroSection?.variant || familyConfig.heroType;
   const headerVariant = familyConfig.headerStyle;
   const galleryVariant = familyConfig.galleryStyle;
-
-  const galleryList = spec.images.gallery.filter((img) => Boolean(img.exportedAssetName || img.normalizedUrl));
-  const activeHeroImg = heroImgAsset || (galleryList[0] ? (galleryList[0].exportedAssetName || galleryList[0].normalizedUrl) : '');
 
   // ── 1. Header Liquid Section ─────────────────────────────────────
   let headerHtml = '';
@@ -504,7 +505,8 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <div style="text-align: center; max-width: 700px; margin: 0 auto;">
       <span class="rx-badge-pill" style="margin-bottom: 1rem;">CRAFTSMANSHIP & DESIGN</span>
       <h2 style="font-size: var(--rx-font-3xl); font-family: var(--rx-heading-font); color: var(--rx-text); margin: 0 0 1rem;">${esc(prod.cleanName)}</h2>
-      <p style="color: var(--rx-muted); font-size: var(--rx-font-lg); line-height: var(--rx-lh-relaxed); margin: 0 auto 2.5rem;">${esc(prod.shortDescription)}</p>
+      <p style="color: var(--rx-muted); font-size: var(--rx-font-lg); line-height: var(--rx-lh-relaxed); margin: 0 auto 2rem;">${esc(prod.shortDescription)}</p>
+      ${showcaseImgAsset ? `<div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">${renderAssetImgTag(showcaseImgAsset, prod.cleanName, 'width: 100%; height: 380px; object-fit: cover; display: block;')}</div>` : ''}
       <form action="/cart/add" method="post">
         <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
         <button type="submit" class="btn btn-primary" style="padding: 0 3rem; height: 54px; font-size: 1.05rem;">Get Yours Today — $${esc(prod.price)} &rarr;</button>

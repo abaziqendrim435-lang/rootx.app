@@ -205,10 +205,19 @@ function processLiquidVariables(html: string, options: LiquidPreviewOptions): st
     .replace(/\{\{\s*section\.settings\.cta_url\s*\}\}/g, '#')
     .replace(/\{\{\s*product\.title\s*\}\}/g, brandName)
     .replace(/\{\{\s*product\.selected_or_first_available_variant\.id\s*\}\}/g, '1')
-    .replace(/\{\{\s*[\w.-]+\s*\|\s*asset_url\s*\}\}/g, (match) => {
-      // Extract raw path inside filter if available
-      const pathMatch = match.match(/\{\{\s*['"]?([^'"]+)['"]?\s*\|\s*asset_url\s*\}\}/);
-      return pathMatch ? pathMatch[1] : heroUrl;
+    .replace(/\{\{\s*['"]?([^'"]+)['"]?\s*\|\s*asset_url\s*\}\}/g, (_, assetVal) => {
+      const cleanVal = assetVal ? assetVal.trim() : '';
+      if (cleanVal.startsWith('http://') || cleanVal.startsWith('https://') || cleanVal.startsWith('/cached-images/') || cleanVal.startsWith('data:image/')) {
+        return cleanVal;
+      }
+      const matchIdx = cleanVal.match(/rootx-product-(\d+)/i);
+      if (matchIdx && options.images && options.images.length > 0) {
+        const num = parseInt(matchIdx[1], 10);
+        if (!isNaN(num) && num > 0 && options.images[num - 1]) {
+          return options.images[num - 1];
+        }
+      }
+      return heroUrl;
     })
     .replace(/\{\{\s*[\s\S]*?\s*\}\}/g, '') // strip remaining unparsed Liquid output tags
     .replace(/{%\s*[\s\S]*?%\s*}/g, ''); // strip remaining unparsed standalone Liquid tags

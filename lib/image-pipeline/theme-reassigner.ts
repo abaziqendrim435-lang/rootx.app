@@ -111,7 +111,7 @@ export function reassignImagesForTheme(
     }
   }
 
-  // 2. Select Story, Featured, & Final CTA Images
+  // 2. Select Story, Featured, & Final CTA Images (Ensure every visual section gets an image from ProductImageLibrary)
   const availableForStory = valid.filter((img) => img.id !== heroImage?.id);
 
   const storyImage = resolveImageFromLibrary(
@@ -119,24 +119,29 @@ export function reassignImagesForTheme(
     aiSelections?.storyImageIndex ?? aiSelections?.storyImageId,
     availableForStory.length > 0 ? valid.indexOf(availableForStory[0]) : 0,
     rejectedExternalUrls
-  ) || heroImage;
+  ) || valid[1] || heroImage;
 
   const featuredImage = resolveImageFromLibrary(
     imageLibrary,
     aiSelections?.featuredImageIndex ?? aiSelections?.featuredImageId,
     availableForStory.length > 1 ? valid.indexOf(availableForStory[1]) : 0,
     rejectedExternalUrls
-  ) || heroImage;
+  ) || valid[2] || storyImage || heroImage;
 
   const finalCtaImage = resolveImageFromLibrary(
     imageLibrary,
     aiSelections?.finalCtaImageIndex ?? aiSelections?.finalCtaImageId,
     availableForStory.length > 2 ? valid.indexOf(availableForStory[availableForStory.length - 1]) : 0,
     rejectedExternalUrls
-  ) || heroImage;
+  ) || valid[3] || storyImage || heroImage;
 
-  // 3. Product Page & Storefront Gallery
+  // 3. Product Page & Storefront Gallery (Render ALL valid ProductImageLibrary images dynamically)
   let galleryImages: NormalizedImage[] = [];
+  if (heroImage) {
+    galleryImages.push(heroImage);
+  }
+
+  // Include AI selected gallery items first if provided
   if (Array.isArray(aiSelections?.galleryImageIndexes) && aiSelections.galleryImageIndexes.length > 0) {
     aiSelections.galleryImageIndexes.forEach((idx) => {
       const resolved = resolveImageFromLibrary(imageLibrary, idx, -1, rejectedExternalUrls);
@@ -146,14 +151,12 @@ export function reassignImagesForTheme(
     });
   }
 
-  if (galleryImages.length === 0) {
-    galleryImages = [heroImage];
-    valid.forEach((img) => {
-      if (img.id !== heroImage.id && !galleryImages.some((g) => g.id === img.id)) {
-        galleryImages.push(img);
-      }
-    });
-  }
+  // Ensure ALL remaining valid ProductImageLibrary images are included in the gallery
+  valid.forEach((img) => {
+    if (!galleryImages.some((g) => g.id === img.id)) {
+      galleryImages.push(img);
+    }
+  });
 
   return {
     hero: heroImage,
