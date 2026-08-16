@@ -456,22 +456,32 @@ export async function POST(req: NextRequest) {
     console.log(`${LOG} [${requestId}] Backend received exact URL: "${trimmedUrl}"`);
 
     const normalized = normalizeUrl(trimmedUrl);
+    const productId = extractAliExpressProductId(trimmedUrl);
+    const cacheKey = `product:v2:${productId || normalized}`;
 
-    // Cache invalidation: evict other cached entries if the URL changes
+    // Cache invalidation: evict legacy v1 entries or entries for different product keys
     for (const key of analysisCache.keys()) {
-      if (key !== normalized) {
-        console.log(`${LOG} [${requestId}] Invaliding cache entry for URL: ${key} because URL changed to: ${normalized}`);
+      if (!key.startsWith('product:v2:')) {
+        console.log(`${LOG} [${requestId}] Invalidating legacy v1 cache entry: ${key}`);
         analysisCache.delete(key);
       }
     }
 
+    const cacheStatus = analysisCache.has(cacheKey) ? 'CACHE_HIT' : 'CACHE_MISS';
+    console.log(`${LOG} [Diagnostic] product ID: "${productId || 'N/A'}"`);
+    console.log(`${LOG} [Diagnostic] cache key: "${cacheKey}"`);
+    console.log(`${LOG} [Diagnostic] whether result was: ${cacheStatus}`);
+
     // Check cache
-    if (analysisCache.has(normalized)) {
-      console.log(`${LOG} [${requestId}] Returning cached analysis for normalized URL: ${normalized}`);
-      const cached = analysisCache.get(normalized)!;
+    if (analysisCache.has(cacheKey)) {
+      console.log(`${LOG} [${requestId}] Returning cached analysis for cache key: ${cacheKey}`);
+      const cached = analysisCache.get(cacheKey)!;
       
       // Update cached analysis with the current request ID
       cached.analysis.requestId = requestId;
+
+      console.log(`${LOG} [Diagnostic] CACHE_READ_IMAGE_COUNT: ${cached.analysis.images?.length || 0}`);
+      console.log(`${LOG} [Diagnostic] API_RESPONSE_IMAGE_COUNT: ${cached.analysis.images?.length || 0}`);
 
       const finalResponse = { success: true, requestId, sourceUrl: trimmedUrl, analysis: cached.analysis, usedProvider: cached.usedProvider };
       console.log(`${LOG} [${requestId}] Final JSON returned to frontend (from cache):`, JSON.stringify(finalResponse));
@@ -660,8 +670,13 @@ export async function POST(req: NextRequest) {
       diagnostics,
     };
 
-    // Cache the analysis
-    analysisCache.set(normalized, { analysis, usedProvider, timestamp: Date.now() });
+    console.log(`${LOG} [Diagnostic] APIFY_RAW_IMAGE_COUNT: ${extractedImages.length}`);
+    console.log(`${LOG} [Diagnostic] NORMALIZED_IMAGE_COUNT: ${extractedImages.length}`);
+    console.log(`${LOG} [Diagnostic] CACHE_WRITE_IMAGE_COUNT: ${finalImages.length}`);
+    console.log(`${LOG} [Diagnostic] API_RESPONSE_IMAGE_COUNT: ${finalImages.length}`);
+
+    // Cache the analysis under versioned key
+    analysisCache.set(cacheKey, { analysis, usedProvider, timestamp: Date.now() });
 
     const finalResponse = { success: true, requestId, sourceUrl: trimmedUrl, analysis, usedProvider };
     console.log(`${LOG} [${requestId}] Final JSON returned to frontend:`, JSON.stringify(finalResponse));

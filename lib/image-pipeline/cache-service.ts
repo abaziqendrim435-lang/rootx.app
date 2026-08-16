@@ -197,6 +197,16 @@ export async function cacheSingleImage(
   } catch (err: any) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Cache Service] Failed to cache image (${rawUrl.slice(0, 60)}...): ${errMsg}`);
+    if (rawUrl && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('/'))) {
+      console.warn(`[Cache Service] Preserving raw image URL as fallback: ${rawUrl.slice(0, 60)}...`);
+      return {
+        ...img,
+        cachedUrl: rawUrl,
+        publicUrl: rawUrl.startsWith('http') ? rawUrl : undefined,
+        status: 'cached',
+        isValid: true,
+      };
+    }
     return {
       ...img,
       status: 'failed',
