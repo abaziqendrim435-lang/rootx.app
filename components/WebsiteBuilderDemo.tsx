@@ -2949,14 +2949,33 @@ export default function WebsiteBuilderDemo() {
 
     try {
       console.log('[Frontend] Analyzing selected Apify product:', product.title);
+      let payloadProduct: ApifyProduct = product;
+
+      // SAFETY GATE: If selected product from Search via Apify contains <= 1 image, force full product-detail hydration once before analysis
+      if (!product.images || !Array.isArray(product.images) || product.images.length <= 1) {
+        console.log('[Frontend] Safety Gate Triggered: Search card item has <= 1 image. Hydrating full product detail gallery...');
+        const detailRes = await fetch('/api/apify/aliexpress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productUrl: product.url }),
+        });
+        if (detailRes.ok) {
+          const detailData = await detailRes.json();
+          if (detailData.success && detailData.products && detailData.products.length > 0) {
+            payloadProduct = detailData.products[0];
+            console.log(`[Frontend] Safety Gate Hydration Succeeded: ${payloadProduct.images?.length || 0} images fetched.`);
+          }
+        }
+      }
+
       const res = await fetch(`/api/agents/analyze-product?cb=${getTimestamp()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          url: product.url,
+          url: payloadProduct.url,
           provider,
-          productData: product
+          productData: payloadProduct
         }),
       });
 
@@ -2969,7 +2988,7 @@ export default function WebsiteBuilderDemo() {
       if (!data.success) throw new Error(data.error || 'Analysis failed');
 
       setProductAnalysis(data.analysis);
-      setSelectedImages(data.analysis.images || []);
+      setSelectedImages(data.analysis.images?.length > 0 ? [data.analysis.images[0]] : []);
       setDropInput((prev) => ({
         ...prev,
         productUrl: product.url,

@@ -467,15 +467,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const cacheStatus = analysisCache.has(cacheKey) ? 'CACHE_HIT' : 'CACHE_MISS';
+    // Check cache: Reject undersized or invalid cached objects
+    let validCacheHit = false;
+    let cached = analysisCache.get(cacheKey);
+
+    if (cached && Array.isArray(cached.analysis?.images) && cached.analysis.images.length > 1) {
+      validCacheHit = true;
+    } else if (cached) {
+      console.log(`${LOG} [${requestId}] Cached object found but is UNDERSIZED (${cached.analysis?.images?.length || 0} images). Invalidation forced (treating as CACHE_MISS).`);
+      analysisCache.delete(cacheKey);
+      cached = undefined;
+    }
+
+    const cacheStatus = validCacheHit ? 'CACHE_HIT' : 'CACHE_MISS';
     console.log(`${LOG} [Diagnostic] product ID: "${productId || 'N/A'}"`);
     console.log(`${LOG} [Diagnostic] cache key: "${cacheKey}"`);
     console.log(`${LOG} [Diagnostic] whether result was: ${cacheStatus}`);
 
     // Check cache
-    if (analysisCache.has(cacheKey)) {
-      console.log(`${LOG} [${requestId}] Returning cached analysis for cache key: ${cacheKey}`);
-      const cached = analysisCache.get(cacheKey)!;
+    if (validCacheHit && cached) {
+      console.log(`${LOG} [${requestId}] Returning validated cached analysis for cache key: ${cacheKey}`);
       
       // Update cached analysis with the current request ID
       cached.analysis.requestId = requestId;
@@ -532,11 +543,11 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // If extracted images count is <= 1 and URL is AliExpress, trigger primary Apify direct extraction for multi-image gallery
+    // For AliExpress URLs, trigger primary Apify direct detail extraction for full product gallery
     let apifySuccess = false;
-    if (extractedImages.length <= 1 && (trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
+    if ((trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
       try {
-        console.log(`${LOG} [${requestId}] Extracted image count is ${extractedImages.length}. Triggering primary Apify direct extraction for full gallery...`);
+        console.log(`${LOG} [${requestId}] Triggering primary Apify direct detail extraction for full gallery: ${trimmedUrl}`);
         const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
         if (apifyRes.success && apifyRes.product && apifyRes.product.images.length > 0) {
           console.log(`${LOG} [${requestId}] Primary Apify direct extraction succeeded for: ${apifyRes.product.title} (${apifyRes.product.images.length} images extracted)`);
