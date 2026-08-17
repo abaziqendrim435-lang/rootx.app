@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchAliExpressProductViaApify } from '@/lib/product-import/apify-aliexpress';
+import {
+  extractAliExpressProductId,
+  fetchAliExpressProductViaApify,
+} from '@/lib/product-import/apify-aliexpress';
 import {
   assertLibraryFullyPersisted,
   getPersistedLibraryUrl,
@@ -49,11 +52,15 @@ export async function POST(req: NextRequest) {
     let finalProduct = apifyResult.product;
     let isFallback = false;
 
+    const requestedProductId = isDirectUrl ? extractAliExpressProductId(targetUrl) : null;
+
     if (!apifyResult.success || !finalProduct) {
-      if (apifyResult.productIdMismatch) {
+      if (apifyResult.productIdMismatch || (requestedProductId && isDirectUrl)) {
         return NextResponse.json(
           {
-            error: apifyResult.error || 'Requested AliExpress product ID did not match Apify extraction result.',
+            error:
+              apifyResult.error ||
+              `Requested AliExpress product ID "${requestedProductId}" did not match Apify extraction result.`,
             trace: apifyResult.trace,
           },
           { status: 422 }
@@ -115,6 +122,20 @@ export async function POST(req: NextRequest) {
           trace: apifyResult.trace,
         },
         { status: 502 }
+      );
+    }
+
+    if (
+      requestedProductId &&
+      (!apifyResult.trace.matchedProductId ||
+        apifyResult.trace.selectedResultProductId !== requestedProductId)
+    ) {
+      return NextResponse.json(
+        {
+          error: `Product ID mismatch: requested "${requestedProductId}", returned "${apifyResult.trace.selectedResultProductId}".`,
+          trace: apifyResult.trace,
+        },
+        { status: 422 }
       );
     }
 
