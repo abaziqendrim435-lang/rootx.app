@@ -21,7 +21,7 @@ if (fs.existsSync('.env.local')) {
 }
 
 import { fetchAliExpressProductViaApify, extractAliExpressProductId } from '../lib/product-import/apify-aliexpress';
-import { buildCachedProductImageLibrary } from '../lib/image-pipeline/library-builder';
+import { buildCachedProductImageLibrary } from '../lib/image-pipeline/cached-library';
 import { supabase } from '../lib/supabase';
 
 async function runComparison() {
