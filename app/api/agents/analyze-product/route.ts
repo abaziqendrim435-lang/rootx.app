@@ -681,6 +681,9 @@ export async function POST(req: NextRequest) {
       diagnostics,
     };
 
+    console.log(`${LOG} [Diagnostic] ANALYZE_INPUT_IMAGE_COUNT: ${extractedImages.length}`);
+    console.log(`${LOG} [Diagnostic] ANALYZE_OUTPUT_IMAGE_COUNT: ${finalImages.length}`);
+    console.log(`${LOG} [Diagnostic] FRONTEND_IMAGE_COUNT: ${finalImages.length}`);
     console.log(`${LOG} [Diagnostic] APIFY_RAW_IMAGE_COUNT: ${extractedImages.length}`);
     console.log(`${LOG} [Diagnostic] NORMALIZED_IMAGE_COUNT: ${extractedImages.length}`);
     console.log(`${LOG} [Diagnostic] CACHE_WRITE_IMAGE_COUNT: ${finalImages.length}`);

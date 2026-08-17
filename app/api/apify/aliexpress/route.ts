@@ -136,6 +136,8 @@ export async function POST(req: NextRequest) {
       imageLibrary: imageLib,
     };
 
+    console.log(`[Apify API Route] [Diagnostic] SEARCH_IMAGE_COUNT: ${cachedUrls.length}`);
+    console.log(`[Apify API Route] [Diagnostic] PRODUCT_DETAIL_IMAGE_COUNT: ${cachedUrls.length}`);
     console.log(`[Apify API Route] [Diagnostic] APIFY_RAW_IMAGE_COUNT: ${apifyResult.trace.rawImageCount}`);
     console.log(`[Apify API Route] [Diagnostic] NORMALIZED_IMAGE_COUNT: ${apifyResult.trace.normalizedImageCount}`);
     console.log(`[Apify API Route] [Diagnostic] CACHE_WRITE_IMAGE_COUNT: ${cachedUrls.length}`);

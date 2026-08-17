@@ -115,11 +115,21 @@ export function getConfiguredActors(): string[] {
 export function buildActorPayload(actorId: string, targetUrl: string, limit: number, isDirectUrl: boolean, searchQuery: string) {
   const cleanUrl = targetUrl.trim();
   const queryStr = (searchQuery || targetUrl).trim();
+  const productId = extractAliExpressProductId(cleanUrl) || queryStr;
 
   if (actorId.includes('epctex')) {
     return {
       startUrls: [{ url: cleanUrl }],
-      searchTerms: [queryStr],
+      searchTerms: [cleanUrl, productId],
+      maxItems: limit,
+    };
+  }
+
+  if (actorId.includes('devcake')) {
+    return {
+      startUrls: [{ url: cleanUrl }],
+      searchQueries: [cleanUrl, productId],
+      maxResults: limit,
       maxItems: limit,
     };
   }
@@ -128,6 +138,7 @@ export function buildActorPayload(actorId: string, targetUrl: string, limit: num
     return {
       startUrls: [{ url: cleanUrl }],
       productUrls: [cleanUrl],
+      searchQueries: [cleanUrl, productId],
       maxResults: limit,
       maxItems: limit,
     };
