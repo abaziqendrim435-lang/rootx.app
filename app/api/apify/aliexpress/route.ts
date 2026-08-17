@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   extractAliExpressProductId,
   fetchAliExpressProductViaApify,
+  fetchAliExpressSearchViaApify,
 } from '@/lib/product-import/apify-aliexpress';
 import {
   assertLibraryFullyPersisted,
@@ -47,6 +48,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Call server-side Apify Service
+    if (!isDirectUrl) {
+      const searchResult = await fetchAliExpressSearchViaApify(targetUrl);
+      if (!searchResult.success || searchResult.products.length === 0) {
+        return NextResponse.json(
+          {
+            error: searchResult.error || 'Apify search returned no valid product cards.',
+            trace: searchResult.trace,
+          },
+          { status: 502 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        products: searchResult.products,
+        trace: searchResult.trace,
+      });
+    }
+
     const apifyResult = await fetchAliExpressProductViaApify(targetUrl, { isDirectUrl });
 
     let finalProduct = apifyResult.product;

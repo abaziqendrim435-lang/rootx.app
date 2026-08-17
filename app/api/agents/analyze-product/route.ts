@@ -19,6 +19,7 @@ import type { ProductImageLibrary } from '@/lib/image-pipeline/types';
 export interface AnalyzeProductRequest {
   url: string;
   provider?: AIProvider;
+  selectedProductId?: string;
   productData?: {
     title: string;
     price: string;
@@ -466,6 +467,37 @@ export async function POST(req: NextRequest) {
     const productId = extractAliExpressProductId(trimmedUrl);
     const cacheKey = `product:v2:${productId || normalized}`;
 
+    const isAliExpressUrl = trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us');
+    if (isAliExpressUrl && !productId) {
+      return NextResponse.json(
+        { success: false, error: 'AliExpress URL must contain a valid product ID before analysis can begin.' },
+        { status: 422 }
+      );
+    }
+
+    if (body.selectedProductId && productId && body.selectedProductId !== productId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Product ID mismatch: request URL is "${productId}" but selectedProductId is "${body.selectedProductId}".`,
+        },
+        { status: 422 }
+      );
+    }
+
+    if (body.productData?.url) {
+      const payloadProductId = extractAliExpressProductId(body.productData.url);
+      if (productId && payloadProductId && productId !== payloadProductId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Product ID mismatch: request URL is "${productId}" but productData.url is "${payloadProductId}".`,
+          },
+          { status: 422 }
+        );
+      }
+    }
+
     // Cache invalidation: evict legacy v1 entries or entries for different product keys
     for (const key of analysisCache.keys()) {
       if (!key.startsWith('product:v2:')) {
@@ -484,7 +516,20 @@ export async function POST(req: NextRequest) {
       cached.analysis.images.length > 1 &&
       isReusableProductImageLibrary(cached.analysis.imageLibrary, cached.analysis.images.length)
     ) {
-      validCacheHit = true;
+      const cachedProductId = extractAliExpressProductId(cached.analysis.sourceUrl);
+      const cacheMatchesRequest =
+        cached.analysis.sourceUrl === trimmedUrl ||
+        (productId && cachedProductId && productId === cachedProductId);
+
+      if (cacheMatchesRequest) {
+        validCacheHit = true;
+      } else {
+        console.log(
+          `${LOG} [${requestId}] Cached analysis product ID/source URL mismatch. Invalidation forced (treating as CACHE_MISS).`
+        );
+        analysisCache.delete(cacheKey);
+        cached = undefined;
+      }
     } else if (cached) {
       console.log(`${LOG} [${requestId}] Cached object found but is UNDERSIZED (${cached.analysis?.images?.length || 0} images). Invalidation forced (treating as CACHE_MISS).`);
       analysisCache.delete(cacheKey);
@@ -498,6 +543,26 @@ export async function POST(req: NextRequest) {
 
     // Check cache
     if (validCacheHit && cached) {
+      const cachedProductId = extractAliExpressProductId(cached.analysis.sourceUrl);
+      if (productId && cachedProductId && productId !== cachedProductId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Cached analysis product ID "${cachedProductId}" does not match requested "${productId}".`,
+          },
+          { status: 422 }
+        );
+      }
+      if (body.selectedProductId && productId && body.selectedProductId !== productId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Product ID mismatch: request URL is "${productId}" but selectedProductId is "${body.selectedProductId}".`,
+          },
+          { status: 422 }
+        );
+      }
+
       console.log(`${LOG} [${requestId}] Returning validated cached analysis for cache key: ${cacheKey}`);
       
       // Update cached analysis with the current request ID
@@ -567,6 +632,25 @@ export async function POST(req: NextRequest) {
         console.log(`${LOG} [${requestId}] Triggering primary Apify direct detail extraction for full gallery: ${trimmedUrl}`);
         const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
         if (apifyRes.success && apifyRes.product && apifyRes.product.images.length > 0) {
+          const returnedProductId = extractAliExpressProductId(apifyRes.product.url);
+          if (productId && returnedProductId && productId !== returnedProductId) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Apify returned product ID "${returnedProductId}" but requested "${productId}".`,
+              },
+              { status: 422 }
+            );
+          }
+          if (productId && !apifyRes.trace.matchedProductId) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Apify extraction did not match requested product ID "${productId}".`,
+              },
+              { status: 422 }
+            );
+          }
           console.log(`${LOG} [${requestId}] Primary Apify direct extraction succeeded for: ${apifyRes.product.title} (${apifyRes.product.images.length} images extracted)`);
           if (!title || title === 'Unknown Product') title = apifyRes.product.title;
           if (!extractedText || extractedText.length < 50) {
@@ -591,6 +675,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (extractedImages.length <= 1 && !apifySuccess) {
+      if (isAliExpressUrl && productId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Could not hydrate AliExpress product "${productId}" with a full gallery. Refusing HTML fallback to avoid product mismatch.`,
+          },
+          { status: 422 }
+        );
+      }
+
       // Fetch the product page via HTML fetcher
       console.log(`${LOG} [${requestId}] Fetching URL via HTML scraper for multi-image fallback: ${trimmedUrl}`);
 
@@ -720,6 +814,17 @@ export async function POST(req: NextRequest) {
 
     // Cache the analysis under versioned key
     analysisCache.set(cacheKey, { analysis, usedProvider, timestamp: Date.now() });
+
+    const analyzedProductId = extractAliExpressProductId(trimmedUrl);
+    if (productId && analyzedProductId && productId !== analyzedProductId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Analysis source URL product ID "${analyzedProductId}" does not match requested "${productId}".`,
+        },
+        { status: 422 }
+      );
+    }
 
     const finalResponse = { success: true, requestId, sourceUrl: trimmedUrl, analysis, usedProvider };
     console.log(`${LOG} [${requestId}] Final JSON returned to frontend:`, JSON.stringify(finalResponse));

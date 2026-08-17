@@ -2462,6 +2462,38 @@ function assertCanonicalImageLibrary(analysis: ProductAnalysis, analyzeInputCoun
   }
 }
 
+function extractAliExpressProductId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/(?:item\/|_|id=)(\d{10,16})/i) || url.match(/\b(\d{10,16})\b/);
+  return match ? match[1] : null;
+}
+
+function normalizeProductTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function assertSelectedProductIdentity(
+  stage: string,
+  expectedProductId: string,
+  product: { url: string; title: string; images?: string[] }
+): void {
+  const productId = extractAliExpressProductId(product.url);
+  if (!productId) {
+    throw new Error(`${stage}: product URL is missing a valid AliExpress product ID.`);
+  }
+  if (productId !== expectedProductId) {
+    throw new Error(
+      `${stage}: product ID "${productId}" does not match selected product ID "${expectedProductId}".`
+    );
+  }
+  if (!product.title?.trim()) {
+    throw new Error(`${stage}: product title is missing.`);
+  }
+  if (!product.images?.length) {
+    throw new Error(`${stage}: product has no images.`);
+  }
+}
+
 interface ApifyProduct {
   url: string;
   title: string;
@@ -2715,16 +2747,22 @@ export default function WebsiteBuilderDemo() {
   async function handleAnalyzeProduct() {
     if (!productUrl.trim()) return;
     const submittedUrl = productUrl.trim();
+    const selectedProductId = extractAliExpressProductId(submittedUrl);
     console.log('[Frontend] Exact URL received by frontend:', submittedUrl);
     setDropStatus('analyzing');
     setErrorMsg('');
     setProductAnalysis(null);
     setSelectedImages([]);
+    setResult(null);
+    setDesignEngineResult(null);
     try {
       let productDataPayload: ApifyProduct | undefined = undefined;
 
       // If it's an AliExpress URL, use Apify to scrape it first to bypass anti-bot blocks
       if (submittedUrl.includes('aliexpress.com')) {
+        if (!selectedProductId) {
+          throw new Error('AliExpress URL must contain a valid product ID before analysis can begin.');
+        }
         console.log('[Frontend] AliExpress URL detected. Sourcing data securely via Apify scraper...');
         const apifyRes = await fetch('/api/apify/aliexpress', {
           method: 'POST',
@@ -2737,8 +2775,18 @@ export default function WebsiteBuilderDemo() {
         }
         const apifyData = await apifyRes.json();
         if (apifyData.success && apifyData.products && apifyData.products.length > 0) {
-          productDataPayload = apifyData.products[0];
-          console.log('[Frontend] Successfully scraped AliExpress product via Apify:', apifyData.products[0].title);
+          const hydratedProduct = apifyData.products[0] as ApifyProduct;
+          productDataPayload = hydratedProduct;
+          const apifyReturnedProductId = extractAliExpressProductId(hydratedProduct.url);
+          console.log('[Frontend] REQUESTED_PRODUCT_ID =', selectedProductId);
+          console.log('[Frontend] APIFY_RETURNED_PRODUCT_ID =', apifyReturnedProductId);
+          if (!apifyReturnedProductId || apifyReturnedProductId !== selectedProductId) {
+            throw new Error(
+              `Product ID mismatch after Apify hydration: requested "${selectedProductId}", got "${apifyReturnedProductId}".`
+            );
+          }
+          assertSelectedProductIdentity('Apify hydration', selectedProductId, hydratedProduct);
+          console.log('[Frontend] Successfully scraped AliExpress product via Apify:', hydratedProduct.title);
         } else {
           throw new Error(apifyData.error || 'Failed to scrape AliExpress product details.');
         }
@@ -2751,6 +2799,7 @@ export default function WebsiteBuilderDemo() {
         body: JSON.stringify({
           url: submittedUrl,
           provider,
+          selectedProductId: selectedProductId || undefined,
           productData: productDataPayload
         }),
       });
@@ -2761,8 +2810,11 @@ export default function WebsiteBuilderDemo() {
       const data = await res.json();
       console.log('[Frontend] Final JSON returned to frontend:', JSON.stringify(data));
       if (!data.success) throw new Error(data.error || 'Analysis failed');
+
+      const analyzedProductId = extractAliExpressProductId(data.analysis.sourceUrl);
+      console.log('[Frontend] ANALYZED_PRODUCT_ID =', analyzedProductId);
       
-      // Strict URL verification check
+      // Strict URL / product ID verification check
       if (!data.sourceUrl || data.sourceUrl !== submittedUrl) {
         console.error('[Frontend] Product URL mismatch detected!', 'Expected:', submittedUrl, 'Got:', data.sourceUrl);
         throw new Error('Product analysis mismatch. Please try again.');
@@ -2770,6 +2822,11 @@ export default function WebsiteBuilderDemo() {
       if (data.analysis.sourceUrl !== submittedUrl) {
         console.error('[Frontend] Product Analysis object URL mismatch detected!', 'Expected:', submittedUrl, 'Got:', data.analysis.sourceUrl);
         throw new Error('Product analysis mismatch. Please try again.');
+      }
+      if (selectedProductId && analyzedProductId && selectedProductId !== analyzedProductId) {
+        throw new Error(
+          `Product ID mismatch after analysis: selected "${selectedProductId}", analyzed "${analyzedProductId}".`
+        );
       }
 
       const analyzeInputCount = productDataPayload?.images?.length || data.analysis.images?.length || 0;
@@ -2952,6 +3009,12 @@ export default function WebsiteBuilderDemo() {
     setErrorMsg('');
     setApifyResults([]);
     setApifySelectedProduct(null);
+    setProductAnalysis(null);
+    setSelectedImages([]);
+    setResult(null);
+    setDesignEngineResult(null);
+    setDropStatus('idle');
+    setProductUrl('');
     try {
       const res = await fetch('/api/apify/aliexpress', {
         method: 'POST',
@@ -2976,45 +3039,77 @@ export default function WebsiteBuilderDemo() {
   }
 
   async function handleSelectApifyProduct(product: ApifyProduct) {
+    const searchCardProductId = extractAliExpressProductId(product.url);
+    const searchCardTitle = product.title?.trim() || '';
+    const searchCardUrl = product.url?.trim() || '';
+
+    console.log('[Frontend] SEARCH_CARD_TITLE =', searchCardTitle);
+    console.log('[Frontend] SEARCH_CARD_PRODUCT_ID =', searchCardProductId);
+    console.log('[Frontend] SEARCH_CARD_URL =', searchCardUrl);
+
+    if (!searchCardProductId) {
+      setErrorMsg('Selected search result is missing a valid AliExpress product ID.');
+      setDropStatus('error');
+      return;
+    }
+
     setApifySelectedProduct(product);
     setDropStatus('analyzing');
     setErrorMsg('');
     setProductAnalysis(null);
     setSelectedImages([]);
-    setProductUrl(product.url);
+    setResult(null);
+    setDesignEngineResult(null);
+    setProductUrl(searchCardUrl);
 
     try {
-      console.log('[Frontend] Analyzing selected Apify product:', product.title);
-      let payloadProduct: ApifyProduct = product;
+      console.log('[Frontend] Analyzing selected Apify product:', searchCardTitle);
 
-      // Hydrate full product detail gallery from canonical product URL / ID
-      if (product.url && product.url.startsWith('http')) {
-        console.log('[Frontend] Hydrating full product detail gallery for URL:', product.url);
-        try {
-          const detailRes = await fetch('/api/apify/aliexpress', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productUrl: product.url }),
-          });
-          if (detailRes.ok) {
-            const detailData = await detailRes.json();
-            if (detailData.success && detailData.products && detailData.products.length > 0) {
-              const fullProduct = detailData.products[0];
-              if (fullProduct.images && Array.isArray(fullProduct.images) && fullProduct.images.length > 0) {
-                payloadProduct = {
-                  ...product,
-                  ...fullProduct,
-                  images: fullProduct.images,
-                };
-                console.log(`[Frontend] Full Product Detail Hydration Succeeded: ${payloadProduct.images?.length || 0} images hydrated.`);
-              }
-            }
-          }
-        } catch (hydrateErr: any) {
-          console.warn('[Frontend] Product detail hydration warning:', hydrateErr.message);
-        }
+      if (!searchCardUrl.startsWith('http')) {
+        throw new Error('Selected product URL is invalid.');
+      }
+      assertSelectedProductIdentity('Search card', searchCardProductId, product);
+
+      console.log('[Frontend] Hydrating full product detail gallery for URL:', searchCardUrl);
+      const detailRes = await fetch('/api/apify/aliexpress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productUrl: searchCardUrl }),
+      });
+
+      if (!detailRes.ok) {
+        const errData = await detailRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Product detail hydration failed with status ${detailRes.status}`);
       }
 
+      const detailData = await detailRes.json();
+      if (!detailData.success || !detailData.products?.length) {
+        throw new Error(detailData.error || 'Product detail hydration returned no product.');
+      }
+
+      const fullProduct = detailData.products[0] as ApifyProduct;
+      const apifyReturnedProductId = extractAliExpressProductId(fullProduct.url);
+
+      console.log('[Frontend] REQUESTED_PRODUCT_ID =', searchCardProductId);
+      console.log('[Frontend] APIFY_RETURNED_PRODUCT_ID =', apifyReturnedProductId);
+
+      if (!apifyReturnedProductId || apifyReturnedProductId !== searchCardProductId) {
+        throw new Error(
+          `Product ID mismatch after hydration: selected "${searchCardProductId}", Apify returned "${apifyReturnedProductId}".`
+        );
+      }
+
+      assertSelectedProductIdentity('Hydrated product', searchCardProductId, fullProduct);
+
+      const payloadProduct: ApifyProduct = {
+        ...product,
+        ...fullProduct,
+        url: searchCardUrl,
+        title: fullProduct.title || searchCardTitle,
+        images: fullProduct.images,
+      };
+
+      console.log(`[Frontend] Full Product Detail Hydration Succeeded: ${payloadProduct.images?.length || 0} images hydrated.`);
       console.log(`[Frontend] ANALYZE_REQUEST_IMAGES_COUNT: ${payloadProduct.images?.length || 0}`);
 
       const res = await fetch(`/api/agents/analyze-product?cb=${getTimestamp()}`, {
@@ -3022,9 +3117,10 @@ export default function WebsiteBuilderDemo() {
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          url: payloadProduct.url,
+          url: searchCardUrl,
           provider,
-          productData: payloadProduct
+          selectedProductId: searchCardProductId,
+          productData: payloadProduct,
         }),
       });
 
@@ -3036,6 +3132,30 @@ export default function WebsiteBuilderDemo() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Analysis failed');
 
+      const analyzedProductId = extractAliExpressProductId(data.analysis.sourceUrl);
+      const idMatch =
+        searchCardProductId === apifyReturnedProductId &&
+        searchCardProductId === analyzedProductId;
+      const titleMatch =
+        normalizeProductTitle(data.analysis.productTitle) === normalizeProductTitle(searchCardTitle) ||
+        normalizeProductTitle(data.analysis.productTitle).includes(normalizeProductTitle(searchCardTitle).slice(0, 24)) ||
+        normalizeProductTitle(searchCardTitle).includes(normalizeProductTitle(data.analysis.productTitle).slice(0, 24));
+      const urlMatch = data.sourceUrl === searchCardUrl && data.analysis.sourceUrl === searchCardUrl;
+
+      console.log('[Frontend] ANALYZED_PRODUCT_ID =', analyzedProductId);
+      console.log('[Frontend] ID_MATCH =', idMatch);
+      console.log('[Frontend] TITLE_MATCH =', titleMatch);
+      console.log('[Frontend] URL_MATCH =', urlMatch);
+
+      if (!idMatch) {
+        throw new Error(
+          `Product ID mismatch after analysis: selected "${searchCardProductId}", analyzed "${analyzedProductId}".`
+        );
+      }
+      if (!urlMatch) {
+        throw new Error('Analyzed product URL does not match the selected search card URL.');
+      }
+
       const analyzeInputCount = payloadProduct.images?.length || 0;
       console.log('[Frontend] ANALYZE_INPUT:', analyzeInputCount);
       assertCanonicalImageLibrary(data.analysis, analyzeInputCount);
@@ -3044,7 +3164,7 @@ export default function WebsiteBuilderDemo() {
       setSelectedImages(data.analysis.images || []);
       setDropInput((prev) => ({
         ...prev,
-        productUrl: payloadProduct.url,
+        productUrl: searchCardUrl,
         storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
       }));
       setDropStatus('analyzed');

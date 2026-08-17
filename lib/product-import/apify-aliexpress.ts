@@ -84,6 +84,13 @@ export interface ApifyImportResult {
   productIdMismatch?: boolean;
 }
 
+export interface ApifySearchResult {
+  success: boolean;
+  products: ApifyProductData[];
+  trace: ApifyDebugTrace;
+  error?: string;
+}
+
 export interface AliExpressExtractionReport {
   images: string[];
   variantImages: string[];
@@ -517,39 +524,245 @@ export function matchDatasetItemByProductId(
       }
     }
 
-    if (options?.requireExactMatch) {
-      return {
-        item: {},
-        matched: false,
-        requestedProductId,
-        selectedResultProductId: null,
-        datasetItemCount: datasetItems.length,
-      };
+    return {
+      item: {},
+      matched: false,
+      requestedProductId,
+      selectedResultProductId: null,
+      datasetItemCount: datasetItems.length,
+    };
+  }
+
+  return {
+    item: {},
+    matched: false,
+    requestedProductId,
+    selectedResultProductId: null,
+    datasetItemCount: datasetItems.length,
+  };
+}
+
+export function resolveDatasetItemProductId(item: Record<string, unknown>): string | null {
+  const candidates = [
+    item.productId,
+    item.id,
+    item.itemId,
+    item.product_id,
+    item.item_id,
+    item.url,
+    item.productUrl,
+    item.link,
+  ];
+
+  for (const val of candidates) {
+    const id = extractAliExpressProductId(String(val || ''));
+    if (id) return id;
+  }
+
+  return null;
+}
+
+export function resolveDatasetItemProductUrl(
+  item: Record<string, unknown>,
+  productId?: string | null
+): string {
+  const pid = productId || resolveDatasetItemProductId(item);
+
+  for (const field of ['url', 'productUrl', 'link']) {
+    const raw = String(item[field] || '').trim();
+    if (raw.startsWith('http') && pid && raw.includes(pid)) {
+      return raw;
     }
   }
 
-  // Fallback: If no exact product ID match, select item with highest image count
-  let bestItem = datasetItems[0];
-  let maxImgCount = -1;
+  if (pid) {
+    return `https://www.aliexpress.com/item/${pid}.html`;
+  }
 
-  datasetItems.forEach((candidate) => {
-    const extracted = extractAllAliExpressProductImages(candidate);
-    if (extracted.images.length > maxImgCount) {
-      maxImgCount = extracted.images.length;
-      bestItem = candidate;
-    }
-  });
+  return String(item.url || item.productUrl || item.link || '').trim();
+}
 
-  const selectedId = extractAliExpressProductId(
-    String(bestItem.id || bestItem.productId || bestItem.itemId || bestItem.url || bestItem.productUrl || '')
-  );
+function parsePriceFields(item: Record<string, unknown>): {
+  price: string;
+  originalPrice: string;
+  discount: string;
+} {
+  let price = '0.00';
+  if (item.priceCurrent) price = String(item.priceCurrent).replace(/[^0-9.]/g, '');
+  else if (item.priceText) price = String(item.priceText).replace(/[^0-9.]/g, '');
+  else if (item.price) {
+    price = typeof item.price === 'object'
+      ? String((item.price as any).value || (item.price as any).amount || '0.00')
+      : String(item.price);
+  } else if (item.salePrice) {
+    price = typeof item.salePrice === 'object'
+      ? String((item.salePrice as any).value || (item.salePrice as any).amount || '0.00')
+      : String(item.salePrice);
+  } else if (item.priceRange) {
+    price = typeof item.priceRange === 'object'
+      ? String((item.priceRange as any).value || (item.priceRange as any).amount || '0.00')
+      : String(item.priceRange);
+  }
+
+  let originalPrice = '';
+  if (item.priceOriginal) originalPrice = String(item.priceOriginal).replace(/[^0-9.]/g, '');
+  else if (item.originalPrice) {
+    originalPrice = typeof item.originalPrice === 'object'
+      ? String((item.originalPrice as any).value || (item.originalPrice as any).amount || '')
+      : String(item.originalPrice);
+  } else if (item.compareAtPrice) {
+    originalPrice = typeof item.compareAtPrice === 'object'
+      ? String((item.compareAtPrice as any).value || (item.compareAtPrice as any).amount || '')
+      : String(item.compareAtPrice);
+  }
+
+  const discount = String(item.priceDiscount || item.discount || item.discountPercentage || '');
+
+  return { price, originalPrice, discount };
+}
+
+export function mapDatasetItemToApifyProduct(
+  item: Record<string, unknown>,
+  options?: { thumbnailOnly?: boolean }
+): ApifyProductData | null {
+  const productId = resolveDatasetItemProductId(item);
+  if (!productId) return null;
+
+  const pageUrl = resolveDatasetItemProductUrl(item, productId);
+  const title = String(item.title || item.productTitle || item.name || item.subject || 'Imported Product').trim();
+  const { price, originalPrice, discount } = parsePriceFields(item);
+  const report = extractAllAliExpressProductImages(item);
+  const galleryImages = options?.thumbnailOnly
+    ? report.images.slice(0, 1)
+    : report.images;
+
+  const rating = item.ratingValue || item.rating || item.stars || (item.aggregateRating as any)?.ratingValue
+    ? parseFloat(String(item.ratingValue || item.rating || item.stars || (item.aggregateRating as any)?.ratingValue))
+    : null;
+  const orders = item.orders || item.orderCount || item.sales || item.soldCount
+    ? parseInt(String(item.orders || item.orderCount || item.sales || item.soldCount).replace(/[^0-9]/g, ''), 10)
+    : null;
+  const seller = String(item.storeName || (item.seller as any)?.name || (item.store as any)?.name || item.seller || 'AliExpress Supplier');
+  const shipping = String(item.shippingInfo || (item.shipping as any)?.name || item.shipping || 'Tracked Shipping');
+  const description = String(item.description || item.descriptionHtml || title);
 
   return {
-    item: bestItem,
-    matched: false,
-    requestedProductId,
-    selectedResultProductId: selectedId,
-    datasetItemCount: datasetItems.length,
+    title,
+    price,
+    originalPrice,
+    discount,
+    description,
+    descriptionHtml: String(item.descriptionHtml || ''),
+    images: galleryImages,
+    featuredImage: galleryImages[0] || null,
+    variantImages: options?.thumbnailOnly ? [] : report.variantImages,
+    variants: [],
+    specifications: [],
+    rating,
+    orders,
+    seller,
+    shipping,
+    url: pageUrl.includes(productId) ? pageUrl : `https://www.aliexpress.com/item/${productId}.html`,
+  };
+}
+
+export async function fetchAliExpressSearchViaApify(searchQuery: string): Promise<ApifySearchResult> {
+  const query = searchQuery.trim();
+  const targetUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
+
+  const trace: ApifyDebugTrace = {
+    sourceUrl: targetUrl,
+    apifyRunStatus: 'FAILED',
+    actorUsed: null,
+    requestedProductId: null,
+    selectedResultProductId: null,
+    matchedProductId: false,
+    datasetItemCount: 0,
+    rawImageCount: 0,
+    normalizedImageCount: 0,
+    validImageCount: 0,
+    downloadedImageCount: 0,
+    zipImageCount: 0,
+    shopifyGalleryCount: 0,
+    failedImages: [],
+    failureReasons: [],
+  };
+
+  const apifyToken = process.env.APIFY_API_TOKEN;
+  if (!apifyToken) {
+    const errMsg = 'APIFY_API_TOKEN is missing in server environment.';
+    trace.failureReasons.push(errMsg);
+    return { success: false, products: [], trace, error: errMsg };
+  }
+
+  const actors = getConfiguredActors({ isDirectUrl: false });
+  let lastError = '';
+
+  for (const actorId of actors) {
+    try {
+      console.log(`[Apify Service] Search Actor: ${actorId} for query: ${query.slice(0, 80)}...`);
+      const runUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyToken}&timeout=60`;
+      const payload = buildActorPayload(actorId, targetUrl, 12, false, query);
+
+      const response = await fetch(runUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Apify Actor ${actorId} HTTP ${response.status}: ${errText.slice(0, 150)}`);
+      }
+
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        trace.failureReasons.push(`Actor ${actorId} returned empty dataset.`);
+        continue;
+      }
+
+      const datasetItems = data as Record<string, unknown>[];
+      const products: ApifyProductData[] = [];
+      const seenProductIds = new Set<string>();
+
+      for (const item of datasetItems) {
+        const mapped = mapDatasetItemToApifyProduct(item, { thumbnailOnly: true });
+        if (!mapped) continue;
+
+        const productId = resolveDatasetItemProductId(item);
+        if (!productId || seenProductIds.has(productId)) continue;
+
+        seenProductIds.add(productId);
+        products.push(mapped);
+      }
+
+      if (products.length === 0) {
+        trace.failureReasons.push(`Actor ${actorId} returned ${datasetItems.length} items but none had a valid product ID.`);
+        continue;
+      }
+
+      trace.actorUsed = actorId;
+      trace.apifyRunStatus = 'SUCCESS';
+      trace.datasetItemCount = datasetItems.length;
+      trace.rawImageCount = products.reduce((sum, product) => sum + product.images.length, 0);
+      trace.normalizedImageCount = trace.rawImageCount;
+      trace.validImageCount = trace.rawImageCount;
+
+      console.log(`[Apify Service] Search mapped ${products.length} unique product cards from ${datasetItems.length} dataset items.`);
+      return { success: true, products, trace };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Apify Service] Search actor ${actorId} failed:`, msg);
+      lastError = msg;
+      trace.failureReasons.push(`Actor ${actorId}: ${msg}`);
+    }
+  }
+
+  return {
+    success: false,
+    products: [],
+    trace,
+    error: `Apify search returned no valid product cards. ${lastError}`,
   };
 }
 
