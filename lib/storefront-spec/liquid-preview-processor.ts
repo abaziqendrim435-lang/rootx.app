@@ -11,6 +11,7 @@ export interface LiquidPreviewOptions {
   storyImage?: string;
   featuredImage?: string;
   finalCtaImage?: string;
+  comparisonImage?: string;
   headline?: string;
   subheadline?: string;
   brandName?: string;
@@ -62,7 +63,6 @@ function findMatchingTagPair(
  * taking top-level {% else %} at depth 0 into account.
  */
 function splitIfElseBranches(blockContent: string): { ifBody: string; elseBody: string | null } {
-  // Find top-level {% else %} not inside nested {% if %}
   const tagRegex = /{%\s*(if|endif|else)\b[\s\S]*?%}/gi;
   let depth = 0;
   let match: RegExpExecArray | null;
@@ -86,6 +86,40 @@ function splitIfElseBranches(blockContent: string): { ifBody: string; elseBody: 
 }
 
 /**
+ * Preview has no Shopify product context. Shopify-native {% if %} branches that
+ * depend on product.media / product.images must evaluate false so baked RootX
+ * fallback markup (renderAssetImgTag) in {% else %} branches is used instead.
+ */
+function evaluatePreviewIfCondition(openingTag: string, images: string[]): boolean | null {
+  const tag = openingTag.toLowerCase();
+
+  if (/product\.media\.size\s*>\s*0/.test(tag)) return false;
+  if (/product\.images\.size\s*>\s*0/.test(tag)) return false;
+  if (/media\.media_type\s*==/.test(tag)) return false;
+
+  if (/\bshowcase_media\b/.test(tag) && !/blank/.test(tag)) return false;
+  if (/\bstory_media\b/.test(tag) && !/blank/.test(tag)) return false;
+  if (/\bmain_left_media\b/.test(tag)) return false;
+  if (/\bmain_prod_media\b/.test(tag)) return false;
+
+  if (/thumb_left_count\s*==\s*0/.test(tag)) return true;
+  if (/gallery_media_rendered\s*==\s*0/.test(tag)) return true;
+
+  if (/section\.blocks\.size\s*>\s*0/.test(tag)) return images.length > 0;
+  if (/block\.settings\.image_url\s*!=\s*blank/.test(tag)) return images.length > 0;
+
+  return null;
+}
+
+function isBlockGalleryForLoop(openingTag: string): boolean {
+  return /for\s+block\s+in\s+section\.blocks/i.test(openingTag);
+}
+
+function isShopifyCatalogForLoop(openingTag: string): boolean {
+  return /for\s+(media|image)\s+in\s+product\.(media|images)/i.test(openingTag);
+}
+
+/**
  * Recursively processes Liquid control structures ({% if %}, {% for %}, {% unless %}, {% case %})
  */
 function processLiquidControlFlow(
@@ -103,19 +137,17 @@ function processLiquidControlFlow(
   while (iterations < MAX_ITERATIONS) {
     iterations++;
 
-    // Find first opening control-flow tag ({% for ... %}, {% if ... %}, etc.)
     const tagMatch = result.match(/{%\s*(for|if|unless|case)\b[\s\S]*?%}/i);
     if (!tagMatch) break;
 
     const startPos = tagMatch.index ?? 0;
     const tagType = tagMatch[1].toLowerCase();
 
-    let openKeyword = tagType;
-    let closeKeyword = `end${tagType}`;
+    const openKeyword = tagType;
+    const closeKeyword = `end${tagType}`;
 
     const pair = findMatchingTagPair(result, startPos, openKeyword, closeKeyword);
     if (!pair) {
-      // If unmatched tag, remove just the opening tag to avoid infinite loop
       result = result.slice(0, startPos) + result.slice(startPos + tagMatch[0].length);
       continue;
     }
@@ -127,50 +159,50 @@ function processLiquidControlFlow(
     let replacement = '';
 
     if (tagType === 'for') {
-      // Render FOR loop for every image item in N images
-      const loopItems = images.length > 0 ? images : [heroImage || ''];
-      const renderedItems: string[] = [];
+      if (isShopifyCatalogForLoop(openingTag)) {
+        replacement = '';
+      } else if (isBlockGalleryForLoop(openingTag)) {
+        const loopItems = images.length > 0 ? images : [heroImage || ''];
+        const renderedItems: string[] = [];
 
-      loopItems.forEach((imgUrl, idx) => {
-        let itemBody = innerContent;
+        loopItems.forEach((imgUrl, idx) => {
+          let itemBody = innerContent;
 
-        // Process {% if forloop.first %} inside loop item
-        itemBody = itemBody.replace(
-          /{%\s*if\s+forloop\.first\s*%}([\s\S]*?)(?:{%\s*else\s*%}([\s\S]*?))?{%\s*endif\s*%}/gi,
-          (_, firstBranch, elseBranch) => (idx === 0 ? firstBranch : elseBranch || '')
-        );
+          itemBody = itemBody.replace(
+            /{%\s*if\s+forloop\.first\s*%}([\s\S]*?)(?:{%\s*else\s*%}([\s\S]*?))?{%\s*endif\s*%}/gi,
+            (_, firstBranch, elseBranch) => (idx === 0 ? firstBranch : elseBranch || '')
+          );
 
-        // Replace forloop variables
-        itemBody = itemBody
-          .replace(/\{\{\s*forloop\.index\s*\}\}/g, String(idx + 1))
-          .replace(/\{\{\s*forloop\.index0\s*\}\}/g, String(idx))
-          .replace(/\{\{\s*forloop\.first\s*\}\}/g, String(idx === 0));
+          itemBody = itemBody
+            .replace(/\{\{\s*forloop\.index\s*\}\}/g, String(idx + 1))
+            .replace(/\{\{\s*forloop\.index0\s*\}\}/g, String(idx))
+            .replace(/\{\{\s*forloop\.first\s*\}\}/g, String(idx === 0));
 
-        // Replace image URL references
-        itemBody = itemBody
-          .replace(/\{\{\s*block\.settings\.image_url\s*\|\s*asset_url\s*\}\}/g, imgUrl)
-          .replace(/\{\{\s*block\.settings\.image_url\s*\}\}/g, imgUrl)
-          .replace(/\{\{\s*block\.settings\.image\s*\|\s*asset_url\s*\}\}/g, imgUrl)
-          .replace(/\{\{\s*block\.settings\.image\s*\}\}/g, imgUrl)
-          .replace(/\{\{\s*image_url\s*\|\s*asset_url\s*\}\}/g, imgUrl)
-          .replace(/\{\{\s*image_url\s*\}\}/g, imgUrl);
+          itemBody = itemBody
+            .replace(/\{\{\s*block\.settings\.image_url\s*\|\s*asset_url\s*\}\}/g, imgUrl)
+            .replace(/\{\{\s*block\.settings\.image_url\s*\}\}/g, imgUrl)
+            .replace(/\{\{\s*block\.settings\.image\s*\|\s*asset_url\s*\}\}/g, imgUrl)
+            .replace(/\{\{\s*block\.settings\.image\s*\}\}/g, imgUrl)
+            .replace(/\{\{\s*image_url\s*\|\s*asset_url\s*\}\}/g, imgUrl)
+            .replace(/\{\{\s*image_url\s*\}\}/g, imgUrl);
 
-        // Recursively process nested control flow inside loop item
-        itemBody = processLiquidControlFlow(itemBody, images, heroImage, options);
-        renderedItems.push(itemBody);
-      });
+          itemBody = processLiquidControlFlow(itemBody, images, heroImage, options);
+          renderedItems.push(itemBody);
+        });
 
-      replacement = renderedItems.join('\n');
+        replacement = renderedItems.join('\n');
+      } else {
+        replacement = '';
+      }
     } else if (tagType === 'if') {
       const { ifBody, elseBody } = splitIfElseBranches(innerContent);
-      const isBlockSizeCheck = /section\.blocks\.size\s*>\s*0/i.test(openingTag);
-      const isBlankCheck = /image_url\s*!=\s*blank/i.test(openingTag);
+      const previewCondition = evaluatePreviewIfCondition(openingTag, images);
 
-      let conditionIsTrue = true;
-      if (isBlockSizeCheck) {
-        conditionIsTrue = images.length > 0;
-      } else if (isBlankCheck) {
-        conditionIsTrue = images.length > 0;
+      let conditionIsTrue: boolean;
+      if (previewCondition !== null) {
+        conditionIsTrue = previewCondition;
+      } else {
+        conditionIsTrue = false;
       }
 
       const selectedBranch = conditionIsTrue ? ifBody : elseBody || '';
@@ -222,8 +254,8 @@ function processLiquidVariables(html: string, options: LiquidPreviewOptions): st
       }
       return heroUrl;
     })
-    .replace(/\{\{\s*[\s\S]*?\s*\}\}/g, '') // strip remaining unparsed Liquid output tags
-    .replace(/{%\s*[\s\S]*?%\s*}/g, ''); // strip remaining unparsed standalone Liquid tags
+    .replace(/\{\{\s*[\s\S]*?\s*\}\}/g, '')
+    .replace(/{%\s*[\s\S]*?%\s*}/g, '');
 }
 
 /**
@@ -235,13 +267,10 @@ export function renderLiquidForPreview(liquidContent: string, options: LiquidPre
   const images = options.images && options.images.length > 0 ? options.images : [];
   const heroImage = options.heroImage || images[0] || '';
 
-  // 1. Remove {% schema %} ... {% endschema %}
   let html = liquidContent.replace(/{%\s*schema\s*%}[\s\S]*?{%\s*endschema\s*%}/gi, '');
 
-  // 2. Process control structures ({% if %}, {% for %}, etc.)
   html = processLiquidControlFlow(html, images, heroImage, options);
 
-  // 3. Replace variable tags {{ ... }}
   html = processLiquidVariables(html, options);
 
   return html;

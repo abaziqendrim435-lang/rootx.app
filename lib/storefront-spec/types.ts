@@ -43,6 +43,8 @@ export interface StorefrontImageAssignments {
   gallery: NormalizedImage[];
   story: NormalizedImage | null;
   finalCta: NormalizedImage | null;
+  benefitImages: NormalizedImage[];
+  comparisonImage: NormalizedImage | null;
   hasSingleImageFallback: boolean;
 }
 

@@ -258,6 +258,7 @@ export interface WebsiteGeneration {
   isDemo: boolean;
   provider: string;
   ecommerce?: EcommerceData;
+  imageLibrary?: import('./image-pipeline/types').ProductImageLibrary;
 }
 
 // ── Export ──────────────────────────────────────────────────────
@@ -290,6 +291,7 @@ export interface ProductAnalysis {
   timestamp?: string;
   requestId?: string;
   diagnostics?: import('./product-import/apify-aliexpress').ProductionDiagnostics;
+  imageLibrary?: import('./image-pipeline/types').ProductImageLibrary;
 }
 
 export interface DropshippingInput {

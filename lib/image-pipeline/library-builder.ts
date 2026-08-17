@@ -8,7 +8,50 @@ import { extractRawImages } from './extractor';
 import { normalizeImageUrl } from './normalizer';
 import { validateImage } from './validator';
 import { scoreImageQuality } from './ranker';
-import { cacheProductImages } from './cache-service';
+import { isAcceptedPersistedUrl } from '../supabase-storage';
+
+export function getPersistedLibraryUrl(img: Pick<NormalizedImage, 'publicUrl' | 'cachedUrl' | 'normalizedUrl'>): string {
+  if (isAcceptedPersistedUrl(img.publicUrl)) return img.publicUrl as string;
+  if (isAcceptedPersistedUrl(img.cachedUrl)) return img.cachedUrl as string;
+  return '';
+}
+
+export function isReusableProductImageLibrary(
+  lib: ProductImageLibrary | null | undefined,
+  expectedImageCount?: number
+): lib is ProductImageLibrary {
+  if (!lib || !Array.isArray(lib.allValidImages) || lib.allValidImages.length === 0) {
+    return false;
+  }
+  if (typeof expectedImageCount === 'number' && lib.allValidImages.length !== expectedImageCount) {
+    return false;
+  }
+  if ((lib.cachedImageCount || 0) !== lib.allValidImages.length) {
+    return false;
+  }
+  return lib.allValidImages.every((img) => isAcceptedPersistedUrl(getPersistedLibraryUrl(img)));
+}
+
+export function assertLibraryFullyPersisted(lib: ProductImageLibrary, sourceCount: number): void {
+  const persisted = lib.cachedImageCount || 0;
+  const unique = lib.validUniqueCount || lib.allValidImages.length;
+  if (sourceCount > 0 && unique !== sourceCount) {
+    throw new Error(
+      `[PERSISTENCE FAILED] Unique extracted count (${unique}) does not match source count (${sourceCount}).`
+    );
+  }
+  if (persisted !== unique) {
+    throw new Error(
+      `[PERSISTENCE FAILED] EXTRACTED=${unique} PERSISTED=${persisted}. Every unique product image must be persisted.`
+    );
+  }
+  const missingDurable = lib.allValidImages.filter((img) => !isAcceptedPersistedUrl(getPersistedLibraryUrl(img)));
+  if (missingDurable.length > 0) {
+    throw new Error(
+      `[PERSISTENCE FAILED] ${missingDurable.length} image(s) lack a durable persisted URL.`
+    );
+  }
+}
 
 export function createProductImageLibrary(productData: unknown, customGenId?: string): ProductImageLibrary {
   const generationId = customGenId || `gen_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -76,61 +119,5 @@ export function createProductImageLibrary(productData: unknown, customGenId?: st
     validUniqueCount: allValidImages.length,
     cachedImageCount: 0,
     failedImageCount: 0,
-  };
-}
-
-export async function buildCachedProductImageLibrary(
-  productData: unknown,
-  customGenId?: string
-): Promise<ProductImageLibrary> {
-  const lib = createProductImageLibrary(productData, customGenId);
-  const genId = lib.generationId || `gen_${Date.now()}`;
-
-  if (lib.allValidImages.length === 0) {
-    return lib;
-  }
-
-  const cacheResult = await cacheProductImages(lib.allValidImages, genId);
-  const cachedMap = new Map<string, NormalizedImage>();
-  cacheResult.cachedImages.forEach((img) => {
-    cachedMap.set(img.normalizedUrl, img);
-    if (img.originalUrl) cachedMap.set(img.originalUrl, img);
-  });
-
-  const updatedValidImages = lib.allValidImages.map((img) => {
-    if (img.normalizedUrl.startsWith('/cached-images/') || img.originalUrl?.startsWith('/cached-images/')) {
-      return {
-        ...img,
-        cachedUrl: img.normalizedUrl,
-        publicUrl: img.normalizedUrl,
-        status: 'cached' as const,
-        isValid: true,
-      };
-    }
-    const cached = cachedMap.get(img.normalizedUrl) || cachedMap.get(img.originalUrl);
-    if (cached) return cached;
-    return {
-      ...img,
-      status: 'failed' as const,
-      isValid: false,
-    };
-  });
-
-  const validOnly = updatedValidImages.filter((img) => img.status === 'cached');
-  const heroCandidates = validOnly.filter((img) => img.qualityScore >= 70);
-
-  return {
-    ...lib,
-    allValidImages: validOnly,
-    heroCandidates: heroCandidates.length > 0 ? heroCandidates : validOnly,
-    galleryCandidates: validOnly,
-    lifestyleCandidates: validOnly,
-    detailCandidates: validOnly,
-    rejectedImages: [
-      ...lib.rejectedImages,
-      ...cacheResult.failedImages.map((f) => ({ url: f.originalUrl, reason: f.reason })),
-    ],
-    cachedImageCount: cacheResult.cachedCount,
-    failedImageCount: cacheResult.failedCount,
   };
 }

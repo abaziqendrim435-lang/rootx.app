@@ -30,6 +30,7 @@ import { LiveImageDebugPanel } from '@/components/image-pipeline/LiveImageDebugP
 import type {
   ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
 } from '@/lib/shopify-types';
+import type { ProductImageLibrary } from '@/lib/image-pipeline/types';
 
 import { supabaseClient } from '@/lib/supabase-auth';
 
@@ -2439,6 +2440,28 @@ function getTimestamp(): number {
   return Date.now();
 }
 
+function assertCanonicalImageLibrary(analysis: ProductAnalysis, analyzeInputCount?: number) {
+  const outputCount = analysis.images?.length || 0;
+  const libraryCount = analysis.imageLibrary?.allValidImages?.length || 0;
+  console.log('[Frontend] ANALYZE_OUTPUT:', outputCount);
+  console.log('[Frontend] STATE_IMAGE_LIBRARY:', libraryCount);
+  if (!analysis.imageLibrary || libraryCount === 0) {
+    throw new Error(
+      `ProductImageLibrary missing after analysis. ANALYZE_OUTPUT=${outputCount} STATE_IMAGE_LIBRARY=${libraryCount}`
+    );
+  }
+  if (libraryCount !== outputCount) {
+    throw new Error(
+      `ProductImageLibrary count mismatch. ANALYZE_OUTPUT=${outputCount} STATE_IMAGE_LIBRARY=${libraryCount}`
+    );
+  }
+  if (typeof analyzeInputCount === 'number' && analyzeInputCount > 0 && libraryCount !== analyzeInputCount) {
+    throw new Error(
+      `ProductImageLibrary dropped images. ANALYZE_INPUT=${analyzeInputCount} STATE_IMAGE_LIBRARY=${libraryCount}`
+    );
+  }
+}
+
 interface ApifyProduct {
   url: string;
   title: string;
@@ -2453,6 +2476,7 @@ interface ApifyProduct {
   shipping?: string;
   features?: string[];
   specifications?: Array<{ label: string; value: string }>;
+  imageLibrary?: ProductImageLibrary;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -2748,6 +2772,10 @@ export default function WebsiteBuilderDemo() {
         throw new Error('Product analysis mismatch. Please try again.');
       }
 
+      const analyzeInputCount = productDataPayload?.images?.length || data.analysis.images?.length || 0;
+      console.log('[Frontend] ANALYZE_INPUT:', analyzeInputCount);
+      assertCanonicalImageLibrary(data.analysis, analyzeInputCount);
+
       setProductAnalysis(data.analysis);
       setSelectedImages(data.analysis.images || []);
       setDropInput((prev) => ({
@@ -2857,7 +2885,11 @@ export default function WebsiteBuilderDemo() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          analysis: { ...productAnalysis, images: selectedImages },
+          analysis: {
+            ...productAnalysis,
+            images: selectedImages,
+            imageLibrary: productAnalysis.imageLibrary,
+          },
           input: dropInput,
           provider
         }),
@@ -2867,7 +2899,11 @@ export default function WebsiteBuilderDemo() {
         throw new Error(errData.error || `Server error ${res.status}`);
       }
       const data: WebsiteGeneration = await res.json();
-      setResult(data);
+      const mergedResult: WebsiteGeneration = {
+        ...data,
+        imageLibrary: data.imageLibrary || productAnalysis.imageLibrary,
+      };
+      setResult(mergedResult);
       setDropStatus('done');
       setStatus('done');
       setActiveTab('pages');
@@ -2999,6 +3035,10 @@ export default function WebsiteBuilderDemo() {
 
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Analysis failed');
+
+      const analyzeInputCount = payloadProduct.images?.length || 0;
+      console.log('[Frontend] ANALYZE_INPUT:', analyzeInputCount);
+      assertCanonicalImageLibrary(data.analysis, analyzeInputCount);
 
       setProductAnalysis(data.analysis);
       setSelectedImages(data.analysis.images || []);
@@ -4930,7 +4970,11 @@ export default function WebsiteBuilderDemo() {
                 {/* Live Image Debug Panel */}
                 <LiveImageDebugPanel
                   productSource={apifySelectedProduct ? 'AliExpress (Apify)' : 'AliExpress'}
-                  imageLibrary={designEngineResult?.imagePipelineResult?.imageLibrary || (result as any)?.imageLibrary}
+                  imageLibrary={
+                    designEngineResult?.spec?.imageLibrary ||
+                    designEngineResult?.imagePipelineResult?.imageLibrary ||
+                    (result as any)?.imageLibrary
+                  }
                   rawImagesCount={result?.ecommerce?.images?.length || 0}
                   heroOriginalUrl={result?.ecommerce?.images?.[0]}
                   heroCachedUrl={result?.ecommerce?.images?.[0]}

@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { NormalizedImage } from './types';
+import { isAcceptedPersistedUrl } from '../supabase-storage';
 
 /**
  * Priority Order:
@@ -23,10 +24,10 @@ export function resolveRenderableImage(
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image/')) {
       return trimmed;
     }
-    if (trimmed.startsWith('/cached-images/') || trimmed.startsWith('cached-images/')) {
-      return ''; // Ignore relative cached paths in favor of public HTTP URLs
+    if (isAcceptedPersistedUrl(trimmed)) {
+      return trimmed;
     }
-    return trimmed;
+    return trimmed.startsWith('/') ? '' : trimmed;
   }
 
   // 1. Persistent Public HTTP URL (e.g. Supabase Storage CDN)
@@ -34,22 +35,32 @@ export function resolveRenderableImage(
     return image.publicUrl.trim();
   }
 
-  // 2. Persistent Cached HTTP URL
+  // 2. Dev-accepted persisted relative cache path
+  if (image.publicUrl && isAcceptedPersistedUrl(image.publicUrl)) {
+    return image.publicUrl.trim();
+  }
+
+  // 3. Persistent Cached HTTP URL
   if (image.cachedUrl && (image.cachedUrl.startsWith('http://') || image.cachedUrl.startsWith('https://'))) {
     return image.cachedUrl.trim();
   }
 
-  // 3. Local packaged Shopify theme asset name (for ZIP exports e.g. rootx-product-01.jpg)
+  // 4. Dev-accepted persisted relative cache path
+  if (image.cachedUrl && isAcceptedPersistedUrl(image.cachedUrl)) {
+    return image.cachedUrl.trim();
+  }
+
+  // 5. Local packaged Shopify theme asset name (for ZIP exports e.g. rootx-product-01.jpg)
   if (image.exportedAssetName && image.exportedAssetName.trim().length > 0 && !image.exportedAssetName.startsWith('/')) {
     return image.exportedAssetName.trim();
   }
 
-  // 4. Cleaned Supplier CDN URL (e.g. https://ae01.alicdn.com/kf/...)
+  // 6. Cleaned Supplier CDN URL (e.g. https://ae01.alicdn.com/kf/...)
   if (image.normalizedUrl && (image.normalizedUrl.startsWith('http://') || image.normalizedUrl.startsWith('https://') || image.normalizedUrl.startsWith('data:image/'))) {
     return image.normalizedUrl.trim();
   }
 
-  // 5. Raw Supplier URL Fallback
+  // 7. Raw Supplier URL Fallback
   if (image.originalUrl && (image.originalUrl.startsWith('http://') || image.originalUrl.startsWith('https://') || image.originalUrl.startsWith('data:image/'))) {
     return image.originalUrl.trim();
   }

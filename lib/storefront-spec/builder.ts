@@ -7,14 +7,13 @@ import type { WebsiteGeneration, WebsiteBuilderInput, DesignArchetypeId } from '
 import type { StorefrontSpec, StorefrontImageAssignments } from './types';
 import { buildCleanBrandProfile } from '../title-cleaner';
 import { sanitizePlaceholders } from '../placeholder-cleaner';
-import { runImagePipeline } from '../image-pipeline';
 import { analyzeAndDetectArchetype } from '../design-engine/category-detector';
 import { generateDesignTokens } from '../design-engine/design-tokens';
 import { createSectionPlan } from '../design-engine/section-sequencer';
 import { getArchetype } from '../design-engine/archetypes';
 
 import type { ProductImageLibrary } from '../image-pipeline/types';
-import { createProductImageLibrary, reassignImagesForTheme, resolveRenderableImage } from '../image-pipeline';
+import { createProductImageLibrary, reassignImagesForTheme, resolveRenderableImage, getPersistedLibraryUrl } from '../image-pipeline';
 
 import { THEME_FAMILIES } from '../design-engine/theme-family-types';
 
@@ -40,7 +39,12 @@ export function buildStorefrontSpec(
   const archetypeId: DesignArchetypeId = getArchetype(input.preferredStyle || categoryAnalysis.selectedArchetype).id;
   const familyConfig = THEME_FAMILIES[archetypeId] || THEME_FAMILIES.modern_tech;
 
-  // 4. Image Pipeline with Persistent Product Image Library
+  // 4. Image Pipeline — ProductImageLibrary is the ONLY canonical image source
+  if (!existingImageLibrary) {
+    console.warn(
+      '[StorefrontSpec Builder] No ProductImageLibrary provided. Rebuilding from generation payload (legacy path).'
+    );
+  }
   const imageLibrary = existingImageLibrary || createProductImageLibrary(gen);
   const rawSelections = (gen.ecommerce as any)?.aiImageSelections || (gen as any)?.aiImageSelections || (gen as any)?.imageSelections;
   const aiSelections = {
@@ -62,24 +66,35 @@ export function buildStorefrontSpec(
     gallery: themeAssignments.gallery,
     story: themeAssignments.story,
     finalCta: themeAssignments.finalCta,
+    benefitImages: themeAssignments.benefitImages,
+    comparisonImage: themeAssignments.comparisonImage,
     hasSingleImageFallback: themeAssignments.hasSingleImageFallback,
   };
 
-  // ── DIAGNOSTIC: Trace image assignments at spec construction ──────
-  const heroUrl = images.hero?.normalizedUrl || 'NONE';
-  const storyUrl = images.story?.normalizedUrl || 'NONE';
-  const featuredUrl = images.featured?.normalizedUrl || 'NONE';
-  const ctaUrl = images.finalCta?.normalizedUrl || 'NONE';
-  const uniqueUrls = new Set([heroUrl, storyUrl, featuredUrl, ctaUrl].filter(u => u !== 'NONE'));
+  const sectionRoleUrls = [
+    images.hero,
+    images.story,
+    images.featured,
+    images.finalCta,
+    ...images.benefitImages,
+    images.comparisonImage,
+  ]
+    .filter(Boolean)
+    .map((img) => getPersistedLibraryUrl(img!) || resolveRenderableImage(img!));
+  const uniqueSectionUrls = new Set(sectionRoleUrls.filter(Boolean));
+
   console.log('[StorefrontSpec Builder] IMAGE ASSIGNMENT DIAGNOSTICS:', {
-    IMAGE_LIBRARY_TOTAL: imageLibrary.allValidImages.length,
-    GALLERY_SIZE: images.gallery.length,
+    PRODUCT_IMAGE_LIBRARY_TOTAL: imageLibrary.allValidImages.length,
+    STOREFRONT_GALLERY_TOTAL: images.gallery.length,
+    UNIQUE_IMAGES_AVAILABLE: imageLibrary.allValidImages.length,
     PRODUCT_PAGE_GALLERY_SIZE: themeAssignments.productPageGallery?.length || 0,
-    HERO: heroUrl.slice(0, 60),
-    STORY: storyUrl.slice(0, 60),
-    FEATURED: featuredUrl.slice(0, 60),
-    FINAL_CTA: ctaUrl.slice(0, 60),
-    UNIQUE_SECTION_IMAGES: uniqueUrls.size,
+    HERO: resolveRenderableImage(images.hero)?.slice(0, 80) || 'NONE',
+    STORY: resolveRenderableImage(images.story)?.slice(0, 80) || 'NONE',
+    FEATURED: resolveRenderableImage(images.featured)?.slice(0, 80) || 'NONE',
+    FINAL_CTA: resolveRenderableImage(images.finalCta)?.slice(0, 80) || 'NONE',
+    BENEFIT_IMAGES: images.benefitImages.map((img) => resolveRenderableImage(img)?.slice(0, 60)),
+    COMPARISON: resolveRenderableImage(images.comparisonImage)?.slice(0, 80) || 'NONE',
+    UNIQUE_SECTION_ROLE_URLS: uniqueSectionUrls.size,
     HAS_SINGLE_FALLBACK: images.hasSingleImageFallback,
   });
 
@@ -99,9 +114,9 @@ export function buildStorefrontSpec(
   const hasStoryContent = Boolean(gen.about?.content || images.story);
 
   // 6. Construct Section Specifications with Multi-Image Gallery Blocks
-  const galleryList = themeAssignments.productPageGallery && themeAssignments.productPageGallery.length > 0
+  const galleryList = themeAssignments.productPageGallery.length > 0
     ? themeAssignments.productPageGallery
-    : (images.hero ? [images.hero] : []);
+    : imageLibrary.allValidImages;
   const hasGalleryContent = galleryList.length > 0;
 
   const galleryBlocks = galleryList.map((img, i) => ({
@@ -113,8 +128,22 @@ export function buildStorefrontSpec(
     },
   }));
 
+  const benefitBlocks = (gen.homepage?.features || []).map((feature, i) => ({
+    id: `benefit_${i + 1}`,
+    type: 'benefit',
+    settings: {
+      title: feature.title,
+      description: feature.description,
+      icon: feature.icon || '',
+      image_url: images.benefitImages[i]
+        ? resolveRenderableImage(images.benefitImages[i])
+        : '',
+    },
+  }));
+
   const sections = sectionPlan.sections.map((sec) => {
-    const isGallerySection = sec.sectionId === 'rootx-gallery' || sec.sectionId === 'rootx-main-product' || sec.sectionId === 'rootx-hero';
+    const isGallerySection =
+      sec.sectionId === 'rootx-gallery' || sec.sectionId === 'rootx-main-product';
     
     let enabled = true;
     let required = familyConfig.requiredSections.includes(sec.sectionId);
@@ -141,17 +170,26 @@ export function buildStorefrontSpec(
       required = true;
     }
 
-    const heroImageResolved = resolveRenderableImage(images.hero) || resolveRenderableImage(galleryList[0]);
-    const storyImageResolved = resolveRenderableImage(images.story) || resolveRenderableImage(galleryList[1] || galleryList[0]);
-    const showcaseImageResolved = resolveRenderableImage(images.featured) || resolveRenderableImage(galleryList[2] || galleryList[1] || galleryList[0]);
-    const finalCtaImageResolved = resolveRenderableImage(images.finalCta) || resolveRenderableImage(galleryList[3] || galleryList[2] || galleryList[0]);
+    const heroImageResolved = resolveRenderableImage(images.hero);
+    const storyImageResolved = resolveRenderableImage(images.story);
+    const showcaseImageResolved = resolveRenderableImage(images.featured);
+    const finalCtaImageResolved = resolveRenderableImage(images.finalCta);
+    const comparisonImageResolved = resolveRenderableImage(images.comparisonImage);
 
     const sectionImageMap: Record<string, string> = {
       'rootx-hero': heroImageResolved,
       'rootx-image-story': storyImageResolved,
       'rootx-product-showcase': showcaseImageResolved,
       'rootx-final-cta': finalCtaImageResolved,
+      'rootx-comparison': comparisonImageResolved,
     };
+
+    const sectionBlocks =
+      sec.sectionId === 'rootx-benefits' && benefitBlocks.length > 0
+        ? benefitBlocks
+        : isGallerySection
+          ? galleryBlocks
+          : undefined;
 
     return {
       id: sec.sectionId,
@@ -165,11 +203,36 @@ export function buildStorefrontSpec(
         cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
         cta_url: '/cart/add',
         hero_image: sectionImageMap[sec.sectionId] || heroImageResolved,
+        story_image: storyImageResolved,
         section_image: sectionImageMap[sec.sectionId] || storyImageResolved,
+        showcase_image: showcaseImageResolved,
+        comparison_image: comparisonImageResolved,
       },
-      blocks: isGallerySection ? galleryBlocks : undefined,
+      blocks: sectionBlocks,
     };
   });
+
+  const heroImageResolvedForProduct = resolveRenderableImage(images.hero);
+  const showcaseImageResolvedForProduct = resolveRenderableImage(images.featured);
+
+  const sectionsWithProductPage = [
+    ...sections,
+    {
+      id: 'rootx-main-product',
+      type: 'rootx-main-product',
+      variant: archDef.productPageLayout || 'standard',
+      enabled: true,
+      required: true,
+      settings: {
+        headline: profile.cleanHeroHeadline,
+        hero_image: heroImageResolvedForProduct,
+        showcase_image: showcaseImageResolvedForProduct,
+        cta_text: `Buy Now — $${gen.ecommerce?.price || '49.99'}`,
+        cta_url: '/cart/add',
+      },
+      blocks: galleryBlocks,
+    },
+  ];
 
   return {
     version: '1.0',
@@ -229,7 +292,7 @@ export function buildStorefrontSpec(
     images,
     imageLibrary,
     imageAssignments: themeAssignments,
-    sections,
+    sections: sectionsWithProductPage,
     navigation: {
       links: [
         { label: 'Home', url: '/' },

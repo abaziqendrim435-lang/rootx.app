@@ -1,15 +1,19 @@
 // ============================================================
-// RootX — Persistent Server-Side Image Cache Service V1
-// Downloads raw supplier images immediately, validates HTTP 200,
-// Content-Type, magic bytes, uploads to Supabase Storage bucket
-// 'rootx-product-images/<generation-id>/image-XX.ext', and assigns
-// stable cachedUrls to all NormalizedImage objects.
+// RootX — Persistent Server-Side Image Cache Service V2
+// Downloads supplier images, then persists them to Supabase Storage
+// (production) or local public/cached-images (development only).
+// Raw AliExpress URLs are never treated as "cached".
 // ============================================================
 
-import { supabase } from '../supabase';
 import type { NormalizedImage } from './types';
+import {
+  isAcceptedPersistedUrl,
+  isDurablePersistedUrl,
+  isProductionPersistenceRequired,
+  uploadProductImage,
+  PRODUCT_IMAGE_BUCKET,
+} from '../supabase-storage';
 
-const BUCKET_NAME = 'rootx-product-images';
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const DOWNLOAD_TIMEOUT_MS = 12_000;
 
@@ -23,14 +27,13 @@ export interface CacheBatchResult {
 
 export function detectImageMimeAndExt(buffer: Buffer, headerContentType?: string): { mimeType: string; ext: string } {
   const mime = (headerContentType || '').toLowerCase().split(';')[0].trim();
-  
+
   if (mime === 'image/jpeg' || mime === 'image/jpg') return { mimeType: 'image/jpeg', ext: '.jpg' };
   if (mime === 'image/png') return { mimeType: 'image/png', ext: '.png' };
   if (mime === 'image/webp') return { mimeType: 'image/webp', ext: '.webp' };
   if (mime === 'image/gif') return { mimeType: 'image/gif', ext: '.gif' };
   if (mime === 'image/avif') return { mimeType: 'image/avif', ext: '.avif' };
 
-  // Magic byte header inspection fallback
   if (buffer.length >= 4) {
     if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
       return { mimeType: 'image/jpeg', ext: '.jpg' };
@@ -46,8 +49,16 @@ export function detectImageMimeAndExt(buffer: Buffer, headerContentType?: string
     }
   }
 
-  // Default fallback for binary data buffers
   return { mimeType: 'image/jpeg', ext: '.jpg' };
+}
+
+function failedImage(img: NormalizedImage, reason: string): NormalizedImage {
+  return {
+    ...img,
+    status: 'failed',
+    isValid: false,
+    rejectionReason: reason,
+  };
 }
 
 export async function cacheSingleImage(
@@ -57,25 +68,43 @@ export async function cacheSingleImage(
 ): Promise<NormalizedImage> {
   const rawUrl = img.normalizedUrl || img.originalUrl;
   const indexStr = String(index + 1).padStart(2, '0');
+  const production = isProductionPersistenceRequired();
 
   try {
-    let buffer: Buffer;
-    let headerMime = 'image/jpeg';
+    if (isDurablePersistedUrl(rawUrl) || isDurablePersistedUrl(img.publicUrl) || isDurablePersistedUrl(img.cachedUrl)) {
+      const durable = (isDurablePersistedUrl(img.publicUrl) && img.publicUrl)
+        || (isDurablePersistedUrl(img.cachedUrl) && img.cachedUrl)
+        || rawUrl;
+      return {
+        ...img,
+        cachedUrl: durable,
+        publicUrl: durable,
+        status: 'cached',
+        isValid: true,
+      };
+    }
 
     if (rawUrl.startsWith('/cached-images/') || rawUrl.startsWith('cached-images/')) {
+      if (production) {
+        return failedImage(img, 'Relative /cached-images/ paths are not durable in production');
+      }
       const cleanPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
       let byteSize = 800;
-      let mimeType = cleanPath.endsWith('.avif') ? 'image/avif' : cleanPath.endsWith('.webp') ? 'image/webp' : cleanPath.endsWith('.png') ? 'image/png' : 'image/jpeg';
-      if (typeof window === 'undefined') {
-        try {
-          const fsMod = await import('fs/promises');
-          const pathMod = await import('path');
-          const localFilePath = pathMod.join(process.cwd(), 'public', cleanPath.replace(/^\//, ''));
-          const stat = await fsMod.stat(localFilePath);
-          byteSize = stat.size;
-        } catch {
-          // File path registered in memory
-        }
+      const mimeType = cleanPath.endsWith('.avif')
+        ? 'image/avif'
+        : cleanPath.endsWith('.webp')
+          ? 'image/webp'
+          : cleanPath.endsWith('.png')
+            ? 'image/png'
+            : 'image/jpeg';
+      try {
+        const fsMod = await import('fs/promises');
+        const pathMod = await import('path');
+        const localFilePath = pathMod.join(process.cwd(), 'public', cleanPath.replace(/^\//, ''));
+        const stat = await fsMod.stat(localFilePath);
+        byteSize = stat.size;
+      } catch {
+        // Path registered; byte size optional in local dev
       }
       return {
         ...img,
@@ -87,6 +116,9 @@ export async function cacheSingleImage(
         isValid: true,
       };
     }
+
+    let buffer: Buffer;
+    let headerMime = 'image/jpeg';
 
     if (rawUrl.startsWith('data:image/')) {
       const parts = rawUrl.split(';base64,');
@@ -124,60 +156,52 @@ export async function cacheSingleImage(
 
     const { mimeType, ext } = detectImageMimeAndExt(buffer, headerMime);
     const filename = `image-${indexStr}${ext}`;
-    const storagePath = `${generationId}/${filename}`;
 
     let cachedUrl = '';
     let publicUrl = '';
+    let storagePath = `${PRODUCT_IMAGE_BUCKET}/${generationId}/${filename}`;
 
-    // Attempt Supabase Storage Upload if configured
-    if (supabase) {
-      try {
-        const { error: uploadError } = await supabase.storage
-          .from(BUCKET_NAME)
-          .upload(storagePath, buffer, {
-            contentType: mimeType,
-            upsert: true,
-          });
-
-        if (!uploadError) {
-          const { data: publicData } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(storagePath);
-          if (publicData?.publicUrl) {
-            publicUrl = publicData.publicUrl;
-            cachedUrl = publicData.publicUrl;
-          }
-        } else {
-          console.warn(`[Cache Service] Supabase bucket upload failed (${uploadError.message}). Using local static cache.`);
-        }
-      } catch (sbErr: any) {
-        console.warn(`[Cache Service] Supabase storage exception:`, sbErr.message);
+    try {
+      const uploaded = await uploadProductImage({
+        generationId,
+        filename,
+        buffer,
+        mimeType,
+      });
+      publicUrl = uploaded.publicUrl;
+      cachedUrl = uploaded.publicUrl;
+      storagePath = uploaded.storagePath;
+    } catch (uploadErr: unknown) {
+      const uploadMsg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+      if (production) {
+        throw new Error(uploadMsg);
       }
+      console.warn(`[Cache Service] Supabase upload unavailable (${uploadMsg}). Using local dev cache.`);
     }
 
-    // Local static filesystem fallback for local dev / demo mode
-    if (!cachedUrl && typeof window === 'undefined') {
-      try {
-        const fsMod = await import('fs/promises');
-        const pathMod = await import('path');
-        const localDir = pathMod.join(process.cwd(), 'public', 'cached-images', generationId);
-        await fsMod.mkdir(localDir, { recursive: true });
-        const filePath = pathMod.join(localDir, filename);
-        await fsMod.writeFile(filePath, buffer);
-        cachedUrl = `/cached-images/${generationId}/${filename}`;
-      } catch (localErr: any) {
-        console.warn(`[Cache Service] Local filesystem cache write skipped:`, localErr.message);
-        cachedUrl = rawUrl;
-      }
+    if (!cachedUrl && !production && typeof window === 'undefined') {
+      const fsMod = await import('fs/promises');
+      const pathMod = await import('path');
+      const localDir = pathMod.join(process.cwd(), 'public', 'cached-images', generationId);
+      await fsMod.mkdir(localDir, { recursive: true });
+      const filePath = pathMod.join(localDir, filename);
+      await fsMod.writeFile(filePath, buffer);
+      cachedUrl = `/cached-images/${generationId}/${filename}`;
     }
 
-    const fullStoragePath = `${BUCKET_NAME}/${storagePath}`;
+    if (!isAcceptedPersistedUrl(publicUrl || cachedUrl)) {
+      throw new Error(
+        production
+          ? 'Production persistence requires a public HTTPS Storage URL'
+          : 'Image was downloaded but could not be persisted to Storage or local cache'
+      );
+    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[Cache Service] Cached image trace:`, {
         originalUrl: img.originalUrl || rawUrl,
         cachedUrl,
-        storagePath: fullStoragePath,
+        storagePath,
         publicUrl: publicUrl || cachedUrl,
         mimeType,
         status: 'cached',
@@ -187,32 +211,17 @@ export async function cacheSingleImage(
     return {
       ...img,
       cachedUrl,
-      publicUrl: publicUrl || (cachedUrl.startsWith('http') ? cachedUrl : undefined),
-      storagePath: fullStoragePath,
+      publicUrl: publicUrl || cachedUrl,
+      storagePath,
       mimeType,
       byteSize: buffer.length,
       status: 'cached',
       isValid: true,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[Cache Service] Failed to cache image (${rawUrl.slice(0, 60)}...): ${errMsg}`);
-    if (rawUrl && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('/'))) {
-      console.warn(`[Cache Service] Preserving raw image URL as fallback: ${rawUrl.slice(0, 60)}...`);
-      return {
-        ...img,
-        cachedUrl: rawUrl,
-        publicUrl: rawUrl.startsWith('http') ? rawUrl : undefined,
-        status: 'cached',
-        isValid: true,
-      };
-    }
-    return {
-      ...img,
-      status: 'failed',
-      isValid: false,
-      rejectionReason: errMsg,
-    };
+    console.error(`[Cache Service] Failed to persist image (${rawUrl.slice(0, 60)}...): ${errMsg}`);
+    return failedImage(img, errMsg);
   }
 }
 
@@ -227,12 +236,12 @@ export async function cacheProductImages(
 
   for (let i = 0; i < images.length; i++) {
     const res = await cacheSingleImage(images[i], generationId, i);
-    if (res.status === 'cached' && res.cachedUrl) {
+    if (res.status === 'cached' && isAcceptedPersistedUrl(res.publicUrl || res.cachedUrl)) {
       cachedImages.push(res);
     } else {
       failedImages.push({
         originalUrl: images[i].originalUrl || images[i].normalizedUrl,
-        reason: res.rejectionReason || 'Failed to download or upload image',
+        reason: res.rejectionReason || 'Failed to download or persist image',
       });
     }
   }

@@ -6,7 +6,6 @@
 
 import type { ProductImageLibrary, ThemeImageAssignments, NormalizedImage, AIImageSelections } from './types';
 import type { DesignArchetypeId } from '../website-builder-types';
-import { isForbiddenOrExternalUrl } from './validator';
 
 /**
  * Deterministically resolves an image from ProductImageLibrary using an index, ID, or valid library URL.
@@ -28,11 +27,9 @@ export function resolveImageFromLibrary(
   } else if (typeof indexOrIdOrUrl === 'string' && indexOrIdOrUrl.trim()) {
     const val = indexOrIdOrUrl.trim();
 
-    // 1. Match by ID
     const foundById = valid.find((img) => img.id === val);
     if (foundById) return foundById;
 
-    // 2. Match by exact URL in ProductImageLibrary
     const foundByUrl = valid.find(
       (img) =>
         img.originalUrl === val ||
@@ -42,7 +39,6 @@ export function resolveImageFromLibrary(
     );
     if (foundByUrl) return foundByUrl;
 
-    // 3. Extract trailing index if string resembles index format e.g. "product-image-2"
     const matchesNum = val.match(/(?:image[-_]?|index[-_]?)?(\d+)/i);
     if (matchesNum) {
       const parsedNum = parseInt(matchesNum[1], 10);
@@ -51,21 +47,71 @@ export function resolveImageFromLibrary(
       }
     }
 
-    // If it is an external URL, forbidden domain (e.g. youtube.com), or unlisted URL, REJECT IT!
     if (rejectedLog) {
       console.log(`[Reassigner Audit] REJECTED external non-library URL: ${val.slice(0, 80)}`);
       rejectedLog.push(val);
     }
   }
 
-  // Safe fallback to valid library image
   const safeIndex = Math.min(Math.max(0, fallbackIndex), valid.length - 1);
   return valid[safeIndex] || valid[0] || null;
 }
 
+function dedupeValidImages(valid: NormalizedImage[]): NormalizedImage[] {
+  return valid.filter(
+    (img, idx, arr) =>
+      arr.findIndex(
+        (x) => x.id === img.id || (x.normalizedUrl && x.normalizedUrl === img.normalizedUrl)
+      ) === idx
+  );
+}
+
+function pickNextUnused(
+  pool: NormalizedImage[],
+  usedIds: Set<string>,
+  allowReuse: boolean
+): NormalizedImage | null {
+  const unused = pool.find((img) => !usedIds.has(img.id));
+  if (unused) return unused;
+  if (allowReuse && pool.length > 0) return pool[0];
+  return null;
+}
+
+function markUsed(img: NormalizedImage | null | undefined, usedIds: Set<string>): void {
+  if (img?.id) usedIds.add(img.id);
+}
+
+function pickFromPoolOrLibrary(
+  imageLibrary: ProductImageLibrary,
+  uniqueValid: NormalizedImage[],
+  usedIds: Set<string>,
+  allowReuse: boolean,
+  pool: NormalizedImage[],
+  aiIndex?: number,
+  aiId?: string,
+  rejectedLog?: string[]
+): NormalizedImage | null {
+  if (aiIndex !== undefined || aiId) {
+    const aiPick = resolveImageFromLibrary(
+      imageLibrary,
+      aiIndex ?? aiId,
+      -1,
+      rejectedLog
+    );
+    if (aiPick && (!usedIds.has(aiPick.id) || allowReuse)) {
+      return aiPick;
+    }
+  }
+
+  const poolPick = pickNextUnused(pool.length > 0 ? pool : uniqueValid, usedIds, allowReuse);
+  if (poolPick) return poolPick;
+
+  return pickNextUnused(uniqueValid, usedIds, allowReuse);
+}
+
 export function reassignImagesForTheme(
   imageLibrary: ProductImageLibrary,
-  archetypeId: DesignArchetypeId,
+  _archetypeId: DesignArchetypeId,
   aiSelections?: AIImageSelections
 ): ThemeImageAssignments {
   const valid = imageLibrary.allValidImages || [];
@@ -78,6 +124,8 @@ export function reassignImagesForTheme(
       gallery: [],
       story: null,
       finalCta: null,
+      benefitImages: [],
+      comparisonImage: null,
       productPageGallery: [],
       hasSingleImageFallback: true,
       aiSelections,
@@ -86,84 +134,97 @@ export function reassignImagesForTheme(
     };
   }
 
-  // 1. Deduplicate valid candidates by unique ID & URL
-  const uniqueValid = valid.filter((img, idx, arr) => 
-    arr.findIndex((x) => x.id === img.id || (x.normalizedUrl && x.normalizedUrl === img.normalizedUrl)) === idx
+  const uniqueValid = dedupeValidImages(valid);
+  const allowReuse = uniqueValid.length === 1;
+  const usedIds = new Set<string>();
+
+  // Hero — strongest primary product image (quality-ranked heroCandidates, AI override when valid)
+  const heroPool = imageLibrary.heroCandidates.filter((img) =>
+    uniqueValid.some((u) => u.id === img.id)
+  );
+  const rankedHeroPool = [...(heroPool.length > 0 ? heroPool : uniqueValid)].sort(
+    (a, b) => b.qualityScore - a.qualityScore
   );
 
-  // 2. Select Hero Image (from AI index/ID if available, else first unique image)
-  let heroImage: NormalizedImage | null = null;
-  if (aiSelections?.heroImageIndex !== undefined || aiSelections?.heroImageId) {
-    heroImage = resolveImageFromLibrary(
-      imageLibrary,
-      aiSelections.heroImageIndex ?? aiSelections.heroImageId,
-      0,
-      rejectedExternalUrls
-    );
-  }
-
+  let heroImage = pickFromPoolOrLibrary(
+    imageLibrary,
+    uniqueValid,
+    usedIds,
+    allowReuse,
+    rankedHeroPool,
+    aiSelections?.heroImageIndex,
+    aiSelections?.heroImageId,
+    rejectedExternalUrls
+  );
   if (!heroImage) {
-    heroImage = uniqueValid[0] || null;
+    heroImage = rankedHeroPool[0] || uniqueValid[0] || null;
+  }
+  markUsed(heroImage, usedIds);
+
+  // Full product gallery — every unique library image in source order
+  const productPageGallery = [...uniqueValid];
+  const galleryImages = [...uniqueValid];
+
+  // Story — lifestyle / use-case image, distinct from hero when possible
+  const lifestylePool = imageLibrary.lifestyleCandidates.filter((img) =>
+    uniqueValid.some((u) => u.id === img.id)
+  );
+  let storyImage = pickFromPoolOrLibrary(
+    imageLibrary,
+    uniqueValid,
+    usedIds,
+    allowReuse,
+    lifestylePool,
+    aiSelections?.storyImageIndex,
+    aiSelections?.storyImageId,
+    rejectedExternalUrls
+  );
+  markUsed(storyImage, usedIds);
+
+  // Featured / showcase — detail or product angle, distinct from hero + story when possible
+  const detailPool = imageLibrary.detailCandidates.filter((img) =>
+    uniqueValid.some((u) => u.id === img.id)
+  );
+  let featuredImage = pickFromPoolOrLibrary(
+    imageLibrary,
+    uniqueValid,
+    usedIds,
+    allowReuse,
+    detailPool.length > 0 ? detailPool : uniqueValid,
+    aiSelections?.featuredImageIndex,
+    aiSelections?.featuredImageId,
+    rejectedExternalUrls
+  );
+  markUsed(featuredImage, usedIds);
+
+  // Final CTA — next unused image, never silently reuse story when more images exist
+  let finalCtaImage = pickFromPoolOrLibrary(
+    imageLibrary,
+    uniqueValid,
+    usedIds,
+    allowReuse,
+    uniqueValid,
+    aiSelections?.finalCtaImageIndex,
+    aiSelections?.finalCtaImageId,
+    rejectedExternalUrls
+  );
+  if (!finalCtaImage && allowReuse) {
+    finalCtaImage = storyImage || heroImage;
+  }
+  markUsed(finalCtaImage, usedIds);
+
+  // Benefits / features — up to 3 distinct supporting images
+  const benefitImages: NormalizedImage[] = [];
+  for (let i = 0; i < 3; i++) {
+    const benefitImg = pickNextUnused(uniqueValid, usedIds, allowReuse);
+    if (!benefitImg) break;
+    benefitImages.push(benefitImg);
+    markUsed(benefitImg, usedIds);
   }
 
-  // 3. Deterministically allocate Story Image (Must be DIFFERENT from Hero if uniqueValid.length > 1)
-  let storyImage: NormalizedImage | null = null;
-  if (aiSelections?.storyImageIndex !== undefined && aiSelections.storyImageIndex > 0 && uniqueValid[aiSelections.storyImageIndex]) {
-    const candidate = uniqueValid[aiSelections.storyImageIndex];
-    if (candidate.id !== heroImage?.id) {
-      storyImage = candidate;
-    }
-  }
-  if (!storyImage) {
-    storyImage = uniqueValid.length > 1 ? (uniqueValid.find(img => img.id !== heroImage?.id) || uniqueValid[1]) : heroImage;
-  }
-
-  // 4. Deterministically allocate Featured / Showcase Image (Must be DIFFERENT from Hero & Story if uniqueValid.length > 2)
-  let featuredImage: NormalizedImage | null = null;
-  if (aiSelections?.featuredImageIndex !== undefined && uniqueValid[aiSelections.featuredImageIndex]) {
-    const candidate = uniqueValid[aiSelections.featuredImageIndex];
-    if (candidate.id !== heroImage?.id && candidate.id !== storyImage?.id) {
-      featuredImage = candidate;
-    }
-  }
-  if (!featuredImage) {
-    featuredImage = uniqueValid.length > 2 ? (uniqueValid.find(img => img.id !== heroImage?.id && img.id !== storyImage?.id) || uniqueValid[2]) : (uniqueValid.length > 1 ? storyImage : heroImage);
-  }
-
-  // 5. Deterministically allocate Final CTA Image (Must be DIFFERENT if uniqueValid.length > 3)
-  let finalCtaImage: NormalizedImage | null = null;
-  if (aiSelections?.finalCtaImageIndex !== undefined && uniqueValid[aiSelections.finalCtaImageIndex]) {
-    const candidate = uniqueValid[aiSelections.finalCtaImageIndex];
-    if (candidate.id !== heroImage?.id && candidate.id !== storyImage?.id && candidate.id !== featuredImage?.id) {
-      finalCtaImage = candidate;
-    }
-  }
-  if (!finalCtaImage) {
-    finalCtaImage = uniqueValid.length > 3 ? (uniqueValid.find(img => img.id !== heroImage?.id && img.id !== storyImage?.id && img.id !== featuredImage?.id) || uniqueValid[3]) : storyImage;
-  }
-
-  // 3. Product Page & Storefront Gallery (Render ALL valid ProductImageLibrary images dynamically)
-  let galleryImages: NormalizedImage[] = [];
-  if (heroImage) {
-    galleryImages.push(heroImage);
-  }
-
-  // Include AI selected gallery items first if provided
-  if (Array.isArray(aiSelections?.galleryImageIndexes) && aiSelections.galleryImageIndexes.length > 0) {
-    aiSelections.galleryImageIndexes.forEach((idx) => {
-      const resolved = resolveImageFromLibrary(imageLibrary, idx, -1, rejectedExternalUrls);
-      if (resolved && !galleryImages.some((g) => g.id === resolved.id)) {
-        galleryImages.push(resolved);
-      }
-    });
-  }
-
-  // Ensure ALL remaining valid ProductImageLibrary images are included in the gallery
-  valid.forEach((img) => {
-    if (!galleryImages.some((g) => g.id === img.id)) {
-      galleryImages.push(img);
-    }
-  });
+  // Comparison / content section — one additional distinct image when available
+  const comparisonImage = pickNextUnused(uniqueValid, usedIds, allowReuse);
+  markUsed(comparisonImage, usedIds);
 
   return {
     hero: heroImage,
@@ -171,8 +232,10 @@ export function reassignImagesForTheme(
     gallery: galleryImages,
     story: storyImage,
     finalCta: finalCtaImage,
-    productPageGallery: galleryImages,
-    hasSingleImageFallback: valid.length === 1,
+    benefitImages,
+    comparisonImage,
+    productPageGallery,
+    hasSingleImageFallback: uniqueValid.length === 1,
     aiSelections: {
       heroImageIndex: heroImage ? valid.indexOf(heroImage) : 0,
       heroImageId: heroImage?.id,
@@ -188,4 +251,3 @@ export function reassignImagesForTheme(
     rejectedExternalUrls,
   };
 }
-

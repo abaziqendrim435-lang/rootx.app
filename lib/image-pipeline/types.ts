@@ -82,6 +82,8 @@ export interface ThemeImageAssignments {
   gallery: NormalizedImage[];
   story: NormalizedImage | null;
   finalCta: NormalizedImage | null;
+  benefitImages: NormalizedImage[];
+  comparisonImage: NormalizedImage | null;
   productPageGallery: NormalizedImage[];
   hasSingleImageFallback: boolean;
   aiSelections?: AIImageSelections;

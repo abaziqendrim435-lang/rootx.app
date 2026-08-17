@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAliExpressProductViaApify } from '@/lib/product-import/apify-aliexpress';
-import { buildCachedProductImageLibrary } from '@/lib/image-pipeline';
+import {
+  assertLibraryFullyPersisted,
+  getPersistedLibraryUrl,
+} from '@/lib/image-pipeline';
+import { buildCachedProductImageLibrary } from '@/lib/image-pipeline/cached-library';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,23 +109,42 @@ export async function POST(req: NextRequest) {
     }
 
     // Run Immediate Persistent Image Caching
-    const imageLib = await buildCachedProductImageLibrary(finalProduct);
-    const cachedUrls = imageLib.allValidImages.map((img) => img.cachedUrl || img.normalizedUrl);
+    const sourceCount = finalProduct.images.length;
+    console.log(`[Apify API Route] [Diagnostic] SOURCE: ${sourceCount}`);
 
-    apifyResult.trace.downloadedImageCount = imageLib.cachedImageCount || 0;
-    apifyResult.trace.zipImageCount = imageLib.cachedImageCount || 0;
-    apifyResult.trace.shopifyGalleryCount = imageLib.cachedImageCount || 0;
+    const imageLib = await buildCachedProductImageLibrary({
+      images: finalProduct.images,
+      title: finalProduct.title,
+    });
+    const extractedCount = imageLib.validUniqueCount || imageLib.originalSourceCount;
+    const persistedCount = imageLib.cachedImageCount || 0;
+    const cachedUrls = imageLib.allValidImages.map((img) => getPersistedLibraryUrl(img)).filter(Boolean);
 
-    // STOP RULE: If cached count === 0, stop generation and return a real error
-    if (imageLib.cachedImageCount === 0 || cachedUrls.length === 0) {
-      console.error('[Apify API Route] STOP RULE ENGAGED: 0 valid images could be cached server-side.');
+    console.log(`[Apify API Route] [Diagnostic] EXTRACTED: ${extractedCount}`);
+    console.log(`[Apify API Route] [Diagnostic] PERSISTED: ${persistedCount}`);
+
+    apifyResult.trace.downloadedImageCount = persistedCount;
+    apifyResult.trace.zipImageCount = persistedCount;
+    apifyResult.trace.shopifyGalleryCount = persistedCount;
+    if (apifyResult.trace.diagnostics) {
+      apifyResult.trace.diagnostics.rawImagesCount = extractedCount;
+      apifyResult.trace.diagnostics.acceptedImagesCount = extractedCount;
+      apifyResult.trace.diagnostics.persistedImagesCount = persistedCount;
+    }
+
+    try {
+      assertLibraryFullyPersisted(imageLib, sourceCount);
+    } catch (persistErr) {
+      const message = persistErr instanceof Error ? persistErr.message : String(persistErr);
+      console.error('[Apify API Route] STOP RULE ENGAGED:', message);
       return NextResponse.json(
         {
-          error: 'Image Caching Failed: 0 valid product images could be cached server-side. Halting generation.',
+          error: message,
           trace: apifyResult.trace,
           details: {
-            raw: apifyResult.trace.rawImageCount,
-            cached: 0,
+            SOURCE: sourceCount,
+            EXTRACTED: extractedCount,
+            PERSISTED: persistedCount,
             failed: imageLib.rejectedImages,
           },
         },

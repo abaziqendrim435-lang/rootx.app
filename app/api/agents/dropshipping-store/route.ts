@@ -912,8 +912,9 @@ export async function POST(req: NextRequest) {
           ...parsed,
           ecommerce: {
             ...(parsed.ecommerce || {}),
-            images: finalImages.filter((u: any) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image/'))),
+            images: finalImages.filter((u: any) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image/') || u.startsWith('/cached-images/'))),
           },
+          imageLibrary: sanitizedAnalysis.imageLibrary,
           isDemo: false,
           provider: 'multi-model',
         };
@@ -956,6 +957,7 @@ export async function POST(req: NextRequest) {
         ...(parsedObj.ecommerce || {}),
         images: finalImages,
       },
+      imageLibrary: sanitizedAnalysis.imageLibrary,
       isDemo: false,
       provider: usedProvider,
     };

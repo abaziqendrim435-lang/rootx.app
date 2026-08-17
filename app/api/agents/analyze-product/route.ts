@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { ProductAnalysis, AIProvider } from '@/lib/website-builder-types';
 import { callWithRetryAndFallback, getAvailableProviders } from '@/lib/ai-providers';
 import { fetchAliExpressProductViaApify, extractAliExpressProductId } from '@/lib/product-import/apify-aliexpress';
-import { buildCachedProductImageLibrary } from '@/lib/image-pipeline';
+import {
+  assertLibraryFullyPersisted,
+  getPersistedLibraryUrl,
+  isReusableProductImageLibrary,
+} from '@/lib/image-pipeline';
+import { buildCachedProductImageLibrary } from '@/lib/image-pipeline/cached-library';
+import type { ProductImageLibrary } from '@/lib/image-pipeline/types';
 
 // ============================================================
 // POST /api/agents/analyze-product
@@ -26,6 +32,7 @@ export interface AnalyzeProductRequest {
     url: string;
     specifications: { label: string; value: string }[];
     description: string;
+    imageLibrary?: ProductImageLibrary;
   };
 }
 
@@ -471,7 +478,12 @@ export async function POST(req: NextRequest) {
     let validCacheHit = false;
     let cached = analysisCache.get(cacheKey);
 
-    if (cached && Array.isArray(cached.analysis?.images) && cached.analysis.images.length > 1) {
+    if (
+      cached &&
+      Array.isArray(cached.analysis?.images) &&
+      cached.analysis.images.length > 1 &&
+      isReusableProductImageLibrary(cached.analysis.imageLibrary, cached.analysis.images.length)
+    ) {
       validCacheHit = true;
     } else if (cached) {
       console.log(`${LOG} [${requestId}] Cached object found but is UNDERSIZED (${cached.analysis?.images?.length || 0} images). Invalidation forced (treating as CACHE_MISS).`);
@@ -492,6 +504,8 @@ export async function POST(req: NextRequest) {
       cached.analysis.requestId = requestId;
 
       console.log(`${LOG} [Diagnostic] CACHE_READ_IMAGE_COUNT: ${cached.analysis.images?.length || 0}`);
+      console.log(`${LOG} [Diagnostic] ANALYZE_OUTPUT: ${cached.analysis.images?.length || 0}`);
+      console.log(`${LOG} [Diagnostic] STATE_IMAGE_LIBRARY: ${cached.analysis.imageLibrary?.allValidImages?.length || 0}`);
       console.log(`${LOG} [Diagnostic] API_RESPONSE_IMAGE_COUNT: ${cached.analysis.images?.length || 0}`);
 
       const finalResponse = { success: true, requestId, sourceUrl: trimmedUrl, analysis: cached.analysis, usedProvider: cached.usedProvider };
@@ -628,16 +642,24 @@ export async function POST(req: NextRequest) {
     console.log(`${LOG} [${requestId}] Raw AI response:`, JSON.stringify(parsed));
     console.log(`${LOG} [${requestId}] Analysis complete via ${usedProvider}`);
 
-    // Immediate server-side image caching
-    const cachedLib = await buildCachedProductImageLibrary({ images: extractedImages, title });
-    const cachedImages = cachedLib.allValidImages.map((img) => img.cachedUrl || img.normalizedUrl);
-    const finalImages = cachedImages.length > 0 ? cachedImages : extractedImages;
+    const analyzeInputCount = extractedImages.length;
+    console.log(`${LOG} [Diagnostic] ANALYZE_INPUT: ${analyzeInputCount}`);
 
-    // HARD PRODUCTION ASSERTION:
-    // If the product payload/page contains >1 valid unique product images, but PIPELINE_RAW_IMAGE_COUNT is 1, throw error!
-    if (extractedImages.length > 1 && cachedLib.allValidImages.length === 1) {
+    let cachedLib: ProductImageLibrary;
+    const incomingLibrary = body.productData?.imageLibrary;
+    if (isReusableProductImageLibrary(incomingLibrary, analyzeInputCount)) {
+      console.log(`${LOG} [${requestId}] Reusing canonical ProductImageLibrary (${incomingLibrary.allValidImages.length} persisted images). Skipping re-cache.`);
+      cachedLib = incomingLibrary;
+    } else {
+      cachedLib = await buildCachedProductImageLibrary({ images: extractedImages, title });
+    }
+
+    const finalImages = cachedLib.allValidImages.map((img) => getPersistedLibraryUrl(img)).filter(Boolean);
+
+    assertLibraryFullyPersisted(cachedLib, analyzeInputCount);
+    if (finalImages.length !== analyzeInputCount) {
       throw new Error(
-        `[PRODUCTION HARD ASSERTION FAILED] Product page/payload contains ${extractedImages.length} valid unique product images, but PIPELINE_RAW_IMAGE_COUNT reached the pipeline with only 1 image.`
+        `[PERSISTENCE FAILED] ANALYZE_INPUT=${analyzeInputCount} ANALYZE_OUTPUT=${finalImages.length}. Gallery count changed during analysis.`
       );
     }
 
@@ -670,6 +692,7 @@ export async function POST(req: NextRequest) {
       priceRange: (structured.price ? `${structured.currency || '$'}${structured.price}` : null) || (parsed.priceRange as string) || 'Contact for pricing',
       sourceUrl: trimmedUrl,
       images: finalImages,
+      imageLibrary: cachedLib,
       shippingInfo: (parsed.shippingInfo as string) || 'Standard shipping available',
       specifications: (structured.specifications && structured.specifications.length > 0)
         ? (structured.specifications as { label: string; value: string }[])
@@ -684,12 +707,15 @@ export async function POST(req: NextRequest) {
       diagnostics,
     };
 
-    console.log(`${LOG} [Diagnostic] ANALYZE_INPUT_IMAGE_COUNT: ${extractedImages.length}`);
+    console.log(`${LOG} [Diagnostic] ANALYZE_INPUT: ${analyzeInputCount}`);
+    console.log(`${LOG} [Diagnostic] ANALYZE_OUTPUT: ${finalImages.length}`);
+    console.log(`${LOG} [Diagnostic] STATE_IMAGE_LIBRARY: ${cachedLib.allValidImages.length}`);
+    console.log(`${LOG} [Diagnostic] ANALYZE_INPUT_IMAGE_COUNT: ${analyzeInputCount}`);
     console.log(`${LOG} [Diagnostic] ANALYZE_OUTPUT_IMAGE_COUNT: ${finalImages.length}`);
     console.log(`${LOG} [Diagnostic] FRONTEND_IMAGE_COUNT: ${finalImages.length}`);
     console.log(`${LOG} [Diagnostic] APIFY_RAW_IMAGE_COUNT: ${extractedImages.length}`);
     console.log(`${LOG} [Diagnostic] NORMALIZED_IMAGE_COUNT: ${extractedImages.length}`);
-    console.log(`${LOG} [Diagnostic] CACHE_WRITE_IMAGE_COUNT: ${finalImages.length}`);
+    console.log(`${LOG} [Diagnostic] CACHE_WRITE_IMAGE_COUNT: ${cachedLib.cachedImageCount || 0}`);
     console.log(`${LOG} [Diagnostic] API_RESPONSE_IMAGE_COUNT: ${finalImages.length}`);
 
     // Cache the analysis under versioned key

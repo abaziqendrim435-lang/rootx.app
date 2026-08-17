@@ -214,10 +214,11 @@ export function runDesignEnginePipeline(
       featuredProductImage: spec.images.featured,
       lifestyleImage: spec.images.story,
       galleryImages: spec.images.gallery,
-      benefitImage: null,
+      benefitImage: spec.images.benefitImages[0] || null,
       finalCtaImage: spec.images.finalCta,
       hasSingleImageFallback: spec.images.hasSingleImageFallback,
       hasNoImageFallback: !spec.images.hero,
+      imageLibrary: spec.imageLibrary,
       diagnosticInfo: {
         totalExtracted: spec.images.gallery.length + 1,
         validCount: spec.images.gallery.length + 1,

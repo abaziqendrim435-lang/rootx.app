@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import type { DesignEngineResult } from '@/lib/website-builder-types';
 import { resolveRenderableImage } from '@/lib/image-pipeline';
 import { renderLiquidForPreview } from '@/lib/storefront-spec/liquid-preview-processor';
+import { injectAssignedPreviewSectionImages } from '@/lib/storefront-spec/preview-section-images';
 import { Monitor, Smartphone, Layers, Palette, Type, Image as ImageIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -29,16 +30,29 @@ export default function DesignPreviewPanel({ result }: Props) {
   const validImagesCount = allImages.length || result.spec?.imageLibrary?.allValidImages?.length || imgPipeline?.images?.length || 0;
   const totalExtractedCount = imgPipeline?.diagnosticInfo?.totalExtracted || 0;
 
+  const storyUrl = resolveRenderableImage(result.spec?.images?.story) || '';
+  const featuredUrl = resolveRenderableImage(result.spec?.images?.featured) || '';
+  const finalCtaUrl = resolveRenderableImage(result.spec?.images?.finalCta) || '';
+  const comparisonUrl = resolveRenderableImage(result.spec?.images?.comparisonImage) || '';
+
+  const previewRenderOptions = {
+    images: allImages,
+    heroImage: heroUrl,
+    storyImage: storyUrl,
+    featuredImage: featuredUrl,
+    finalCtaImage: finalCtaUrl,
+    comparisonImage: comparisonUrl,
+    brandName: result.brandName,
+  };
+
   // Render liquid section templates into clean, fully-evaluated preview HTML body
-  const renderedSectionsHtml = sectionFiles
-    .map((sf) =>
-      renderLiquidForPreview(sf.value, {
-        images: allImages,
-        heroImage: heroUrl,
-        brandName: result.brandName,
-      })
-    )
-    .join('\n');
+  const renderedSectionsHtml = injectAssignedPreviewSectionImages(
+    sectionFiles.map((sf) => renderLiquidForPreview(sf.value, previewRenderOptions)).join('\n'),
+    {
+      comparison: comparisonUrl,
+      finalCta: finalCtaUrl,
+    }
+  );
 
   // Generate full interactive preview HTML document
   const previewHtml = `<!doctype html>

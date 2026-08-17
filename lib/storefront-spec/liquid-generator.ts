@@ -20,7 +20,12 @@ function esc(str: string): string {
 function renderAssetImgTag(assetNameOrUrl: string, alt: string, style: string, id: string = ''): string {
   if (!assetNameOrUrl) return '';
   const idAttr = id ? `id="${id}" ` : '';
-  if (assetNameOrUrl.startsWith('http://') || assetNameOrUrl.startsWith('https://')) {
+  if (
+    assetNameOrUrl.startsWith('http://') ||
+    assetNameOrUrl.startsWith('https://') ||
+    assetNameOrUrl.startsWith('/cached-images/') ||
+    assetNameOrUrl.startsWith('data:image/')
+  ) {
     return `<img ${idAttr}src="${assetNameOrUrl}" alt="${esc(alt)}" style="${style}" loading="lazy" referrerpolicy="no-referrer" />`;
   }
   return `<img ${idAttr}src="{{ '${assetNameOrUrl}' | asset_url }}" alt="${esc(alt)}" style="${style}" loading="lazy" />`;
@@ -28,7 +33,12 @@ function renderAssetImgTag(assetNameOrUrl: string, alt: string, style: string, i
 
 function resolveAssetUrlExpression(assetNameOrUrl: string): string {
   if (!assetNameOrUrl) return '';
-  if (assetNameOrUrl.startsWith('http://') || assetNameOrUrl.startsWith('https://')) {
+  if (
+    assetNameOrUrl.startsWith('http://') ||
+    assetNameOrUrl.startsWith('https://') ||
+    assetNameOrUrl.startsWith('/cached-images/') ||
+    assetNameOrUrl.startsWith('data:image/')
+  ) {
     return assetNameOrUrl;
   }
   return `{{ '${assetNameOrUrl}' | asset_url }}`;
@@ -38,22 +48,38 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const brand = spec.brand;
   const prod = spec.product;
   const content = spec.content;
-  const galleryList = spec.images.gallery.filter((img) => Boolean(resolveRenderableImage(img)));
-  const heroImgAsset = resolveRenderableImage(spec.images.hero) || resolveRenderableImage(galleryList[0]);
-  const activeHeroImg = heroImgAsset || resolveRenderableImage(galleryList[0]);
-  const storyImgAsset = resolveRenderableImage(spec.images.story) || resolveRenderableImage(galleryList[1] || galleryList[0]);
-  const showcaseImgAsset = resolveRenderableImage(spec.images.featured) || resolveRenderableImage(galleryList[2] || galleryList[1] || galleryList[0]);
-  const finalCtaImgAsset = resolveRenderableImage(spec.images.finalCta) || storyImgAsset;
+  const galleryList = (spec.imageLibrary?.allValidImages || spec.images.gallery).filter((img) =>
+    Boolean(resolveRenderableImage(img))
+  );
+  const heroImgAsset = resolveRenderableImage(spec.images.hero);
+  const activeHeroImg = heroImgAsset;
+  const storyImgAsset = resolveRenderableImage(spec.images.story);
+  const showcaseImgAsset = resolveRenderableImage(spec.images.featured);
+  const finalCtaImgAsset = resolveRenderableImage(spec.images.finalCta);
+  const comparisonImgAsset = resolveRenderableImage(spec.images.comparisonImage);
 
-  // ── DIAGNOSTIC: Log image assignment per section ──────────────────
+  const sectionAssignedUrls = [
+    heroImgAsset,
+    storyImgAsset,
+    showcaseImgAsset,
+    finalCtaImgAsset,
+    comparisonImgAsset,
+    ...spec.images.benefitImages.map((img) => resolveRenderableImage(img)),
+  ].filter(Boolean);
+  const uniqueSectionAssigned = new Set(sectionAssignedUrls);
+
   console.log('[Liquid Generator] Image Assignment Diagnostics:', {
-    PRODUCT_IMAGES_COUNT: galleryList.length,
-    UNIQUE_IMAGES_AVAILABLE: new Set(galleryList.map(img => img.exportedAssetName || img.normalizedUrl)).size,
-    HERO_IMAGE: activeHeroImg?.slice(0, 60),
-    STORY_IMAGE: storyImgAsset?.slice(0, 60),
-    SHOWCASE_IMAGE: showcaseImgAsset?.slice(0, 60),
-    FINAL_CTA_IMAGE: finalCtaImgAsset?.slice(0, 60),
+    PRODUCT_IMAGE_LIBRARY_TOTAL: spec.imageLibrary?.allValidImages.length || galleryList.length,
+    STOREFRONT_GALLERY_TOTAL: galleryList.length,
+    UNIQUE_IMAGES_AVAILABLE: spec.imageLibrary?.allValidImages.length || galleryList.length,
+    HERO_IMAGE: activeHeroImg?.slice(0, 80),
+    STORY_IMAGE: storyImgAsset?.slice(0, 80),
+    SHOWCASE_IMAGE: showcaseImgAsset?.slice(0, 80),
+    FINAL_CTA_IMAGE: finalCtaImgAsset?.slice(0, 80),
+    COMPARISON_IMAGE: comparisonImgAsset?.slice(0, 80),
+    BENEFIT_IMAGES: spec.images.benefitImages.map((img) => resolveRenderableImage(img)?.slice(0, 60)),
     GALLERY_IMAGE_COUNT: galleryList.length,
+    UNIQUE_SECTION_ASSIGNED: uniqueSectionAssigned.size,
     HERO_STORY_SAME: activeHeroImg === storyImgAsset,
     HERO_SHOWCASE_SAME: activeHeroImg === showcaseImgAsset,
     STORY_SHOWCASE_SAME: storyImgAsset === showcaseImgAsset,
@@ -308,7 +334,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
             {% endfor %}
           {% else %}
             ${galleryList.map((img, i) => {
-              const assetStr = img.exportedAssetName || img.normalizedUrl;
+              const assetStr = resolveRenderableImage(img);
               return `
               <button type="button" onclick="document.getElementById('rx-left-gallery-main').src='${resolveAssetUrlExpression(assetStr)}'" style="border: 2px solid ${i === 0 ? 'var(--rx-primary)' : 'var(--rx-border)'}; border-radius: var(--rx-radius-sm); padding: 0; cursor: pointer; height: 110px; overflow: hidden; background: none; transition: border-color var(--rx-transition-base);">
                 ${renderAssetImgTag(assetStr, 'Thumb', 'width: 100%; height: 100%; object-fit: cover;')}
@@ -366,7 +392,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
           {% endfor %}
         {% else %}
           ${galleryList.map((img) => {
-            const assetStr = img.exportedAssetName || img.normalizedUrl;
+            const assetStr = resolveRenderableImage(img);
             return `
             <div class="rx-card rx-img-zoom-wrap" style="padding: 0; aspect-ratio: 1/1;">
               ${renderAssetImgTag(assetStr, prod.cleanName, 'width: 100%; height: 100%; object-fit: cover; display: block;')}
@@ -567,13 +593,18 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       <p style="color: var(--rx-muted); font-size: var(--rx-font-lg);">Experience the key advantages of ${esc(prod.cleanName)}</p>
     </div>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
-      ${prod.benefits.map((b, i) => `
+      ${prod.benefits.map((b, i) => {
+        const benefitImg = spec.images.benefitImages[i]
+          ? resolveRenderableImage(spec.images.benefitImages[i])
+          : '';
+        return `
         <div class="rx-card" style="position: relative; overflow: hidden; padding: 2.25rem;">
+          ${benefitImg ? `<div style="margin-bottom: 1.25rem; border-radius: var(--rx-radius-md); overflow: hidden; aspect-ratio: 16/10;">${renderAssetImgTag(benefitImg, b.title, 'width: 100%; height: 100%; object-fit: cover; display: block;')}</div>` : ''}
           <div style="width: 48px; height: 48px; border-radius: var(--rx-radius-md); background: var(--rx-primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; margin-bottom: 1.5rem; box-shadow: var(--rx-shadow-sm);">0${i + 1}</div>
           <h3 style="font-size: 1.3rem; font-family: var(--rx-heading-font); margin: 0 0 0.75rem; color: var(--rx-text);">${esc(b.title)}</h3>
           <p style="color: var(--rx-muted); line-height: var(--rx-lh-relaxed); font-size: 0.98rem; margin: 0;">${esc(b.description)}</p>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
     </div>
   </div>
 </section>
