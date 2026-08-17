@@ -2951,22 +2951,35 @@ export default function WebsiteBuilderDemo() {
       console.log('[Frontend] Analyzing selected Apify product:', product.title);
       let payloadProduct: ApifyProduct = product;
 
-      // SAFETY GATE: If selected product from Search via Apify contains <= 1 image, force full product-detail hydration once before analysis
-      if (!product.images || !Array.isArray(product.images) || product.images.length <= 1) {
-        console.log('[Frontend] Safety Gate Triggered: Search card item has <= 1 image. Hydrating full product detail gallery...');
-        const detailRes = await fetch('/api/apify/aliexpress', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productUrl: product.url }),
-        });
-        if (detailRes.ok) {
-          const detailData = await detailRes.json();
-          if (detailData.success && detailData.products && detailData.products.length > 0) {
-            payloadProduct = detailData.products[0];
-            console.log(`[Frontend] Safety Gate Hydration Succeeded: ${payloadProduct.images?.length || 0} images fetched.`);
+      // Hydrate full product detail gallery from canonical product URL / ID
+      if (product.url && product.url.startsWith('http')) {
+        console.log('[Frontend] Hydrating full product detail gallery for URL:', product.url);
+        try {
+          const detailRes = await fetch('/api/apify/aliexpress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productUrl: product.url }),
+          });
+          if (detailRes.ok) {
+            const detailData = await detailRes.json();
+            if (detailData.success && detailData.products && detailData.products.length > 0) {
+              const fullProduct = detailData.products[0];
+              if (fullProduct.images && Array.isArray(fullProduct.images) && fullProduct.images.length > 0) {
+                payloadProduct = {
+                  ...product,
+                  ...fullProduct,
+                  images: fullProduct.images,
+                };
+                console.log(`[Frontend] Full Product Detail Hydration Succeeded: ${payloadProduct.images?.length || 0} images hydrated.`);
+              }
+            }
           }
+        } catch (hydrateErr: any) {
+          console.warn('[Frontend] Product detail hydration warning:', hydrateErr.message);
         }
       }
+
+      console.log(`[Frontend] ANALYZE_REQUEST_IMAGES_COUNT: ${payloadProduct.images?.length || 0}`);
 
       const res = await fetch(`/api/agents/analyze-product?cb=${getTimestamp()}`, {
         method: 'POST',
@@ -2988,10 +3001,10 @@ export default function WebsiteBuilderDemo() {
       if (!data.success) throw new Error(data.error || 'Analysis failed');
 
       setProductAnalysis(data.analysis);
-      setSelectedImages(data.analysis.images?.length > 0 ? [data.analysis.images[0]] : []);
+      setSelectedImages(data.analysis.images || []);
       setDropInput((prev) => ({
         ...prev,
-        productUrl: product.url,
+        productUrl: payloadProduct.url,
         storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
       }));
       setDropStatus('analyzed');

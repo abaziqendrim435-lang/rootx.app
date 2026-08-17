@@ -543,9 +543,12 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // For AliExpress URLs, trigger primary Apify direct detail extraction for full product gallery
+    // For AliExpress URLs, trigger primary Apify direct detail extraction for full product gallery if not already hydrated (>1 images)
     let apifySuccess = false;
-    if ((trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
+    if (extractedImages.length > 1) {
+      console.log(`${LOG} [${requestId}] Product data already contains ${extractedImages.length} hydrated gallery images. Preserving exact gallery.`);
+      apifySuccess = true;
+    } else if ((trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
       try {
         console.log(`${LOG} [${requestId}] Triggering primary Apify direct detail extraction for full gallery: ${trimmedUrl}`);
         const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
