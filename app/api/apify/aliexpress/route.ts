@@ -50,6 +50,16 @@ export async function POST(req: NextRequest) {
     let isFallback = false;
 
     if (!apifyResult.success || !finalProduct) {
+      if (apifyResult.productIdMismatch) {
+        return NextResponse.json(
+          {
+            error: apifyResult.error || 'Requested AliExpress product ID did not match Apify extraction result.',
+            trace: apifyResult.trace,
+          },
+          { status: 422 }
+        );
+      }
+
       // FALLBACK STRATEGY: HTML Scraper Fallback if Apify fails or returns unusable data
       console.warn('[Apify API Route] Primary Apify extraction failed. Activating Fallback Extractor...', apifyResult.error);
       apifyResult.trace.apifyRunStatus = 'FALLBACK_ACTIVATED';

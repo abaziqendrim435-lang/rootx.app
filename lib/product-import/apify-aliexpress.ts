@@ -81,6 +81,7 @@ export interface ApifyImportResult {
   trace: ApifyDebugTrace;
   error?: string;
   isFallback?: boolean;
+  productIdMismatch?: boolean;
 }
 
 export interface AliExpressExtractionReport {
@@ -97,14 +98,45 @@ export interface AliExpressExtractionReport {
   };
 }
 
+const PRIMARY_DIRECT_URL_ACTOR = 'unfenced-group~aliexpress-scraper';
+
+/** Search-card actors must never satisfy a direct product URL import. */
+const SEARCH_CARD_ONLY_ACTORS = new Set([
+  'devcake~aliexpress-products-scraper',
+]);
+
 const DEFAULT_ACTORS = [
-  'unfenced-group~aliexpress-scraper',
+  PRIMARY_DIRECT_URL_ACTOR,
   'devcake~aliexpress-products-scraper',
   'cryptosignals~aliexpress-scraper',
   'epctex~aliexpress-scraper',
 ];
 
-export function getConfiguredActors(): string[] {
+const DIRECT_URL_DETAIL_ACTORS = [
+  PRIMARY_DIRECT_URL_ACTOR,
+  'cryptosignals~aliexpress-scraper',
+  'epctex~aliexpress-scraper',
+];
+
+export function getConfiguredActors(options?: { isDirectUrl?: boolean }): string[] {
+  if (options?.isDirectUrl) {
+    const customActor = process.env.APIFY_ALIEXPRESS_ACTOR_ID?.trim();
+    if (
+      customActor &&
+      customActor !== PRIMARY_DIRECT_URL_ACTOR &&
+      !SEARCH_CARD_ONLY_ACTORS.has(customActor)
+    ) {
+      return [
+        PRIMARY_DIRECT_URL_ACTOR,
+        customActor,
+        ...DIRECT_URL_DETAIL_ACTORS.filter(
+          (actor) => actor !== PRIMARY_DIRECT_URL_ACTOR && actor !== customActor
+        ),
+      ];
+    }
+    return [...DIRECT_URL_DETAIL_ACTORS];
+  }
+
   const customActor = process.env.APIFY_ALIEXPRESS_ACTOR_ID?.trim();
   if (customActor) {
     return [customActor, ...DEFAULT_ACTORS.filter((a) => a !== customActor)];
@@ -439,7 +471,8 @@ export const extractAllProductImages = extractAllAliExpressProductImages;
 
 export function matchDatasetItemByProductId(
   datasetItems: Record<string, unknown>[],
-  requestedProductId: string | null
+  requestedProductId: string | null,
+  options?: { requireExactMatch?: boolean }
 ): {
   item: Record<string, unknown>;
   matched: boolean;
@@ -482,6 +515,16 @@ export function matchDatasetItemByProductId(
           };
         }
       }
+    }
+
+    if (options?.requireExactMatch) {
+      return {
+        item: {},
+        matched: false,
+        requestedProductId,
+        selectedResultProductId: null,
+        datasetItemCount: datasetItems.length,
+      };
     }
   }
 
@@ -543,9 +586,11 @@ export async function fetchAliExpressProductViaApify(
     return { success: false, product: null, trace, error: errMsg };
   }
 
-  const actors = getConfiguredActors();
+  const actors = getConfiguredActors({ isDirectUrl });
+  const requireExactProductId = isDirectUrl && Boolean(requestedProductId);
   let lastError = '';
   let datasetItems: Record<string, unknown>[] = [];
+  let matchRes: ReturnType<typeof matchDatasetItemByProductId> | null = null;
 
   for (const actorId of actors) {
     try {
@@ -565,15 +610,31 @@ export async function fetchAliExpressProductViaApify(
       }
 
       const data = await response.json();
-      if (Array.isArray(data) && data.length > 0) {
-        datasetItems = data as Record<string, unknown>[];
-        trace.actorUsed = actorId;
-        trace.apifyRunStatus = 'SUCCESS';
-        console.log(`[Apify Service] Actor ${actorId} successfully returned ${datasetItems.length} items.`);
-        break;
-      } else {
+      if (!Array.isArray(data) || data.length === 0) {
         trace.failureReasons.push(`Actor ${actorId} returned empty dataset.`);
+        continue;
       }
+
+      const candidateItems = data as Record<string, unknown>[];
+      const candidateMatch = matchDatasetItemByProductId(
+        candidateItems,
+        requestedProductId,
+        { requireExactMatch: requireExactProductId }
+      );
+
+      if (requireExactProductId && !candidateMatch.matched) {
+        trace.failureReasons.push(
+          `Actor ${actorId} returned ${candidateItems.length} item(s) but none matched product ID ${requestedProductId}.`
+        );
+        continue;
+      }
+
+      datasetItems = candidateItems;
+      matchRes = candidateMatch;
+      trace.actorUsed = actorId;
+      trace.apifyRunStatus = 'SUCCESS';
+      console.log(`[Apify Service] Actor ${actorId} successfully returned ${datasetItems.length} items.`);
+      break;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[Apify Service] Actor ${actorId} failed:`, msg);
@@ -582,7 +643,22 @@ export async function fetchAliExpressProductViaApify(
     }
   }
 
-  if (datasetItems.length === 0) {
+  if (!matchRes || datasetItems.length === 0) {
+    if (requireExactProductId) {
+      const mismatchError = `Product ID mismatch: requested "${requestedProductId}", but no Apify actor returned a matching product detail record.`;
+      trace.matchedProductId = false;
+      trace.selectedResultProductId = null;
+      trace.datasetItemCount = 0;
+      trace.failureReasons.push(mismatchError);
+      return {
+        success: false,
+        product: null,
+        trace,
+        error: mismatchError,
+        productIdMismatch: true,
+      };
+    }
+
     return {
       success: false,
       product: null,
@@ -591,14 +667,26 @@ export async function fetchAliExpressProductViaApify(
     };
   }
 
-  // Exact Product ID Matcher
-  const matchRes = matchDatasetItemByProductId(datasetItems, requestedProductId);
+  // Exact Product ID Matcher (final selected item)
   const item = matchRes.item;
 
   trace.requestedProductId = matchRes.requestedProductId;
   trace.selectedResultProductId = matchRes.selectedResultProductId;
   trace.matchedProductId = matchRes.matched;
   trace.datasetItemCount = matchRes.datasetItemCount;
+
+  if (requireExactProductId && matchRes.selectedResultProductId !== requestedProductId) {
+    const mismatchError = `Product ID mismatch: requested "${requestedProductId}", returned "${matchRes.selectedResultProductId}".`;
+    trace.matchedProductId = false;
+    trace.failureReasons.push(mismatchError);
+    return {
+      success: false,
+      product: null,
+      trace,
+      error: mismatchError,
+      productIdMismatch: true,
+    };
+  }
 
   console.log(`[Apify Service] Product ID Matcher: requested="${requestedProductId}", selected="${matchRes.selectedResultProductId}", matched=${matchRes.matched}, datasetItemCount=${matchRes.datasetItemCount}`);
 
