@@ -20,7 +20,7 @@ if (fs.existsSync('.env.local')) {
 }
 
 import { fetchAliExpressProductViaApify } from '../lib/product-import/apify-aliexpress';
-import { buildCachedProductImageLibrary } from '../lib/image-pipeline/library-builder';
+import { buildCachedProductImageLibrary } from '../lib/image-pipeline/cached-library';
 import { buildStorefrontSpec } from '../lib/storefront-spec/builder';
 import { resolveRenderableImage } from '../lib/image-pipeline/resolve-image';
 import { calculateStorefrontImageDiagnostics } from '../lib/storefront-spec/diagnostics';

@@ -26,7 +26,7 @@ import {
   extractAllAliExpressProductImages,
   extractAllProductImages,
 } from '../lib/product-import/apify-aliexpress';
-import { buildCachedProductImageLibrary } from '../lib/image-pipeline/library-builder';
+import { buildCachedProductImageLibrary } from '../lib/image-pipeline/cached-library';
 import { buildStorefrontSpec } from '../lib/storefront-spec/builder';
 import { runDesignEnginePipeline } from '../lib/design-engine/pipeline';
 import type { WebsiteGeneration, WebsiteBuilderInput } from '../lib/website-builder-types';

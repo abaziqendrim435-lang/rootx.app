@@ -8,7 +8,8 @@
 import JSZip from 'jszip';
 import { validateImage } from '../lib/image-pipeline/validator';
 import { cacheProductImages } from '../lib/image-pipeline/cache-service';
-import { buildCachedProductImageLibrary, createProductImageLibrary } from '../lib/image-pipeline/library-builder';
+import { buildCachedProductImageLibrary } from '../lib/image-pipeline/cached-library';
+import { createProductImageLibrary } from '../lib/image-pipeline/library-builder';
 import { buildStorefrontSpec } from '../lib/storefront-spec/builder';
 import { downloadAndPackageProductImages } from '../lib/image-pipeline/asset-downloader';
 import { runDesignEnginePipeline } from '../lib/design-engine/pipeline';
