@@ -3,16 +3,24 @@
 // Prevents stale async responses from overwriting a newer selection.
 // ============================================================
 
+import { createSelectionSessionId } from './product-identity';
+
 export interface ProductSelectionSession {
   token: number;
   productId: string | null;
+  selectionSessionId: string;
 }
 
 export function createProductSelectionSession(
   previousToken: number,
   productId: string | null
 ): ProductSelectionSession {
-  return { token: previousToken + 1, productId };
+  const token = previousToken + 1;
+  return {
+    token,
+    productId,
+    selectionSessionId: productId ? createSelectionSessionId(productId, token) : `sel_${token}_none`,
+  };
 }
 
 export function isActiveProductSelectionSession(
@@ -20,7 +28,11 @@ export function isActiveProductSelectionSession(
   captured: ProductSelectionSession
 ): boolean {
   if (captured.productId === null) return false;
-  return current.token === captured.token && current.productId === captured.productId;
+  return (
+    current.token === captured.token &&
+    current.productId === captured.productId &&
+    current.selectionSessionId === captured.selectionSessionId
+  );
 }
 
 export function productUrlMatchesSelection(

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ProductAnalysis, AIProvider } from '@/lib/website-builder-types';
 import { callWithRetryAndFallback, getAvailableProviders } from '@/lib/ai-providers';
-import { fetchAliExpressProductViaApify, extractAliExpressProductId } from '@/lib/product-import/apify-aliexpress';
+import { extractAliExpressProductId } from '@/lib/product-import/apify-aliexpress';
+import { fetchExactAliExpressProduct } from '@/lib/product-import/exact-product-detail';
+import {
+  PRODUCT_CACHE_SCHEMA_VERSION,
+  canonicalCacheKey,
+  createCanonicalProductIdentity,
+} from '@/lib/product-identity';
 import {
   assertLibraryFullyPersisted,
   getPersistedLibraryUrl,
@@ -20,6 +26,7 @@ export interface AnalyzeProductRequest {
   url: string;
   provider?: AIProvider;
   selectedProductId?: string;
+  selectionSessionId?: string;
   productData?: {
     title: string;
     price: string;
@@ -332,7 +339,18 @@ Rules:
 export const dynamic = 'force-dynamic';
 
 // Simple in-memory cache for product analysis
-const analysisCache = new Map<string, { analysis: ProductAnalysis; usedProvider: string; timestamp: number }>();
+const analysisCache = new Map<
+  string,
+  {
+    schemaVersion: number;
+    productId: string;
+    sourceUrl: string;
+    createdAt: string;
+    analysis: ProductAnalysis;
+    usedProvider: string;
+    timestamp: number;
+  }
+>();
 
 function normalizeUrl(urlStr: string): string {
   try {
@@ -465,7 +483,7 @@ export async function POST(req: NextRequest) {
 
     const normalized = normalizeUrl(trimmedUrl);
     const productId = extractAliExpressProductId(trimmedUrl);
-    const cacheKey = `product:v2:${productId || normalized}`;
+    const cacheKey = productId ? canonicalCacheKey(productId) : `product:v${PRODUCT_CACHE_SCHEMA_VERSION}:${normalized}`;
 
     const isAliExpressUrl = trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us');
     if (isAliExpressUrl && !productId) {
@@ -498,42 +516,36 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Cache invalidation: evict legacy v1 entries or entries for different product keys
+    // Cache invalidation: never reuse legacy v1/v2/v3 one-image entries
     for (const key of analysisCache.keys()) {
-      if (!key.startsWith('product:v2:')) {
-        console.log(`${LOG} [${requestId}] Invalidating legacy v1 cache entry: ${key}`);
+      if (!key.startsWith(`product:v${PRODUCT_CACHE_SCHEMA_VERSION}:`)) {
+        console.log(`${LOG} [${requestId}] Invalidating legacy cache entry: ${key}`);
         analysisCache.delete(key);
       }
     }
 
-    // Check cache: Reject undersized or invalid cached objects
+    // Check cache: product ID and schema must match; never accept another product
     let validCacheHit = false;
     let cached = analysisCache.get(cacheKey);
 
-    if (
-      cached &&
-      Array.isArray(cached.analysis?.images) &&
-      cached.analysis.images.length > 1 &&
-      isReusableProductImageLibrary(cached.analysis.imageLibrary, cached.analysis.images.length)
-    ) {
-      const cachedProductId = extractAliExpressProductId(cached.analysis.sourceUrl);
-      const cacheMatchesRequest =
-        cached.analysis.sourceUrl === trimmedUrl ||
-        (productId && cachedProductId && productId === cachedProductId);
+    if (cached) {
+      const cachedProductId = cached.productId || extractAliExpressProductId(cached.analysis.sourceUrl);
+      const cacheIdentityOk =
+        cached.schemaVersion === PRODUCT_CACHE_SCHEMA_VERSION &&
+        Boolean(productId) &&
+        cachedProductId === productId &&
+        cached.analysis.productId === productId &&
+        isReusableProductImageLibrary(cached.analysis.imageLibrary, cached.analysis.images.length, productId);
 
-      if (cacheMatchesRequest) {
+      if (cacheIdentityOk) {
         validCacheHit = true;
       } else {
         console.log(
-          `${LOG} [${requestId}] Cached analysis product ID/source URL mismatch. Invalidation forced (treating as CACHE_MISS).`
+          `${LOG} [${requestId}] Rejecting cache for ${cacheKey} (schema=${cached.schemaVersion} cachedProductId=${cachedProductId} requested=${productId} images=${cached.analysis?.images?.length || 0}).`
         );
         analysisCache.delete(cacheKey);
         cached = undefined;
       }
-    } else if (cached) {
-      console.log(`${LOG} [${requestId}] Cached object found but is UNDERSIZED (${cached.analysis?.images?.length || 0} images). Invalidation forced (treating as CACHE_MISS).`);
-      analysisCache.delete(cacheKey);
-      cached = undefined;
     }
 
     const cacheStatus = validCacheHit ? 'CACHE_HIT' : 'CACHE_MISS';
@@ -605,10 +617,82 @@ export async function POST(req: NextRequest) {
     let extractedImages: string[] = [];
     let structured: Partial<PreExtracted> = {};
 
-    if (body.productData) {
-      console.log(`${LOG} [${requestId}] Using pre-scraped Apify product data (${body.productData.images?.length || 0} images).`);
+    let apifySuccess = false;
+    const incomingLibrary = body.productData?.imageLibrary;
+    const incomingLibraryOk =
+      Boolean(productId) &&
+      isReusableProductImageLibrary(incomingLibrary, undefined, productId);
+
+    if (isAliExpressUrl && productId) {
+      if (incomingLibraryOk && incomingLibrary) {
+        console.log(
+          `${LOG} [${requestId}] Reusing identity-verified ProductImageLibrary (${incomingLibrary.allValidImages.length} images) for ${productId}.`
+        );
+        extractedImages = incomingLibrary.allValidImages.map((img) => getPersistedLibraryUrl(img)).filter(Boolean);
+        title = body.productData?.title || title || 'Unknown Product';
+        extractedText = `Product Title: ${title}\nProduct Price: ${body.productData?.price || ''}\nDescription:\n${body.productData?.description || title}`;
+        structured = {
+          title,
+          description: body.productData?.description || '',
+          images: extractedImages,
+          price: body.productData?.price,
+          rating: body.productData?.rating ?? null,
+          reviewCount: body.productData?.orders ?? null,
+          shippingInfo: body.productData?.shipping,
+          specifications: body.productData?.specifications || [],
+        };
+        apifySuccess = true;
+      } else {
+        try {
+          const identity = createCanonicalProductIdentity(trimmedUrl, body.selectionSessionId);
+          console.log(`${LOG} [${requestId}] Exact product-detail fetch for ${identity.productId}`);
+          const exactRes = await fetchExactAliExpressProduct(identity);
+          if (!exactRes.success || !exactRes.product || !exactRes.trace.matchedProductId) {
+            return NextResponse.json(
+              {
+                success: false,
+                error:
+                  exactRes.error ||
+                  `Exact product-detail fetch did not match requested product ID "${productId}".`,
+              },
+              { status: 422 }
+            );
+          }
+          const returnedProductId = extractAliExpressProductId(exactRes.product.url);
+          if (!returnedProductId || returnedProductId !== productId) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Product ID mismatch: requested "${productId}", returned "${returnedProductId}".`,
+              },
+              { status: 422 }
+            );
+          }
+          title = exactRes.product.title || body.productData?.title || title;
+          extractedImages = exactRes.product.images;
+          extractedText = `Product Title: ${title}\nDescription:\n${exactRes.product.description || title}`;
+          structured = {
+            title,
+            description: exactRes.product.description,
+            images: extractedImages,
+            price: body.productData?.price || exactRes.product.price,
+            rating: body.productData?.rating ?? exactRes.product.rating,
+            reviewCount: body.productData?.orders ?? exactRes.product.orders,
+            shippingInfo: body.productData?.shipping || exactRes.product.shipping,
+            specifications: body.productData?.specifications || exactRes.product.specifications || [],
+          };
+          apifySuccess = true;
+        } catch (exactErr: unknown) {
+          const message = exactErr instanceof Error ? exactErr.message : String(exactErr);
+          return NextResponse.json(
+            { success: false, error: `Exact product-detail fetch failed: ${message}` },
+            { status: 422 }
+          );
+        }
+      }
+    } else if (body.productData) {
       title = body.productData.title || 'Unknown Product';
-      extractedText = `Product Title: ${body.productData.title}\nProduct Price: ${body.productData.price}\nOriginal Price: ${body.productData.originalPrice}\nDiscount: ${body.productData.discount}\nRating: ${body.productData.rating || 'N/A'}\nOrders: ${body.productData.orders || 'N/A'}\nSeller: ${body.productData.seller || 'N/A'}\nShipping: ${body.productData.shipping || 'N/A'}\nDescription:\n${body.productData.description || 'No description'}`;
+      extractedText = `Product Title: ${body.productData.title}\nProduct Price: ${body.productData.price}\nDescription:\n${body.productData.description || 'No description'}`;
       extractedImages = body.productData.images || [];
       structured = {
         title: body.productData.title,
@@ -622,75 +706,20 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // For AliExpress URLs, trigger primary Apify direct detail extraction for full product gallery if not already hydrated (>1 images)
-    let apifySuccess = false;
-    if (extractedImages.length > 1) {
-      console.log(`${LOG} [${requestId}] Product data already contains ${extractedImages.length} hydrated gallery images. Preserving exact gallery.`);
-      apifySuccess = true;
-    } else if ((trimmedUrl.includes('aliexpress.com') || trimmedUrl.includes('aliexpress.us')) && process.env.APIFY_API_TOKEN) {
-      try {
-        console.log(`${LOG} [${requestId}] Triggering primary Apify direct detail extraction for full gallery: ${trimmedUrl}`);
-        const apifyRes = await fetchAliExpressProductViaApify(trimmedUrl, { isDirectUrl: true });
-        if (apifyRes.success && apifyRes.product && apifyRes.product.images.length > 0) {
-          const returnedProductId = extractAliExpressProductId(apifyRes.product.url);
-          if (productId && returnedProductId && productId !== returnedProductId) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: `Apify returned product ID "${returnedProductId}" but requested "${productId}".`,
-              },
-              { status: 422 }
-            );
-          }
-          if (productId && !apifyRes.trace.matchedProductId) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: `Apify extraction did not match requested product ID "${productId}".`,
-              },
-              { status: 422 }
-            );
-          }
-          console.log(`${LOG} [${requestId}] Primary Apify direct extraction succeeded for: ${apifyRes.product.title} (${apifyRes.product.images.length} images extracted)`);
-          if (!title || title === 'Unknown Product') title = apifyRes.product.title;
-          if (!extractedText || extractedText.length < 50) {
-            extractedText = `Product Title: ${apifyRes.product.title}\nProduct Price: ${apifyRes.product.price}\nOriginal Price: ${apifyRes.product.originalPrice}\nDiscount: ${apifyRes.product.discount}\nRating: ${apifyRes.product.rating || 'N/A'}\nOrders: ${apifyRes.product.orders || 'N/A'}\nSeller: ${apifyRes.product.seller || 'N/A'}\nShipping: ${apifyRes.product.shipping || 'N/A'}\nDescription:\n${apifyRes.product.description}`;
-          }
-          extractedImages = [...new Set([...extractedImages, ...apifyRes.product.images])];
-          structured = {
-            title: title || apifyRes.product.title,
-            description: structured.description || apifyRes.product.description,
-            images: extractedImages,
-            price: structured.price || apifyRes.product.price,
-            rating: structured.rating ?? apifyRes.product.rating,
-            reviewCount: structured.reviewCount ?? apifyRes.product.orders,
-            shippingInfo: structured.shippingInfo || apifyRes.product.shipping,
-            specifications: (structured.specifications && structured.specifications.length > 0) ? structured.specifications : apifyRes.product.specifications,
-          };
-          apifySuccess = true;
-        }
-      } catch (apifyErr: any) {
-        console.warn(`${LOG} [${requestId}] Server Apify extraction failed, falling back to HTML fetcher:`, apifyErr.message);
-      }
-    }
-
-    if (extractedImages.length <= 1 && !apifySuccess) {
+    if (extractedImages.length === 0 && !apifySuccess) {
       if (isAliExpressUrl && productId) {
         return NextResponse.json(
           {
             success: false,
-            error: `Could not hydrate AliExpress product "${productId}" with a full gallery. Refusing HTML fallback to avoid product mismatch.`,
+            error: `Could not hydrate AliExpress product "${productId}" with a product gallery.`,
           },
           { status: 422 }
         );
       }
 
-      // Fetch the product page via HTML fetcher
-      console.log(`${LOG} [${requestId}] Fetching URL via HTML scraper for multi-image fallback: ${trimmedUrl}`);
-
-      let pageHtml: string;
+      console.log(`${LOG} [${requestId}] Fetching URL via HTML scraper: ${trimmedUrl}`);
       try {
-        pageHtml = await fetchPageContent(trimmedUrl);
+        const pageHtml = await fetchPageContent(trimmedUrl);
         const extracted = extractFromHtml(pageHtml);
         if (!extractedText) extractedText = extracted.text;
         if (!title) title = extracted.title;
@@ -740,34 +769,8 @@ export async function POST(req: NextRequest) {
     console.log(`${LOG} [Diagnostic] ANALYZE_INPUT: ${analyzeInputCount}`);
 
     let cachedLib: ProductImageLibrary;
-    const incomingLibrary = body.productData?.imageLibrary;
-    if (
-      incomingLibrary &&
-      isReusableProductImageLibrary(incomingLibrary, analyzeInputCount)
-    ) {
-      const libraryProductId = incomingLibrary.productId;
-      const librarySourceId = incomingLibrary.sourceUrl
-        ? extractAliExpressProductId(incomingLibrary.sourceUrl)
-        : null;
-      if (productId && libraryProductId && libraryProductId !== productId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `ProductImageLibrary product ID "${libraryProductId}" does not match requested "${productId}".`,
-          },
-          { status: 422 }
-        );
-      }
-      if (productId && librarySourceId && librarySourceId !== productId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `ProductImageLibrary source URL product ID "${librarySourceId}" does not match requested "${productId}".`,
-          },
-          { status: 422 }
-        );
-      }
-      console.log(`${LOG} [${requestId}] Reusing canonical ProductImageLibrary (${incomingLibrary.allValidImages.length} persisted images). Skipping re-cache.`);
+    if (incomingLibraryOk && incomingLibrary) {
+      console.log(`${LOG} [${requestId}] Using canonical ProductImageLibrary (${incomingLibrary.allValidImages.length} persisted images).`);
       cachedLib = incomingLibrary;
     } else {
       cachedLib = await buildCachedProductImageLibrary({
@@ -775,6 +778,7 @@ export async function POST(req: NextRequest) {
         title,
         productId: productId || undefined,
         sourceUrl: trimmedUrl,
+        selectionSessionId: body.selectionSessionId,
       });
     }
 
@@ -815,6 +819,8 @@ export async function POST(req: NextRequest) {
       category: (parsed.category as string) || structured.category || 'General',
       priceRange: (structured.price ? `${structured.currency || '$'}${structured.price}` : null) || (parsed.priceRange as string) || 'Contact for pricing',
       sourceUrl: trimmedUrl,
+      productId: productId || undefined,
+      selectionSessionId: body.selectionSessionId,
       images: finalImages,
       imageLibrary: cachedLib,
       shippingInfo: (parsed.shippingInfo as string) || 'Standard shipping available',
@@ -842,8 +848,28 @@ export async function POST(req: NextRequest) {
     console.log(`${LOG} [Diagnostic] CACHE_WRITE_IMAGE_COUNT: ${cachedLib.cachedImageCount || 0}`);
     console.log(`${LOG} [Diagnostic] API_RESPONSE_IMAGE_COUNT: ${finalImages.length}`);
 
-    // Cache the analysis under versioned key
-    analysisCache.set(cacheKey, { analysis, usedProvider, timestamp: Date.now() });
+    if (productId && cachedLib.productId && cachedLib.productId !== productId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `ProductImageLibrary product ID "${cachedLib.productId}" does not match requested "${productId}".`,
+        },
+        { status: 422 }
+      );
+    }
+
+    // Cache the analysis under versioned product-safe key
+    if (productId) {
+      analysisCache.set(cacheKey, {
+        schemaVersion: PRODUCT_CACHE_SCHEMA_VERSION,
+        productId,
+        sourceUrl: trimmedUrl,
+        createdAt: new Date().toISOString(),
+        analysis,
+        usedProvider,
+        timestamp: Date.now(),
+      });
+    }
 
     const analyzedProductId = extractAliExpressProductId(trimmedUrl);
     if (productId && analyzedProductId && productId !== analyzedProductId) {

@@ -63,7 +63,7 @@ export function extractRawImages(data: unknown): ExtractedRawImage[] {
     const singleFields = [
       'productMainImageUrl', 'productImage', 'product_image',
       'imageUrl', 'image_url', 'image', 'thumbnail', 'skuImage', 'sku_image',
-      'featuredImage', 'featured_image', 'src', 'url', 'main_image', 'mainImage',
+      'featuredImage', 'featured_image', 'src', 'main_image', 'mainImage',
       'photo', 'picture'
     ];
 

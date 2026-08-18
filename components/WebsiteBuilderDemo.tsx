@@ -2451,9 +2451,15 @@ function assertCanonicalImageLibrary(analysis: ProductAnalysis, analyzeInputCoun
   const libraryCount = analysis.imageLibrary?.allValidImages?.length || 0;
   console.log('[Frontend] ANALYZE_OUTPUT:', outputCount);
   console.log('[Frontend] STATE_IMAGE_LIBRARY:', libraryCount);
+  console.log('[Frontend] FRONTEND_IMAGES_COUNT:', outputCount);
   if (!analysis.imageLibrary || libraryCount === 0) {
     throw new Error(
       `ProductImageLibrary missing after analysis. ANALYZE_OUTPUT=${outputCount} STATE_IMAGE_LIBRARY=${libraryCount}`
+    );
+  }
+  if (analysis.productId && analysis.imageLibrary.productId && analysis.productId !== analysis.imageLibrary.productId) {
+    throw new Error(
+      `ProductImageLibrary product ID "${analysis.imageLibrary.productId}" does not match analysis "${analysis.productId}".`
     );
   }
   if (libraryCount !== outputCount) {
@@ -2562,7 +2568,7 @@ export default function WebsiteBuilderDemo() {
   const [apifyResults, setApifyResults] = useState<ApifyProduct[]>([]);
   const [apifySelectedProduct, setApifySelectedProduct] = useState<ApifyProduct | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const productSelectionRef = useRef<ProductSelectionSession>({ token: 0, productId: null });
+  const productSelectionRef = useRef<ProductSelectionSession>({ token: 0, productId: null, selectionSessionId: 'sel_0_none' });
   const [manualTitle, setManualTitle] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [manualDescription, setManualDescription] = useState('');
@@ -2668,6 +2674,13 @@ export default function WebsiteBuilderDemo() {
     if (!analysis || !selectedProductId) return false;
     if (selectedProductId === 'manual') {
       return analysis.sourceUrl === 'manual://import';
+    }
+    if (analysis.productId && analysis.productId !== selectedProductId) return false;
+    if (
+      analysis.selectionSessionId &&
+      analysis.selectionSessionId !== productSelectionRef.current.selectionSessionId
+    ) {
+      return false;
     }
     return productUrlMatchesSelection(analysis.sourceUrl, selectedProductId, extractAliExpressProductId);
   }
@@ -2822,7 +2835,11 @@ export default function WebsiteBuilderDemo() {
         const apifyRes = await fetch('/api/apify/aliexpress', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productUrl: submittedUrl }),
+          body: JSON.stringify({
+            productUrl: submittedUrl,
+            selectedProductId: selectedProductIdForRequest,
+            selectionSessionId: session.selectionSessionId,
+          }),
         });
         if (!isActiveSelection(session)) {
           console.log('[Frontend] Ignoring stale Apify response — selection changed.');
@@ -2859,6 +2876,7 @@ export default function WebsiteBuilderDemo() {
           url: submittedUrl,
           provider,
           selectedProductId: selectedProductIdForRequest || undefined,
+          selectionSessionId: session.selectionSessionId,
           productData: productDataPayload
         }),
       });
@@ -3153,7 +3171,11 @@ export default function WebsiteBuilderDemo() {
       const detailRes = await fetch('/api/apify/aliexpress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productUrl: searchCardUrl }),
+        body: JSON.stringify({
+          productUrl: searchCardUrl,
+          selectedProductId: searchCardProductId,
+          selectionSessionId: session.selectionSessionId,
+        }),
       });
 
       if (!isActiveSelection(session)) {
@@ -3204,6 +3226,7 @@ export default function WebsiteBuilderDemo() {
           url: searchCardUrl,
           provider,
           selectedProductId: searchCardProductId,
+          selectionSessionId: session.selectionSessionId,
           productData: payloadProduct,
         }),
       });

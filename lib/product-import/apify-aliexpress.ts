@@ -91,6 +91,10 @@ export interface ApifySearchResult {
   error?: string;
 }
 
+import { extractAliExpressProductId } from '../product-identity';
+
+export { extractAliExpressProductId };
+
 export interface AliExpressExtractionReport {
   images: string[];
   variantImages: string[];
@@ -192,12 +196,6 @@ export function buildActorPayload(actorId: string, targetUrl: string, limit: num
   };
 }
 
-export function extractAliExpressProductId(url: string): string | null {
-  if (!url || typeof url !== 'string') return null;
-  const match = url.match(/(?:item\/|_|id=)(\d{10,16})/i) || url.match(/\b(\d{10,16})\b/);
-  return match ? match[1] : null;
-}
-
 export function isValidImageUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
   const clean = url.trim().toLowerCase();
@@ -218,7 +216,8 @@ export function isValidImageUrl(url: string): boolean {
     clean.includes('spacer') ||
     clean.includes('1x1') ||
     clean.includes('blank.gif') ||
-    clean.includes('avatar')
+    clean.includes('avatar') ||
+    /\/\d{2,4}x\d{2,4}\.(png|gif)(\?|#|$)/i.test(clean)
   ) {
     return false;
   }
@@ -286,7 +285,7 @@ export function extractImagesFromAliExpressHtml(html: string): string[] {
   };
 
   // 1. Scan for imagePathList or pcDetailUrlList or summaryImageList JSON arrays in script blocks
-  const jsonArrayRegex = /"(?:imagePathList|pcDetailUrlList|summaryImageList|summryImageList|images|gallery)"\s*:\s*(\[[^\]]+\])/gi;
+  const jsonArrayRegex = /"(?:imagePathList|pcDetailUrlList|summaryImageList|summryImageList|summImagePathList|images|gallery)"\s*:\s*(\[[^\]]+\])/gi;
   let arrayMatch: RegExpExecArray | null;
   while ((arrayMatch = jsonArrayRegex.exec(html)) !== null) {
     try {
@@ -511,8 +510,8 @@ export function matchDatasetItemByProductId(
       ];
 
       for (const idStr of idsToTest) {
-        if (idStr.includes(requestedProductId)) {
-          const foundId = extractAliExpressProductId(idStr) || requestedProductId;
+        const foundId = extractAliExpressProductId(idStr);
+        if (foundId && foundId === requestedProductId) {
           return {
             item: candidate,
             matched: true,
@@ -770,308 +769,38 @@ export async function fetchAliExpressProductViaApify(
   targetUrlOrQuery: string,
   options?: { isDirectUrl?: boolean }
 ): Promise<ApifyImportResult> {
-  const isDirectUrl = options?.isDirectUrl ?? (targetUrlOrQuery.startsWith('http://') || targetUrlOrQuery.startsWith('https://'));
-  const targetUrl = isDirectUrl ? targetUrlOrQuery.trim() : `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(targetUrlOrQuery.trim())}.html`;
-  const requestedProductId = extractAliExpressProductId(targetUrl);
+  const isDirectUrl =
+    options?.isDirectUrl ??
+    (targetUrlOrQuery.startsWith('http://') || targetUrlOrQuery.startsWith('https://'));
 
-  const trace: ApifyDebugTrace = {
-    sourceUrl: targetUrl,
-    apifyRunStatus: 'FAILED',
-    actorUsed: null,
-    requestedProductId,
-    selectedResultProductId: null,
-    matchedProductId: false,
-    datasetItemCount: 0,
-    rawImageCount: 0,
-    normalizedImageCount: 0,
-    validImageCount: 0,
-    downloadedImageCount: 0,
-    zipImageCount: 0,
-    shopifyGalleryCount: 0,
-    failedImages: [],
-    failureReasons: [],
-  };
-
-  const apifyToken = process.env.APIFY_API_TOKEN;
-  if (!apifyToken) {
-    const errMsg = 'APIFY_API_TOKEN is missing in server environment.';
-    trace.failureReasons.push(errMsg);
-    return { success: false, product: null, trace, error: errMsg };
-  }
-
-  const actors = getConfiguredActors({ isDirectUrl });
-  const requireExactProductId = isDirectUrl && Boolean(requestedProductId);
-  let lastError = '';
-  let datasetItems: Record<string, unknown>[] = [];
-  let matchRes: ReturnType<typeof matchDatasetItemByProductId> | null = null;
-
-  for (const actorId of actors) {
-    if (isDirectUrl && SEARCH_CARD_ONLY_ACTORS.has(actorId)) {
-      trace.failureReasons.push(`Actor ${actorId} is search-card only and cannot satisfy direct product URL imports.`);
-      continue;
-    }
-    try {
-      console.log(`[Apify Service] Invoking Actor: ${actorId} for URL: ${targetUrl.slice(0, 80)}...`);
-      const runUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyToken}&timeout=60`;
-      const payload = buildActorPayload(actorId, targetUrl, 8, isDirectUrl, targetUrlOrQuery);
-
-      const response = await fetch(runUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Apify Actor ${actorId} HTTP ${response.status}: ${errText.slice(0, 150)}`);
-      }
-
-      const data = await response.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        trace.failureReasons.push(`Actor ${actorId} returned empty dataset.`);
-        continue;
-      }
-
-      const candidateItems = data as Record<string, unknown>[];
-      const candidateMatch = matchDatasetItemByProductId(
-        candidateItems,
-        requestedProductId,
-        { requireExactMatch: requireExactProductId }
-      );
-
-      if (requireExactProductId && !candidateMatch.matched) {
-        trace.failureReasons.push(
-          `Actor ${actorId} returned ${candidateItems.length} item(s) but none matched product ID ${requestedProductId}.`
-        );
-        continue;
-      }
-
-      datasetItems = candidateItems;
-      matchRes = candidateMatch;
-      trace.actorUsed = actorId;
-      trace.apifyRunStatus = 'SUCCESS';
-      console.log(`[Apify Service] Actor ${actorId} successfully returned ${datasetItems.length} items.`);
-      break;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[Apify Service] Actor ${actorId} failed:`, msg);
-      lastError = msg;
-      trace.failureReasons.push(`Actor ${actorId}: ${msg}`);
-    }
-  }
-
-  if (!matchRes || datasetItems.length === 0) {
-    if (requireExactProductId) {
-      const mismatchError = `Product ID mismatch: requested "${requestedProductId}", but no Apify actor returned a matching product detail record.`;
-      trace.matchedProductId = false;
-      trace.selectedResultProductId = null;
-      trace.datasetItemCount = 0;
-      trace.failureReasons.push(mismatchError);
-      return {
-        success: false,
-        product: null,
-        trace,
-        error: mismatchError,
-        productIdMismatch: true,
-      };
-    }
-
+  if (!isDirectUrl) {
+    const errMsg =
+      'Product-detail extraction cannot run a search. Use fetchAliExpressSearchViaApify for search cards.';
     return {
       success: false,
       product: null,
-      trace,
-      error: `Apify extraction returned no dataset items. ${lastError}`,
-    };
-  }
-
-  // Exact Product ID Matcher (final selected item)
-  const item = matchRes.item;
-
-  trace.requestedProductId = matchRes.requestedProductId;
-  trace.selectedResultProductId = matchRes.selectedResultProductId;
-  trace.matchedProductId = matchRes.matched;
-  trace.datasetItemCount = matchRes.datasetItemCount;
-
-  if (requireExactProductId && matchRes.selectedResultProductId !== requestedProductId) {
-    const mismatchError = `Product ID mismatch: requested "${requestedProductId}", returned "${matchRes.selectedResultProductId}".`;
-    trace.matchedProductId = false;
-    trace.failureReasons.push(mismatchError);
-    return {
-      success: false,
-      product: null,
-      trace,
-      error: mismatchError,
+      trace: {
+        sourceUrl: targetUrlOrQuery,
+        apifyRunStatus: 'FAILED',
+        actorUsed: null,
+        requestedProductId: extractAliExpressProductId(targetUrlOrQuery),
+        selectedResultProductId: null,
+        matchedProductId: false,
+        datasetItemCount: 0,
+        rawImageCount: 0,
+        normalizedImageCount: 0,
+        validImageCount: 0,
+        downloadedImageCount: 0,
+        zipImageCount: 0,
+        shopifyGalleryCount: 0,
+        failedImages: [],
+        failureReasons: [errMsg],
+      },
+      error: errMsg,
       productIdMismatch: true,
     };
   }
 
-  console.log(`[Apify Service] Product ID Matcher: requested="${requestedProductId}", selected="${matchRes.selectedResultProductId}", matched=${matchRes.matched}, datasetItemCount=${matchRes.datasetItemCount}`);
-
-  const title = String(item.title || item.productTitle || item.name || item.subject || 'Imported Product').trim();
-
-  // Price parsing
-  let price = '0.00';
-  if (item.priceCurrent) price = String(item.priceCurrent).replace(/[^0-9.]/g, '');
-  else if (item.priceText) price = String(item.priceText).replace(/[^0-9.]/g, '');
-  else if (item.price) price = typeof item.price === 'object' ? String((item.price as any).value || (item.price as any).amount || '0.00') : String(item.price);
-  else if (item.salePrice) price = typeof item.salePrice === 'object' ? String((item.salePrice as any).value || (item.salePrice as any).amount || '0.00') : String(item.salePrice);
-  else if (item.priceRange) price = typeof item.priceRange === 'object' ? String((item.priceRange as any).value || (item.priceRange as any).amount || '0.00') : String(item.priceRange);
-
-  // Original price
-  let originalPrice = '';
-  if (item.priceOriginal) originalPrice = String(item.priceOriginal).replace(/[^0-9.]/g, '');
-  else if (item.originalPrice) originalPrice = typeof item.originalPrice === 'object' ? String((item.originalPrice as any).value || (item.originalPrice as any).amount || '') : String(item.originalPrice);
-  else if (item.compareAtPrice) originalPrice = typeof item.compareAtPrice === 'object' ? String((item.compareAtPrice as any).value || (item.compareAtPrice as any).amount || '') : String(item.compareAtPrice);
-
-  const discount = String(item.priceDiscount || item.discount || item.discountPercentage || '');
-
-  // Deep canonical image extraction across all dataset product fields
-  const report = extractAllAliExpressProductImages(item);
-
-  // 1. Scan raw dataset item JSON for embedded script/gallery image strings
-  try {
-    const itemJsonStr = JSON.stringify(item);
-    const rawEmbeddedImgs = extractImagesFromAliExpressHtml(itemJsonStr);
-    if (rawEmbeddedImgs.length > 0) {
-      const combined = [...new Set([...report.images, ...rawEmbeddedImgs])];
-      report.images = combined;
-      report.stats.uniqueNormalizedCount = combined.length;
-      report.stats.mainGalleryCount = combined.length;
-    }
-  } catch { /* ignore JSON stringify errors */ }
-
-  // 2. Direct product detail page HTML scanning fallback if Apify item returned <= 1 image
-  const pageUrl = String(item.url || item.productUrl || targetUrl);
-  if (report.images.length <= 1 && pageUrl.startsWith('http')) {
-    try {
-      console.log(`[Apify Service] Scraper item has <= 1 image. Executing HTML script extraction fallback for: ${pageUrl.slice(0, 80)}...`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const htmlRes = await fetch(pageUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (htmlRes.ok) {
-        const html = await htmlRes.text();
-        const htmlImgs = extractImagesFromAliExpressHtml(html);
-        if (htmlImgs.length > 0) {
-          console.log(`[Apify Service] HTML script extraction added ${htmlImgs.length} images.`);
-          const combined = [...new Set([...report.images, ...htmlImgs])];
-          report.images = combined;
-          report.stats.uniqueNormalizedCount = combined.length;
-          report.stats.mainGalleryCount = combined.length;
-        }
-      }
-    } catch (htmlErr) {
-      console.warn('[Apify Service] HTML script extraction fallback failed:', htmlErr);
-    }
-  }
-
-  trace.rawImageCount = report.stats.rawCandidates > 0 ? report.stats.rawCandidates : report.images.length;
-  trace.normalizedImageCount = report.stats.uniqueNormalizedCount;
-  trace.validImageCount = report.stats.uniqueNormalizedCount;
-  trace.mainGalleryCount = report.stats.mainGalleryCount;
-  trace.variantImageCount = report.stats.variantCount;
-  trace.descriptionImageCount = report.stats.descriptionCount;
-
-  // HARD PRODUCTION ASSERTION:
-  // If the product payload/page contains >1 valid unique product images, but validImageCount === 1, throw a detailed diagnostic error.
-  if (report.images.length > 1 && trace.validImageCount === 1) {
-    throw new Error(
-      `[PRODUCTION HARD ASSERTION FAILED] Selected product payload contains ${report.images.length} valid unique product images, but PIPELINE_RAW_IMAGE_COUNT is 1.`
-    );
-  }
-
-  // Real production diagnostics object
-  trace.diagnostics = {
-    requestedProductId,
-    matchedProductId: matchRes.selectedResultProductId,
-    datasetItemCount: datasetItems.length,
-    datasetKeys: item ? Object.keys(item) : [],
-    rawGalleryCount: report.stats.mainGalleryCount,
-    variantImageCount: report.stats.variantCount,
-    descriptionImageCount: report.stats.descriptionCount,
-    uniqueExtractedCount: report.images.length,
-  };
-
-  console.log(`[Apify Service] Image Extraction Report: rawCandidates=${report.stats.rawCandidates}, mainGallery=${report.stats.mainGalleryCount}, variants=${report.stats.variantCount}, description=${report.stats.descriptionCount}, uniqueNormalized=${report.stats.uniqueNormalizedCount}`);
-
-  // Extract structured variants
-  const variants: ApifyVariant[] = [];
-  if (Array.isArray(item.variants)) {
-    item.variants.forEach((v: Record<string, unknown>, idx: number) => {
-      const vName = String(v.name || v.title || v.optionValue || v.color || `Variant ${idx + 1}`);
-      const vPrice = v.price ? String(v.price) : price;
-      const vSku = v.sku ? String(v.sku) : `SKU-${idx + 1}`;
-      let vImg = '';
-      if (v.image) vImg = String(v.image);
-      else if (v.imageUrl) vImg = String(v.imageUrl);
-      else if (v.image_url) vImg = String(v.image_url);
-      variants.push({
-        id: `var-${idx + 1}`,
-        name: vName,
-        price: vPrice,
-        sku: vSku,
-        imageUrl: vImg ? normalizeAliExpressImageUrl(vImg) : undefined,
-      });
-    });
-  }
-
-  // Specifications
-  let specifications: ApifySpecification[] = [];
-  if (Array.isArray(item.specifications)) {
-    specifications = item.specifications
-      .map((s: unknown) => {
-        if (typeof s === 'object' && s !== null) {
-          const obj = s as Record<string, unknown>;
-          return { label: String(obj.label || obj.name || obj.key || ''), value: String(obj.value || obj.val || '') };
-        }
-        return { label: 'Spec', value: String(s) };
-      })
-      .filter((s) => Boolean(s.label && s.value));
-  } else if (item.specifications && typeof item.specifications === 'object') {
-    specifications = Object.entries(item.specifications as Record<string, unknown>).map(([label, value]) => ({
-      label,
-      value: String(value),
-    }));
-  }
-
-  // Seller, shipping, rating, orders
-  const rating = item.ratingValue || item.rating || item.stars || (item.aggregateRating as any)?.ratingValue ? parseFloat(String(item.ratingValue || item.rating || item.stars || (item.aggregateRating as any)?.ratingValue)) : null;
-  const orders = item.orders || item.orderCount || item.sales || item.soldCount ? parseInt(String(item.orders || item.orderCount || item.sales || item.soldCount).replace(/[^0-9]/g, ''), 10) : null;
-  const seller = String(item.storeName || (item.seller as any)?.name || (item.store as any)?.name || item.seller || 'AliExpress Supplier');
-  const shipping = String(item.shippingInfo || (item.shipping as any)?.name || item.shipping || 'Tracked Shipping');
-  const description = String(item.description || item.descriptionHtml || title);
-
-  const productData: ApifyProductData = {
-    title,
-    price,
-    originalPrice,
-    discount,
-    description,
-    descriptionHtml: String(item.descriptionHtml || ''),
-    images: report.images, // Full normalized images list
-    featuredImage: report.images.length > 0 ? report.images[0] : null,
-    variantImages: report.variantImages,
-    variants,
-    specifications,
-    rating,
-    orders,
-    seller,
-    shipping,
-    url: pageUrl,
-  };
-
-  return {
-    success: true,
-    product: productData,
-    trace,
-  };
+  const { fetchExactAliExpressProduct } = await import('./exact-product-detail');
+  return fetchExactAliExpressProduct(targetUrlOrQuery.trim());
 }

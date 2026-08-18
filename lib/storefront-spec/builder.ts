@@ -40,12 +40,16 @@ export function buildStorefrontSpec(
   const familyConfig = THEME_FAMILIES[archetypeId] || THEME_FAMILIES.modern_tech;
 
   // 4. Image Pipeline — ProductImageLibrary is the ONLY canonical image source
-  if (!existingImageLibrary) {
-    console.warn(
-      '[StorefrontSpec Builder] No ProductImageLibrary provided. Rebuilding from generation payload (legacy path).'
+  const imageLibrary = existingImageLibrary || createProductImageLibrary(gen);
+  if (
+    existingImageLibrary?.productId &&
+    imageLibrary.productId &&
+    existingImageLibrary.productId !== imageLibrary.productId
+  ) {
+    throw new Error(
+      `StorefrontSpec refused to mix ProductImageLibrary identities: "${existingImageLibrary.productId}" vs "${imageLibrary.productId}".`
     );
   }
-  const imageLibrary = existingImageLibrary || createProductImageLibrary(gen);
   const rawSelections = (gen.ecommerce as any)?.aiImageSelections || (gen as any)?.aiImageSelections || (gen as any)?.imageSelections;
   const aiSelections = {
     heroImageIndex: rawSelections?.heroImageIndex ?? (gen.ecommerce as any)?.heroImageIndex ?? (gen as any)?.heroImageIndex,

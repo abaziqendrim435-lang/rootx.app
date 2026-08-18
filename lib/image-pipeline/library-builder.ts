@@ -9,6 +9,7 @@ import { normalizeImageUrl } from './normalizer';
 import { validateImage } from './validator';
 import { scoreImageQuality } from './ranker';
 import { isAcceptedPersistedUrl } from '../supabase-storage';
+import { PRODUCT_CACHE_SCHEMA_VERSION } from '../product-identity';
 
 export function getPersistedLibraryUrl(img: Pick<NormalizedImage, 'publicUrl' | 'cachedUrl' | 'normalizedUrl'>): string {
   if (isAcceptedPersistedUrl(img.publicUrl)) return img.publicUrl as string;
@@ -18,9 +19,16 @@ export function getPersistedLibraryUrl(img: Pick<NormalizedImage, 'publicUrl' | 
 
 export function isReusableProductImageLibrary(
   lib: ProductImageLibrary | null | undefined,
-  expectedImageCount?: number
+  expectedImageCount?: number,
+  productId?: string | null
 ): lib is ProductImageLibrary {
   if (!lib || !Array.isArray(lib.allValidImages) || lib.allValidImages.length === 0) {
+    return false;
+  }
+  if (lib.schemaVersion !== PRODUCT_CACHE_SCHEMA_VERSION) {
+    return false;
+  }
+  if (productId && lib.productId !== productId) {
     return false;
   }
   if (typeof expectedImageCount === 'number' && lib.allValidImages.length !== expectedImageCount) {
@@ -67,6 +75,8 @@ export function createProductImageLibrary(productData: unknown, customGenId?: st
     (typeof meta?.sourceUrl === 'string' && meta.sourceUrl) ||
     (typeof meta?.url === 'string' && meta.url) ||
     null;
+  const selectionSessionId =
+    typeof meta?.selectionSessionId === 'string' ? meta.selectionSessionId : null;
   const rawCandidates = extractRawImages(productData);
   const seenUrls = new Set<string>();
   const allValidImages: NormalizedImage[] = [];
@@ -117,8 +127,10 @@ export function createProductImageLibrary(productData: unknown, customGenId?: st
 
   return {
     generationId,
+    schemaVersion: PRODUCT_CACHE_SCHEMA_VERSION,
     productId,
     sourceUrl,
+    selectionSessionId,
     allValidImages,
     heroCandidates: heroCandidates.length > 0 ? heroCandidates : allValidImages,
     galleryCandidates,

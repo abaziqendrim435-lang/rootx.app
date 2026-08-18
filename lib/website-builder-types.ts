@@ -280,6 +280,8 @@ export interface ProductAnalysis {
   category: string;
   priceRange: string;
   sourceUrl: string;
+  productId?: string;
+  selectionSessionId?: string;
   images: string[];
   shippingInfo: string;
   specifications: { label: string; value: string }[];
