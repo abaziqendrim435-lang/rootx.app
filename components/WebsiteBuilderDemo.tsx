@@ -31,6 +31,12 @@ import type {
   ShopifyThemeFile, ThemeCreateResponse, ThemePublishResponse, ThemeDeployStatus,
 } from '@/lib/shopify-types';
 import type { ProductImageLibrary } from '@/lib/image-pipeline/types';
+import {
+  createProductSelectionSession,
+  isActiveProductSelectionSession,
+  productUrlMatchesSelection,
+  type ProductSelectionSession,
+} from '@/lib/product-selection-session';
 
 import { supabaseClient } from '@/lib/supabase-auth';
 
@@ -2555,6 +2561,8 @@ export default function WebsiteBuilderDemo() {
   const [apifyLoading, setApifyLoading] = useState(false);
   const [apifyResults, setApifyResults] = useState<ApifyProduct[]>([]);
   const [apifySelectedProduct, setApifySelectedProduct] = useState<ApifyProduct | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const productSelectionRef = useRef<ProductSelectionSession>({ token: 0, productId: null });
   const [manualTitle, setManualTitle] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [manualDescription, setManualDescription] = useState('');
@@ -2616,6 +2624,56 @@ export default function WebsiteBuilderDemo() {
   const [showShopifyDeploy, setShowShopifyDeploy] = useState(false);
   const [showImageManager, setShowImageManager] = useState(false);
   const [debugMode, setDebugMode] = useState(process.env.NODE_ENV !== 'production');
+
+  function clearPersistedStoreResult() {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('rootx_builder_result');
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function resetProductDerivedState() {
+    setProductAnalysis(null);
+    setSelectedImages([]);
+    setResult(null);
+    setDesignEngineResult(null);
+    setStatus('idle');
+    setErrorMsg('');
+    setManualImageUrl('');
+    setShowImageManager(false);
+    clearPersistedStoreResult();
+    setDropInput((prev) => ({
+      ...prev,
+      productUrl: '',
+      storeName: '',
+    }));
+  }
+
+  function beginProductSelection(productId: string | null): ProductSelectionSession {
+    const session = createProductSelectionSession(productSelectionRef.current.token, productId);
+    productSelectionRef.current = session;
+    setSelectedProductId(productId);
+    resetProductDerivedState();
+    return session;
+  }
+
+  function isActiveSelection(session: ProductSelectionSession): boolean {
+    return isActiveProductSelectionSession(productSelectionRef.current, session);
+  }
+
+  function analysisMatchesCurrentSelection(analysis: ProductAnalysis | null): boolean {
+    if (!analysis || !selectedProductId) return false;
+    if (selectedProductId === 'manual') {
+      return analysis.sourceUrl === 'manual://import';
+    }
+    return productUrlMatchesSelection(analysis.sourceUrl, selectedProductId, extractAliExpressProductId);
+  }
+
+  const currentProductAnalysis =
+    productAnalysis && analysisMatchesCurrentSelection(productAnalysis) ? productAnalysis : null;
 
   // Shopify deploy state
   const [shopifyDomain, setShopifyDomain] = useState('');
@@ -2747,20 +2805,17 @@ export default function WebsiteBuilderDemo() {
   async function handleAnalyzeProduct() {
     if (!productUrl.trim()) return;
     const submittedUrl = productUrl.trim();
-    const selectedProductId = extractAliExpressProductId(submittedUrl);
+    const selectedProductIdForRequest = extractAliExpressProductId(submittedUrl);
+    const session = beginProductSelection(selectedProductIdForRequest);
     console.log('[Frontend] Exact URL received by frontend:', submittedUrl);
+    setProductUrl(submittedUrl);
     setDropStatus('analyzing');
-    setErrorMsg('');
-    setProductAnalysis(null);
-    setSelectedImages([]);
-    setResult(null);
-    setDesignEngineResult(null);
     try {
       let productDataPayload: ApifyProduct | undefined = undefined;
 
       // If it's an AliExpress URL, use Apify to scrape it first to bypass anti-bot blocks
       if (submittedUrl.includes('aliexpress.com')) {
-        if (!selectedProductId) {
+        if (!selectedProductIdForRequest) {
           throw new Error('AliExpress URL must contain a valid product ID before analysis can begin.');
         }
         console.log('[Frontend] AliExpress URL detected. Sourcing data securely via Apify scraper...');
@@ -2769,6 +2824,10 @@ export default function WebsiteBuilderDemo() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productUrl: submittedUrl }),
         });
+        if (!isActiveSelection(session)) {
+          console.log('[Frontend] Ignoring stale Apify response — selection changed.');
+          return;
+        }
         if (!apifyRes.ok) {
           const errData = await apifyRes.json().catch(() => ({}));
           throw new Error(errData.error || `Apify scraper returned status ${apifyRes.status}`);
@@ -2778,14 +2837,14 @@ export default function WebsiteBuilderDemo() {
           const hydratedProduct = apifyData.products[0] as ApifyProduct;
           productDataPayload = hydratedProduct;
           const apifyReturnedProductId = extractAliExpressProductId(hydratedProduct.url);
-          console.log('[Frontend] REQUESTED_PRODUCT_ID =', selectedProductId);
+          console.log('[Frontend] REQUESTED_PRODUCT_ID =', selectedProductIdForRequest);
           console.log('[Frontend] APIFY_RETURNED_PRODUCT_ID =', apifyReturnedProductId);
-          if (!apifyReturnedProductId || apifyReturnedProductId !== selectedProductId) {
+          if (!apifyReturnedProductId || apifyReturnedProductId !== selectedProductIdForRequest) {
             throw new Error(
-              `Product ID mismatch after Apify hydration: requested "${selectedProductId}", got "${apifyReturnedProductId}".`
+              `Product ID mismatch after Apify hydration: requested "${selectedProductIdForRequest}", got "${apifyReturnedProductId}".`
             );
           }
-          assertSelectedProductIdentity('Apify hydration', selectedProductId, hydratedProduct);
+          assertSelectedProductIdentity('Apify hydration', selectedProductIdForRequest, hydratedProduct);
           console.log('[Frontend] Successfully scraped AliExpress product via Apify:', hydratedProduct.title);
         } else {
           throw new Error(apifyData.error || 'Failed to scrape AliExpress product details.');
@@ -2799,10 +2858,14 @@ export default function WebsiteBuilderDemo() {
         body: JSON.stringify({
           url: submittedUrl,
           provider,
-          selectedProductId: selectedProductId || undefined,
+          selectedProductId: selectedProductIdForRequest || undefined,
           productData: productDataPayload
         }),
       });
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale analyze-product response — selection changed.');
+        return;
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `Server returned status ${res.status}`);
@@ -2823,10 +2886,14 @@ export default function WebsiteBuilderDemo() {
         console.error('[Frontend] Product Analysis object URL mismatch detected!', 'Expected:', submittedUrl, 'Got:', data.analysis.sourceUrl);
         throw new Error('Product analysis mismatch. Please try again.');
       }
-      if (selectedProductId && analyzedProductId && selectedProductId !== analyzedProductId) {
+      if (selectedProductIdForRequest && analyzedProductId && selectedProductIdForRequest !== analyzedProductId) {
         throw new Error(
-          `Product ID mismatch after analysis: selected "${selectedProductId}", analyzed "${analyzedProductId}".`
+          `Product ID mismatch after analysis: selected "${selectedProductIdForRequest}", analyzed "${analyzedProductId}".`
         );
+      }
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale analysis commit — selection changed before state update.');
+        return;
       }
 
       const analyzeInputCount = productDataPayload?.images?.length || data.analysis.images?.length || 0;
@@ -2838,10 +2905,11 @@ export default function WebsiteBuilderDemo() {
       setDropInput((prev) => ({
         ...prev,
         productUrl: submittedUrl,
-        storeName: data.analysis.productTitle ? cleanBrandName(data.analysis.productTitle) : prev.storeName,
+        storeName: data.analysis.productTitle ? cleanBrandName(data.analysis.productTitle) : '',
       }));
       setDropStatus('analyzed');
     } catch (err) {
+      if (!isActiveSelection(session)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Product analysis failed');
       setDropStatus('error');
     }
@@ -2885,6 +2953,7 @@ export default function WebsiteBuilderDemo() {
 
     console.log('[Frontend] Saving manual product details:', JSON.stringify(manualAnalysis));
     
+    beginProductSelection('manual');
     setProductAnalysis(manualAnalysis);
     setSelectedImages(manualImagesInput);
     setDropInput((prev) => ({
@@ -2918,24 +2987,33 @@ export default function WebsiteBuilderDemo() {
   }
 
   function handleAddManualImage() {
-    if (!manualImageUrl.trim() || !productAnalysis) return;
+    if (!manualImageUrl.trim() || !currentProductAnalysis) return;
     const url = manualImageUrl.trim();
     setProductAnalysis({
-      ...productAnalysis,
-      images: [...(productAnalysis.images || []), url],
+      ...currentProductAnalysis,
+      images: [...(currentProductAnalysis.images || []), url],
     });
     setSelectedImages((prev) => [...prev, url]);
     setManualImageUrl('');
   }
 
   async function handleGenerateStore() {
-    if (!productAnalysis || !dropInput.storeName.trim()) return;
+    const session = productSelectionRef.current;
+    if (!currentProductAnalysis || !dropInput.storeName.trim()) return;
+    if (!isActiveSelection(session)) return;
+    if (!productUrlMatchesSelection(currentProductAnalysis.sourceUrl, session.productId, extractAliExpressProductId)) {
+      setErrorMsg('Cannot generate store: analysis does not match the currently selected product.');
+      return;
+    }
     if (selectedImages.length === 0) {
       setErrorMsg('Cannot generate store: At least one product image must be selected.');
       return;
     }
     setDropStatus('generating');
     setResult(null);
+    setDesignEngineResult(null);
+    setStatus('idle');
+    clearPersistedStoreResult();
     setErrorMsg('');
     try {
       const res = await fetch('/api/agents/dropshipping-store', {
@@ -2943,22 +3021,30 @@ export default function WebsiteBuilderDemo() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           analysis: {
-            ...productAnalysis,
+            ...currentProductAnalysis,
             images: selectedImages,
-            imageLibrary: productAnalysis.imageLibrary,
+            imageLibrary: currentProductAnalysis.imageLibrary,
           },
           input: dropInput,
           provider
         }),
       });
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale store generation response — selection changed.');
+        return;
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `Server error ${res.status}`);
       }
       const data: WebsiteGeneration = await res.json();
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale store result commit — selection changed.');
+        return;
+      }
       const mergedResult: WebsiteGeneration = {
         ...data,
-        imageLibrary: data.imageLibrary || productAnalysis.imageLibrary,
+        imageLibrary: data.imageLibrary || currentProductAnalysis.imageLibrary,
       };
       setResult(mergedResult);
       setDropStatus('done');
@@ -2968,8 +3054,8 @@ export default function WebsiteBuilderDemo() {
       setInput((prev) => ({
         ...prev,
         businessName: dropInput.storeName,
-        businessType: productAnalysis.category || 'E-commerce',
-        targetAudience: productAnalysis.targetAudience || 'online shoppers',
+        businessType: currentProductAnalysis.category || 'E-commerce',
+        targetAudience: currentProductAnalysis.targetAudience || 'online shoppers',
         preferredStyle: dropInput.preferredStyle,
         primaryColor: dropInput.primaryColor,
         secondaryColor: dropInput.secondaryColor,
@@ -2983,7 +3069,7 @@ export default function WebsiteBuilderDemo() {
         inputs: {
           productUrl: dropInput.productUrl,
           storeName: dropInput.storeName,
-          product: productAnalysis.productTitle,
+          product: currentProductAnalysis.productTitle,
           style: dropInput.preferredStyle,
         },
         outputs: {
@@ -2997,6 +3083,7 @@ export default function WebsiteBuilderDemo() {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     } catch (err) {
+      if (!isActiveSelection(session)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Store generation failed');
       setDropStatus('error');
     }
@@ -3005,14 +3092,10 @@ export default function WebsiteBuilderDemo() {
   async function handleApifySearch(e: React.FormEvent) {
     e.preventDefault();
     if (!apifyQuery.trim()) return;
+    beginProductSelection(null);
     setApifyLoading(true);
-    setErrorMsg('');
     setApifyResults([]);
     setApifySelectedProduct(null);
-    setProductAnalysis(null);
-    setSelectedImages([]);
-    setResult(null);
-    setDesignEngineResult(null);
     setDropStatus('idle');
     setProductUrl('');
     try {
@@ -3053,13 +3136,9 @@ export default function WebsiteBuilderDemo() {
       return;
     }
 
+    const session = beginProductSelection(searchCardProductId);
     setApifySelectedProduct(product);
     setDropStatus('analyzing');
-    setErrorMsg('');
-    setProductAnalysis(null);
-    setSelectedImages([]);
-    setResult(null);
-    setDesignEngineResult(null);
     setProductUrl(searchCardUrl);
 
     try {
@@ -3076,6 +3155,11 @@ export default function WebsiteBuilderDemo() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ productUrl: searchCardUrl }),
       });
+
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale hydration response — selection changed.');
+        return;
+      }
 
       if (!detailRes.ok) {
         const errData = await detailRes.json().catch(() => ({}));
@@ -3124,6 +3208,11 @@ export default function WebsiteBuilderDemo() {
         }),
       });
 
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale analyze-product response — selection changed.');
+        return;
+      }
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `Server returned status ${res.status}`);
@@ -3155,6 +3244,10 @@ export default function WebsiteBuilderDemo() {
       if (!urlMatch) {
         throw new Error('Analyzed product URL does not match the selected search card URL.');
       }
+      if (!isActiveSelection(session)) {
+        console.log('[Frontend] Ignoring stale analysis commit — selection changed before state update.');
+        return;
+      }
 
       const analyzeInputCount = payloadProduct.images?.length || 0;
       console.log('[Frontend] ANALYZE_INPUT:', analyzeInputCount);
@@ -3165,23 +3258,20 @@ export default function WebsiteBuilderDemo() {
       setDropInput((prev) => ({
         ...prev,
         productUrl: searchCardUrl,
-        storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : prev.storeName,
+        storeName: data.analysis.productTitle ? `${data.analysis.productTitle} Store` : '',
       }));
       setDropStatus('analyzed');
     } catch (err) {
+      if (!isActiveSelection(session)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Product analysis failed');
       setDropStatus('error');
     }
   }
 
   function handleDropReset() {
+    beginProductSelection(null);
     setDropStatus('idle');
-    setProductAnalysis(null);
     setProductUrl('');
-    setResult(null);
-    setDesignEngineResult(null);
-    setStatus('idle');
-    setErrorMsg('');
     setApifyQuery('');
     setApifyResults([]);
     setApifySelectedProduct(null);
@@ -3891,7 +3981,7 @@ export default function WebsiteBuilderDemo() {
             )}
 
             {/* Step 2: Product Analysis Results */}
-            {productAnalysis && (dropStatus === 'analyzed' || dropStatus === 'generating' || dropStatus === 'done') && (
+            {currentProductAnalysis && (dropStatus === 'analyzed' || dropStatus === 'generating' || dropStatus === 'done') && (
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -3905,33 +3995,33 @@ export default function WebsiteBuilderDemo() {
 
                 {/* Product card */}
                 <div className="rounded-xl p-4 mb-5" style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)' }}>
-                  <h4 className="font-bold mb-2">{productAnalysis.productTitle}</h4>
-                  <p className="text-xs mb-3 leading-relaxed" style={{ color: '#a1a1aa' }}>{productAnalysis.productDescription}</p>
+                  <h4 className="font-bold mb-2">{currentProductAnalysis.productTitle}</h4>
+                  <p className="text-xs mb-3 leading-relaxed" style={{ color: '#a1a1aa' }}>{currentProductAnalysis.productDescription}</p>
                   
                   {/* Analysis details */}
                   <div className="rounded-lg p-3 mb-4 flex flex-col gap-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', color: '#a1a1aa' }}>
                     <div className="flex justify-between gap-4">
                       <span className="font-semibold text-zinc-500">Source URL:</span>
-                      <a href={productAnalysis.sourceUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline" style={{ color: '#818cf8', maxWidth: '75%' }}>
-                        {productAnalysis.sourceUrl}
+                      <a href={currentProductAnalysis.sourceUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline" style={{ color: '#818cf8', maxWidth: '75%' }}>
+                        {currentProductAnalysis.sourceUrl}
                       </a>
                     </div>
-                    {productAnalysis.analysisId && (
+                    {currentProductAnalysis.analysisId && (
                       <div className="flex justify-between gap-4">
                         <span className="font-semibold text-zinc-500">Analysis ID:</span>
-                        <span className="font-mono">{productAnalysis.analysisId}</span>
+                        <span className="font-mono">{currentProductAnalysis.analysisId}</span>
                       </div>
                     )}
-                    {productAnalysis.requestId && (
+                    {currentProductAnalysis.requestId && (
                       <div className="flex justify-between gap-4">
                         <span className="font-semibold text-zinc-500">Request ID:</span>
-                        <span className="font-mono">{productAnalysis.requestId}</span>
+                        <span className="font-mono">{currentProductAnalysis.requestId}</span>
                       </div>
                     )}
-                    {productAnalysis.timestamp && (
+                    {currentProductAnalysis.timestamp && (
                       <div className="flex justify-between gap-4">
                         <span className="font-semibold text-zinc-500">Analyzed At:</span>
-                        <span>{new Date(productAnalysis.timestamp).toLocaleString()}</span>
+                        <span>{new Date(currentProductAnalysis.timestamp).toLocaleString()}</span>
                       </div>
                     )}
                   </div>
@@ -3939,16 +4029,16 @@ export default function WebsiteBuilderDemo() {
                   {/* Product Images Selector */}
                   <div className="mb-4">
                     <p className="text-xs font-bold mb-2" style={{ color: '#52525b' }}>
-                      Product Images ({selectedImages.length} selected of {productAnalysis.images?.length || 0} found)
+                      Product Images ({selectedImages.length} selected of {currentProductAnalysis.images?.length || 0} found)
                     </p>
                     
-                    {(!productAnalysis.images || productAnalysis.images.length === 0) ? (
+                    {(!currentProductAnalysis.images || currentProductAnalysis.images.length === 0) ? (
                       <div className="rounded-xl p-3 mb-3 text-sm" style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)', color: '#eab308' }}>
                         ⚠️ No product images could be extracted from this URL.
                       </div>
                     ) : (
                       <div className="flex gap-2 mb-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-                        {productAnalysis.images.map((img, i) => {
+                        {currentProductAnalysis.images.map((img, i) => {
                           const isSelected = selectedImages.includes(img);
                           return (
                             <button
@@ -4014,7 +4104,7 @@ export default function WebsiteBuilderDemo() {
                   </div>
 
                   {/* Ratings */}
-                  {productAnalysis.ratings && (
+                  {currentProductAnalysis.ratings && (
                     <div className="flex items-center gap-2 mb-3">
                       <div className="flex items-center gap-1">
                         {Array.from({ length: 5 }).map((_, i) => (
@@ -4022,25 +4112,25 @@ export default function WebsiteBuilderDemo() {
                             key={i}
                             size={12}
                             style={{
-                              color: i < Math.round(productAnalysis.ratings!) ? '#eab308' : '#3f3f46',
-                              fill: i < Math.round(productAnalysis.ratings!) ? '#eab308' : 'transparent',
+                              color: i < Math.round(currentProductAnalysis.ratings!) ? '#eab308' : '#3f3f46',
+                              fill: i < Math.round(currentProductAnalysis.ratings!) ? '#eab308' : 'transparent',
                             }}
                           />
                         ))}
                       </div>
-                      <span className="text-xs font-bold" style={{ color: '#eab308' }}>{productAnalysis.ratings.toFixed(1)}</span>
-                      {productAnalysis.reviewCount && (
-                        <span className="text-xs" style={{ color: '#52525b' }}>({productAnalysis.reviewCount.toLocaleString()} reviews)</span>
+                      <span className="text-xs font-bold" style={{ color: '#eab308' }}>{currentProductAnalysis.ratings.toFixed(1)}</span>
+                      {currentProductAnalysis.reviewCount && (
+                        <span className="text-xs" style={{ color: '#52525b' }}>({currentProductAnalysis.reviewCount.toLocaleString()} reviews)</span>
                       )}
                     </div>
                   )}
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     {[
-                      { label: 'Category', value: productAnalysis.category, icon: <Store size={12} /> },
-                      { label: 'Price', value: productAnalysis.priceRange, icon: <Hash size={12} /> },
-                      { label: 'Audience', value: productAnalysis.targetAudience.slice(0, 30), icon: <Target size={12} /> },
-                      { label: 'Shipping', value: productAnalysis.shippingInfo.slice(0, 30), icon: <Truck size={12} /> },
+                      { label: 'Category', value: currentProductAnalysis.category, icon: <Store size={12} /> },
+                      { label: 'Price', value: currentProductAnalysis.priceRange, icon: <Hash size={12} /> },
+                      { label: 'Audience', value: currentProductAnalysis.targetAudience.slice(0, 30), icon: <Target size={12} /> },
+                      { label: 'Shipping', value: currentProductAnalysis.shippingInfo.slice(0, 30), icon: <Truck size={12} /> },
                     ].map((item) => (
                       <div key={item.label} className="rounded-lg p-2.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}>
                         <div className="flex items-center gap-1 mb-1" style={{ color: '#52525b' }}>
@@ -4057,7 +4147,7 @@ export default function WebsiteBuilderDemo() {
                     <div>
                       <p className="text-xs font-bold mb-1.5" style={{ color: '#52525b' }}>Features</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {productAnalysis.features.slice(0, 6).map((f, i) => (
+                        {currentProductAnalysis.features.slice(0, 6).map((f, i) => (
                           <span key={i} className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', color: '#a5b4fc' }}>{f}</span>
                         ))}
                       </div>
@@ -4065,7 +4155,7 @@ export default function WebsiteBuilderDemo() {
                     <div>
                       <p className="text-xs font-bold mb-1.5" style={{ color: '#52525b' }}>Selling Points</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {productAnalysis.sellingPoints.slice(0, 4).map((s, i) => (
+                        {currentProductAnalysis.sellingPoints.slice(0, 4).map((s, i) => (
                           <span key={i} className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)', color: '#86efac' }}>{s}</span>
                         ))}
                       </div>
@@ -4073,10 +4163,10 @@ export default function WebsiteBuilderDemo() {
                   </div>
 
                   {/* Warnings */}
-                  {productAnalysis.warnings.length > 0 && (
+                  {currentProductAnalysis.warnings.length > 0 && (
                     <div className="mt-3 flex items-start gap-1.5 text-xs" style={{ color: '#eab308' }}>
                       <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-                      <span>{productAnalysis.warnings.join(' · ')}</span>
+                      <span>{currentProductAnalysis.warnings.join(' · ')}</span>
                     </div>
                   )}
                 </div>
@@ -4226,7 +4316,7 @@ export default function WebsiteBuilderDemo() {
         )}
 
         {/* ── Results ────────────────────────────────────────── */}
-        {status === 'done' && result && (
+        {status === 'done' && result && (builderMode !== 'dropshipping' || (dropStatus === 'done' && selectedProductId && (selectedProductId === 'manual' || productUrlMatchesSelection(dropInput.productUrl, selectedProductId, extractAliExpressProductId)))) && (
           <div ref={resultsRef} className="mt-10">
             {/* Header row */}
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
