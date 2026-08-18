@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Run Pipeline & Quality Gate
-    const initialResult = runDesignEnginePipeline(result, input);
+    const initialResult = runDesignEnginePipeline(result, input, result.imageLibrary);
     if (!initialResult.spec) {
       return NextResponse.json(
         { error: 'Validation Failed: Shopify exporter did not receive canonical StorefrontSpec.' },

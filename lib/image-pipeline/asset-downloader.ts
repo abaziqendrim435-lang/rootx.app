@@ -237,6 +237,14 @@ export async function downloadAndPackageProductImages(
     throw new Error('Export Failed: Unable to download product images server-side. Please verify product image URLs.');
   }
 
+  // The gallery is canonical. A partial export would silently turn an N-image
+  // product into a smaller gallery, so it is never a successful export.
+  if (stats.downloadedAssetCount !== rawCandidateImages.length) {
+    throw new Error(
+      `Export Failed: Product gallery persistence mismatch. SOURCE=${rawCandidateImages.length} EXPORTED=${stats.downloadedAssetCount} FAILED=${stats.failedImageCount}.`
+    );
+  }
+
   // 3. Update StorefrontSpec image assignments with local asset references
   const updatedSpec = JSON.parse(JSON.stringify(spec)) as StorefrontSpec;
 

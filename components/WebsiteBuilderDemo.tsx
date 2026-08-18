@@ -2521,6 +2521,7 @@ interface ApifyProduct {
   features?: string[];
   specifications?: Array<{ label: string; value: string }>;
   imageLibrary?: ProductImageLibrary;
+  importKind?: 'search-card' | 'product-detail';
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -3128,7 +3129,8 @@ export default function WebsiteBuilderDemo() {
       }
       const data = await res.json();
       if (data.success && data.products) {
-        setApifyResults(data.products);
+        // Search cards deliberately contain only a thumbnail and cannot become a gallery.
+        setApifyResults(data.products.map((product: ApifyProduct) => ({ ...product, importKind: 'search-card' })));
       } else {
         throw new Error(data.error || 'No products found matching query.');
       }
@@ -3195,6 +3197,7 @@ export default function WebsiteBuilderDemo() {
 
       const fullProduct = detailData.products[0] as ApifyProduct;
       const apifyReturnedProductId = extractAliExpressProductId(fullProduct.url);
+      const hydratedImages = fullProduct.images ?? [];
 
       console.log('[Frontend] REQUESTED_PRODUCT_ID =', searchCardProductId);
       console.log('[Frontend] APIFY_RETURNED_PRODUCT_ID =', apifyReturnedProductId);
@@ -3207,23 +3210,44 @@ export default function WebsiteBuilderDemo() {
 
       assertSelectedProductIdentity('Hydrated product', searchCardProductId, fullProduct);
 
+      if (!fullProduct.imageLibrary ||
+          fullProduct.imageLibrary.productId !== searchCardProductId ||
+          fullProduct.imageLibrary.selectionSessionId !== session.selectionSessionId ||
+          fullProduct.imageLibrary.allValidImages.length !== hydratedImages.length) {
+        throw new Error(
+          'EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: Hydrated detail did not return an identity-bound complete ProductImageLibrary.'
+        );
+      }
+
+      // Do not merge the search card into this object. Its thumbnail is only a
+      // display aid; the exact detail response is the one canonical gallery.
       const payloadProduct: ApifyProduct = {
-        ...product,
         ...fullProduct,
-        url: searchCardUrl,
+        url: fullProduct.url,
         title: fullProduct.title || searchCardTitle,
-        images: fullProduct.images,
+        images: hydratedImages,
+        imageLibrary: fullProduct.imageLibrary,
+        importKind: 'product-detail',
       };
 
       console.log(`[Frontend] Full Product Detail Hydration Succeeded: ${payloadProduct.images?.length || 0} images hydrated.`);
       console.log(`[Frontend] ANALYZE_REQUEST_IMAGES_COUNT: ${payloadProduct.images?.length || 0}`);
+      console.log('[Frontend] SELECTED_PRODUCT_ID =', searchCardProductId);
+      console.log('[Frontend] HYDRATED_PRODUCT_ID =', apifyReturnedProductId);
+      console.log('[Frontend] DETAIL_GALLERY_RAW_COUNT =', payloadProduct.images?.length || 0);
+      console.log('[Frontend] DETAIL_GALLERY_NORMALIZED_COUNT =', payloadProduct.images?.length || 0);
+      console.log('[Frontend] PRODUCT_IMAGE_LIBRARY_COUNT =', payloadProduct.imageLibrary?.allValidImages?.length || 0);
+
+      if (!payloadProduct.imageLibrary || payloadProduct.imageLibrary.allValidImages.length !== (payloadProduct.images?.length || 0)) {
+        throw new Error('EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: Hydrated detail gallery has no complete ProductImageLibrary.');
+      }
 
       const res = await fetch(`/api/agents/analyze-product?cb=${getTimestamp()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          url: searchCardUrl,
+          url: payloadProduct.url,
           provider,
           selectedProductId: searchCardProductId,
           selectionSessionId: session.selectionSessionId,
@@ -3252,7 +3276,7 @@ export default function WebsiteBuilderDemo() {
         normalizeProductTitle(data.analysis.productTitle) === normalizeProductTitle(searchCardTitle) ||
         normalizeProductTitle(data.analysis.productTitle).includes(normalizeProductTitle(searchCardTitle).slice(0, 24)) ||
         normalizeProductTitle(searchCardTitle).includes(normalizeProductTitle(data.analysis.productTitle).slice(0, 24));
-      const urlMatch = data.sourceUrl === searchCardUrl && data.analysis.sourceUrl === searchCardUrl;
+      const urlMatch = data.sourceUrl === payloadProduct.url && data.analysis.sourceUrl === payloadProduct.url;
 
       console.log('[Frontend] ANALYZED_PRODUCT_ID =', analyzedProductId);
       console.log('[Frontend] ID_MATCH =', idMatch);

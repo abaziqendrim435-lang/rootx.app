@@ -41,6 +41,7 @@ export interface AnalyzeProductRequest {
     specifications: { label: string; value: string }[];
     description: string;
     imageLibrary?: ProductImageLibrary;
+    importKind?: 'search-card' | 'product-detail';
   };
 }
 
@@ -493,6 +494,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (isAliExpressUrl && (!body.selectedProductId || !productId)) {
+      return NextResponse.json(
+        { success: false, error: 'EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: AliExpress analysis requires a selectedProductId and an exact product-detail URL.' },
+        { status: 422 }
+      );
+    }
+
     if (body.selectedProductId && productId && body.selectedProductId !== productId) {
       return NextResponse.json(
         {
@@ -514,6 +522,31 @@ export async function POST(req: NextRequest) {
           { status: 422 }
         );
       }
+    }
+
+    if (isAliExpressUrl && body.productData?.importKind === 'product-detail') {
+      const detailProductId = extractAliExpressProductId(body.productData.url);
+      const detailLibrary = body.productData.imageLibrary;
+      if (
+        detailProductId !== body.selectedProductId ||
+        detailLibrary?.productId !== body.selectedProductId ||
+        detailLibrary?.selectionSessionId !== body.selectionSessionId
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: selectedProductId, hydrated product ID, and ProductImageLibrary identity must be identical.',
+          },
+          { status: 422 }
+        );
+      }
+    }
+
+    if (isAliExpressUrl && body.productData?.importKind === 'search-card') {
+      return NextResponse.json(
+        { success: false, error: 'EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: Search-card thumbnails are display-only and cannot enter the Analyze pipeline.' },
+        { status: 422 }
+      );
     }
 
     // Cache invalidation: never reuse legacy v1/v2/v3 one-image entries
@@ -652,8 +685,7 @@ export async function POST(req: NextRequest) {
               {
                 success: false,
                 error:
-                  exactRes.error ||
-                  `Exact product-detail fetch did not match requested product ID "${productId}".`,
+                  `EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: ${exactRes.error || `Exact product-detail fetch did not match requested product ID "${productId}".`}`,
               },
               { status: 422 }
             );
@@ -663,7 +695,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(
               {
                 success: false,
-                error: `Product ID mismatch: requested "${productId}", returned "${returnedProductId}".`,
+                error: `EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: Product ID mismatch: requested "${productId}", returned "${returnedProductId}".`,
               },
               { status: 422 }
             );
@@ -685,7 +717,7 @@ export async function POST(req: NextRequest) {
         } catch (exactErr: unknown) {
           const message = exactErr instanceof Error ? exactErr.message : String(exactErr);
           return NextResponse.json(
-            { success: false, error: `Exact product-detail fetch failed: ${message}` },
+            { success: false, error: `EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: ${message}` },
             { status: 422 }
           );
         }
@@ -872,11 +904,11 @@ export async function POST(req: NextRequest) {
     }
 
     const analyzedProductId = extractAliExpressProductId(trimmedUrl);
-    if (productId && analyzedProductId && productId !== analyzedProductId) {
+    if (!analyzedProductId || analyzedProductId !== productId || analyzedProductId !== body.selectedProductId) {
       return NextResponse.json(
         {
           success: false,
-          error: `Analysis source URL product ID "${analyzedProductId}" does not match requested "${productId}".`,
+          error: `Product ID mismatch: selected "${body.selectedProductId}", hydrated "${productId}", analyzed "${analyzedProductId}".`,
         },
         { status: 422 }
       );

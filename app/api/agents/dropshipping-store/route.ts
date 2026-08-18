@@ -7,6 +7,8 @@ import type {
   AIProvider,
   PreferredStyle,
 } from '@/lib/website-builder-types';
+import { extractAliExpressProductId } from '@/lib/product-identity';
+import { getPersistedLibraryUrl, isReusableProductImageLibrary } from '@/lib/image-pipeline';
 import {
   callWithRetryAndFallback,
   getAvailableProviders,
@@ -735,6 +737,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const aliExpressProductId = extractAliExpressProductId(analysis.sourceUrl || "");
+    if (aliExpressProductId) {
+      const library = analysis.imageLibrary;
+      if (!isReusableProductImageLibrary(library, analysis.images?.length, aliExpressProductId)) {
+        return NextResponse.json(
+          { error: `EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: Store generation requires the complete identity-verified ProductImageLibrary for "${aliExpressProductId}".` },
+          { status: 422 }
+        );
+      }
+    }
+
     // Sanitize inputs
     const sanitizedInput: DropshippingInput = {
       productUrl: input.productUrl || '',
@@ -756,11 +769,16 @@ export async function POST(req: NextRequest) {
       priceRange: analysis.priceRange?.trim() || '$29.99 - $49.99',
       sourceUrl: analysis.sourceUrl || '',
       images: analysis.images || [],
+      productId: analysis.productId,
+      selectionSessionId: analysis.selectionSessionId,
+      imageLibrary: analysis.imageLibrary,
       shippingInfo: analysis.shippingInfo?.trim() || 'Standard shipping 7-14 business days',
       specifications: analysis.specifications || [],
       warnings: analysis.warnings || [],
       isPlaceholder: analysis.isPlaceholder ?? false,
     };
+
+    console.log(`${LOG} SELECTED_PRODUCT_ID=${aliExpressProductId || 'n/a'} PRODUCT_IMAGE_LIBRARY_COUNT=${sanitizedAnalysis.imageLibrary?.allValidImages.length || 0} ANALYZE_RESPONSE_IMAGE_COUNT=${sanitizedAnalysis.images.length}`);
 
     // Check if any provider is available
     const selectedProvider = provider || 'auto';
@@ -947,7 +965,7 @@ export async function POST(req: NextRequest) {
       : [];
 
     const finalImages = sanitizedAnalysis.images && sanitizedAnalysis.images.length > 0
-      ? [...new Set([...sanitizedAnalysis.images, ...validAiImgs])]
+      ? sanitizedAnalysis.images
       : validAiImgs;
 
     // Merge AI output with metadata and preserved images

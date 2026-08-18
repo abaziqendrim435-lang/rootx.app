@@ -35,6 +35,8 @@ export interface ApifyProductData {
   seller: string;
   shipping: string;
   url: string;
+  /** Search cards are display-only and must never be used as product-detail input. */
+  importKind?: 'search-card' | 'product-detail';
 }
 
 export interface ProductionDiagnostics {
@@ -662,6 +664,7 @@ export function mapDatasetItemToApifyProduct(
     seller,
     shipping,
     url: pageUrl.includes(productId) ? pageUrl : `https://www.aliexpress.com/item/${productId}.html`,
+    importKind: options?.thumbnailOnly ? 'search-card' : 'product-detail',
   };
 }
 

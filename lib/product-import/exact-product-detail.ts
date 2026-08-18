@@ -141,6 +141,17 @@ export async function fetchExactAliExpressProduct(
   const resolvedProductId = extractAliExpressProductId(finalUrl);
   identity.resolvedProductId = resolvedProductId && resolvedProductId !== identity.productId ? resolvedProductId : null;
 
+  // A redirect to a differently numbered item is a different supplier product for
+  // RootX purposes. Never relabel it as the selected product or cache its gallery
+  // under the selected product's identity.
+  if (resolvedProductId && resolvedProductId !== identity.productId) {
+    const error = `Product ID mismatch: requested "${identity.productId}", returned "${resolvedProductId}".`;
+    trace.selectedResultProductId = resolvedProductId;
+    trace.matchedProductId = false;
+    trace.failureReasons.push(error);
+    return { success: false, product: null, trace, error, productIdMismatch: true };
+  }
+
   if (!/\/item\/\d{10,16}/i.test(finalUrl) && !finalUrl.includes(identity.productId)) {
     const error = `Exact product-detail fetch did not land on an AliExpress item page for "${identity.productId}".`;
     trace.failureReasons.push(error);
@@ -153,7 +164,6 @@ export async function fetchExactAliExpressProduct(
   const pageBelongsToSelection =
     pageIds.has(identity.productId) ||
     belongsToIdentity(resolvedProductId, identity) ||
-    (identity.resolvedProductId ? pageIds.has(identity.resolvedProductId) : false) ||
     finalUrl.includes(identity.productId);
 
   if (!pageBelongsToSelection) {
@@ -192,6 +202,7 @@ export async function fetchExactAliExpressProduct(
     seller: 'AliExpress Supplier',
     shipping: 'Tracked Shipping',
     url: canonicalSourceUrl,
+    importKind: 'product-detail',
   };
 
   trace.actorUsed = 'exact-product-html';

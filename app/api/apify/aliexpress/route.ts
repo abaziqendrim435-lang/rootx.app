@@ -70,6 +70,19 @@ export async function POST(req: NextRequest) {
     const apifyResult = await fetchAliExpressProductViaApify(targetUrl, { isDirectUrl });
     const requestedProductId = extractAliExpressProductId(targetUrl);
 
+    // Product-detail hydration is always anchored to the selection made from a
+    // search card. A URL without that frozen ID cannot enter the canonical
+    // gallery pipeline because there is no identity to verify it against.
+    if (!selectedProductId || !requestedProductId) {
+      return NextResponse.json(
+        {
+          error: 'EXACT_PRODUCT_DETAIL_HYDRATION_FAILED: AliExpress product-detail hydration requires selectedProductId and an exact item URL.',
+          trace: apifyResult.trace,
+        },
+        { status: 422 }
+      );
+    }
+
     if (selectedProductId && requestedProductId && selectedProductId !== requestedProductId) {
       return NextResponse.json(
         {
@@ -86,7 +99,7 @@ export async function POST(req: NextRequest) {
       apifyResult.productIdMismatch ||
       !requestedProductId ||
       !apifyResult.trace.matchedProductId ||
-      apifyResult.trace.selectedResultProductId !== requestedProductId
+      apifyResult.trace.selectedResultProductId !== selectedProductId
     ) {
       return NextResponse.json(
         {
@@ -108,7 +121,7 @@ export async function POST(req: NextRequest) {
     const imageLib = await buildCachedProductImageLibrary({
       images: finalProduct.images,
       title: finalProduct.title,
-      productId: requestedProductId,
+      productId: selectedProductId,
       sourceUrl: targetUrl,
       selectionSessionId,
     });
@@ -153,6 +166,7 @@ export async function POST(req: NextRequest) {
       images: cachedUrls,
       featuredImage: cachedUrls[0] || null,
       imageLibrary: imageLib,
+      importKind: 'product-detail' as const,
     };
 
     console.log(`[Apify API Route] [Diagnostic] SEARCH_IMAGE_COUNT: ${cachedUrls.length}`);
