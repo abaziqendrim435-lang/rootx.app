@@ -44,6 +44,36 @@ function resolveAssetUrlExpression(assetNameOrUrl: string): string {
   return `{{ '${assetNameOrUrl}' | asset_url }}`;
 }
 
+function getSectionSettingUrl(
+  spec: StorefrontSpec,
+  sectionId: string,
+  settingKey: string,
+  fallback: string
+): string {
+  const section = spec.sections.find((s) => s.id === sectionId);
+  const value = section?.settings?.[settingKey];
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function renderRoleImageOrShopifyFallback(
+  roleImage: string,
+  alt: string,
+  style: string,
+  shopifyAssign: string,
+  shopifyTag: string
+): string {
+  if (roleImage) {
+    return `<div class="rx-img-zoom-wrap">${renderAssetImgTag(roleImage, alt, style)}</div>`;
+  }
+  return `
+        {% assign role_media = ${shopifyAssign} %}
+        {% if role_media %}
+          <div class="rx-img-zoom-wrap">
+            {{ role_media | image_url: width: 1200 | image_tag: alt: '${esc(alt)}', style: '${style}', loading: 'lazy' }}
+          </div>
+        {% endif %}`;
+}
+
 export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: string; value: string }[] {
   const brand = spec.brand;
   const prod = spec.product;
@@ -57,6 +87,11 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
   const showcaseImgAsset = resolveRenderableImage(spec.images.featured);
   const finalCtaImgAsset = resolveRenderableImage(spec.images.finalCta);
   const comparisonImgAsset = resolveRenderableImage(spec.images.comparisonImage);
+  const heroSettingUrl = getSectionSettingUrl(spec, ROOTX_SECTION_TYPES.HERO, 'hero_image', activeHeroImg || '');
+  const storySettingUrl = getSectionSettingUrl(spec, ROOTX_SECTION_TYPES.IMAGE_STORY, 'story_image', storyImgAsset || '');
+  const showcaseSettingUrl = getSectionSettingUrl(spec, ROOTX_SECTION_TYPES.PRODUCT_SHOWCASE, 'showcase_image', showcaseImgAsset || '');
+  const comparisonSettingUrl = getSectionSettingUrl(spec, ROOTX_SECTION_TYPES.COMPARISON, 'comparison_image', comparisonImgAsset || '');
+  const finalCtaSettingUrl = getSectionSettingUrl(spec, ROOTX_SECTION_TYPES.FINAL_CTA, 'final_cta_image', finalCtaImgAsset || '');
 
   const sectionAssignedUrls = [
     heroImgAsset,
@@ -626,14 +661,15 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       <span class="rx-badge-pill" style="margin-bottom: 1rem;">CRAFTSMANSHIP & DESIGN</span>
       <h2 style="font-size: var(--rx-font-3xl); font-family: var(--rx-heading-font); color: var(--rx-text); margin: 0 0 1rem;">${esc(prod.cleanName)}</h2>
       <p style="color: var(--rx-muted); font-size: var(--rx-font-lg); line-height: var(--rx-lh-relaxed); margin: 0 auto 2rem;">${esc(prod.shortDescription)}</p>
-      {% assign showcase_media = product.images[2] | default: product.images[1] | default: product.featured_image | default: product.media[0] %}
-      {% if showcase_media %}
-        <div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">
-          {{ showcase_media | image_url: width: 1200 | image_tag: alt: product.title, style: 'width: 100%; height: 380px; object-fit: cover; display: block;', loading: 'lazy' }}
-        </div>
-      {% else %}
-        <div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">${renderAssetImgTag(showcaseImgAsset, prod.cleanName, 'width: 100%; height: 380px; object-fit: cover; display: block;')}</div>
-      {% endif %}
+      ${showcaseSettingUrl
+        ? `<div class="rx-img-zoom-wrap" style="margin: 0 auto 2.5rem; max-width: 680px; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-lg);">${renderAssetImgTag(showcaseSettingUrl, prod.cleanName, 'width: 100%; height: 380px; object-fit: cover; display: block;')}</div>`
+        : renderRoleImageOrShopifyFallback(
+            '',
+            prod.cleanName,
+            'width: 100%; height: 380px; object-fit: cover; display: block;',
+            'product.images[2] | default: product.images[1] | default: product.featured_image | default: product.media[0]',
+            'showcase_media'
+          )}
       <form action="/cart/add" method="post">
         <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
         <button type="submit" class="btn btn-primary" style="padding: 0 3rem; height: 54px; font-size: 1.05rem;">Get Yours Today — $${esc(prod.price)} &rarr;</button>
@@ -644,7 +680,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% schema %}
 {
   "name": "RootX Product Showcase",
-  "settings": []
+  "settings": [
+    { "type": "text", "id": "showcase_image", "label": "Showcase Image URL", "default": "${esc(showcaseSettingUrl)}" }
+  ]
 }
 {% endschema %}`,
     },
@@ -692,16 +730,15 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
         </div>
       </div>
       <div>
-        {% assign story_media = product.images[1] | default: product.featured_image | default: product.media[0] %}
-        {% if story_media %}
-          <div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">
-            {{ story_media | image_url: width: 1200 | image_tag: alt: 'Story', style: 'width: 100%; height: 440px; object-fit: cover; display: block;', loading: 'lazy' }}
-          </div>
-        {% else %}
-          <div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">
-            ${renderAssetImgTag(storyImgAsset, 'Story', 'width: 100%; height: 440px; object-fit: cover; display: block;')}
-          </div>
-        {% endif %}
+        ${storySettingUrl
+          ? `<div class="rx-img-zoom-wrap" style="border-radius: var(--rx-radius-lg); box-shadow: var(--rx-shadow-lg); border: 1px solid var(--rx-border);">${renderAssetImgTag(storySettingUrl, 'Story', 'width: 100%; height: 440px; object-fit: cover; display: block;')}</div>`
+          : renderRoleImageOrShopifyFallback(
+              '',
+              'Story',
+              'width: 100%; height: 440px; object-fit: cover; display: block;',
+              'product.images[1] | default: product.featured_image | default: product.media[0]',
+              'story_media'
+            )}
       </div>
     </div>
   </div>
@@ -709,7 +746,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% schema %}
 {
   "name": "RootX Image Story",
-  "settings": []
+  "settings": [
+    { "type": "text", "id": "story_image", "label": "Story Image URL", "default": "${esc(storySettingUrl)}" }
+  ]
 }
 {% endschema %}`,
     },
@@ -754,6 +793,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
       <h2 style="font-size: var(--rx-font-3xl); font-family: var(--rx-heading-font); color: var(--rx-text); margin: 0 0 0.75rem;">Why ${esc(brand.name)} Outperforms Generic Alternatives</h2>
       <p style="color: var(--rx-muted); font-size: var(--rx-font-lg);">See how our product stacks up against cheap imitations</p>
     </div>
+    ${comparisonSettingUrl ? `<div style="text-align: center; margin-bottom: 2.5rem;">${renderAssetImgTag(comparisonSettingUrl, 'Product comparison', 'max-width: 680px; width: 100%; height: 320px; object-fit: cover; border-radius: var(--rx-radius-lg); border: 1px solid var(--rx-border); box-shadow: var(--rx-shadow-md); display: inline-block;')}</div>` : ''}
     <div class="rx-card" style="padding: 0; overflow: hidden;">
       <div style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr; background: var(--rx-surface); border-bottom: 2px solid var(--rx-border); padding: 1.25rem 1.5rem; font-weight: 800; font-size: 1rem; color: var(--rx-text); align-items: center;">
         <div>Feature</div>
@@ -778,7 +818,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% schema %}
 {
   "name": "RootX Comparison",
-  "settings": []
+  "settings": [
+    { "type": "text", "id": "comparison_image", "label": "Comparison Image URL", "default": "${esc(comparisonSettingUrl)}" }
+  ]
 }
 {% endschema %}`,
     },
@@ -882,6 +924,7 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
     <span style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); padding: 0.35rem 1rem; border-radius: var(--rx-radius-full); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; display: inline-block; margin-bottom: 1.5rem;">LIMITED TIME OFFER</span>
     <h2 style="font-size: var(--rx-font-4xl); font-family: var(--rx-heading-font); margin: 0 0 1.25rem; color: #ffffff; line-height: var(--rx-lh-tight);">${esc(brand.name)}</h2>
     <p style="font-size: var(--rx-font-lg); opacity: 0.95; margin: 0 auto 2.5rem; max-width: 600px; line-height: var(--rx-lh-relaxed);">Order your ${esc(prod.cleanName)} today with free express tracked shipping and a 30-day money-back guarantee.</p>
+    ${finalCtaSettingUrl ? `<div style="margin: 0 auto 2rem; max-width: 480px; border-radius: var(--rx-radius-lg); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.25);">${renderAssetImgTag(finalCtaSettingUrl, prod.cleanName, 'width: 100%; height: 260px; object-fit: cover; display: block;')}</div>` : ''}
     <form action="/cart/add" method="post">
       <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" />
       <button type="submit" class="btn" style="background: #ffffff; color: var(--rx-primary); padding: 0 3.5rem; height: 58px; font-weight: 800; font-size: 1.15rem; border-radius: var(--rx-button-radius); box-shadow: 0 10px 30px rgba(0,0,0,0.2);">Claim Yours Now — $${esc(prod.price)} &rarr;</button>
@@ -896,7 +939,9 @@ export function generateShopifyLiquidSections(spec: StorefrontSpec): { key: stri
 {% schema %}
 {
   "name": "RootX Final CTA",
-  "settings": []
+  "settings": [
+    { "type": "text", "id": "final_cta_image", "label": "Final CTA Image URL", "default": "${esc(finalCtaSettingUrl)}" }
+  ]
 }
 {% endschema %}`,
     },

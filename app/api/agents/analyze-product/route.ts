@@ -741,11 +741,41 @@ export async function POST(req: NextRequest) {
 
     let cachedLib: ProductImageLibrary;
     const incomingLibrary = body.productData?.imageLibrary;
-    if (isReusableProductImageLibrary(incomingLibrary, analyzeInputCount)) {
+    if (
+      incomingLibrary &&
+      isReusableProductImageLibrary(incomingLibrary, analyzeInputCount)
+    ) {
+      const libraryProductId = incomingLibrary.productId;
+      const librarySourceId = incomingLibrary.sourceUrl
+        ? extractAliExpressProductId(incomingLibrary.sourceUrl)
+        : null;
+      if (productId && libraryProductId && libraryProductId !== productId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `ProductImageLibrary product ID "${libraryProductId}" does not match requested "${productId}".`,
+          },
+          { status: 422 }
+        );
+      }
+      if (productId && librarySourceId && librarySourceId !== productId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `ProductImageLibrary source URL product ID "${librarySourceId}" does not match requested "${productId}".`,
+          },
+          { status: 422 }
+        );
+      }
       console.log(`${LOG} [${requestId}] Reusing canonical ProductImageLibrary (${incomingLibrary.allValidImages.length} persisted images). Skipping re-cache.`);
       cachedLib = incomingLibrary;
     } else {
-      cachedLib = await buildCachedProductImageLibrary({ images: extractedImages, title });
+      cachedLib = await buildCachedProductImageLibrary({
+        images: extractedImages,
+        title,
+        productId: productId || undefined,
+        sourceUrl: trimmedUrl,
+      });
     }
 
     const finalImages = cachedLib.allValidImages.map((img) => getPersistedLibraryUrl(img)).filter(Boolean);

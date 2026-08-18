@@ -51,6 +51,8 @@ export interface DiagnosticInfo {
 
 export interface ProductImageLibrary {
   generationId?: string;
+  productId?: string | null;
+  sourceUrl?: string | null;
   allValidImages: NormalizedImage[];
   heroCandidates: NormalizedImage[];
   galleryCandidates: NormalizedImage[];

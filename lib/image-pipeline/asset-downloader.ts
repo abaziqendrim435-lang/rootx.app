@@ -255,6 +255,10 @@ export async function downloadAndPackageProductImages(
   updatedSpec.images.featured = mapImage(spec.images.featured);
   updatedSpec.images.story = mapImage(spec.images.story);
   updatedSpec.images.finalCta = mapImage(spec.images.finalCta);
+  updatedSpec.images.comparisonImage = mapImage(spec.images.comparisonImage);
+  updatedSpec.images.benefitImages = (spec.images.benefitImages || [])
+    .map(mapImage)
+    .filter((img): img is NormalizedImage => img !== null);
 
   const downloadedGallery = (spec.images.gallery || [])
     .map(mapImage)
@@ -284,15 +288,25 @@ export async function downloadAndPackageProductImages(
   }));
 
   updatedSpec.sections = updatedSpec.sections.map((sec) => {
-    const isGallerySec = sec.id === 'rootx-gallery' || sec.id === 'rootx-main-product' || sec.id === 'rootx-hero';
+    const isGallerySec = sec.id === 'rootx-gallery' || sec.id === 'rootx-main-product';
     const heroAsset = updatedSpec.images.hero?.exportedAssetName || updatedSpec.images.hero?.normalizedUrl || '';
+    const storyAsset = updatedSpec.images.story?.exportedAssetName || updatedSpec.images.story?.normalizedUrl || '';
+    const showcaseAsset = updatedSpec.images.featured?.exportedAssetName || updatedSpec.images.featured?.normalizedUrl || '';
+    const comparisonAsset = updatedSpec.images.comparisonImage?.exportedAssetName || updatedSpec.images.comparisonImage?.normalizedUrl || '';
+    const finalCtaAsset = updatedSpec.images.finalCta?.exportedAssetName || updatedSpec.images.finalCta?.normalizedUrl || '';
+
+    const sectionSettings: Record<string, string | number | boolean | string[]> = {
+      ...sec.settings,
+      hero_image: sec.id === 'rootx-hero' ? heroAsset : (sec.settings.hero_image as string) || heroAsset,
+      story_image: sec.id === 'rootx-image-story' ? storyAsset : (sec.settings.story_image as string) || storyAsset,
+      showcase_image: sec.id === 'rootx-product-showcase' ? showcaseAsset : (sec.settings.showcase_image as string) || showcaseAsset,
+      comparison_image: sec.id === 'rootx-comparison' ? comparisonAsset : (sec.settings.comparison_image as string) || comparisonAsset,
+      final_cta_image: sec.id === 'rootx-final-cta' ? finalCtaAsset : (sec.settings.final_cta_image as string) || finalCtaAsset,
+    };
 
     return {
       ...sec,
-      settings: {
-        ...sec.settings,
-        hero_image: heroAsset,
-      },
+      settings: sectionSettings,
       blocks: isGallerySec ? galleryAssetBlocks : sec.blocks,
     };
   });

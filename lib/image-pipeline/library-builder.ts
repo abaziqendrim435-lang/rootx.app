@@ -55,6 +55,18 @@ export function assertLibraryFullyPersisted(lib: ProductImageLibrary, sourceCoun
 
 export function createProductImageLibrary(productData: unknown, customGenId?: string): ProductImageLibrary {
   const generationId = customGenId || `gen_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const meta =
+    productData && typeof productData === 'object' && !Array.isArray(productData)
+      ? (productData as Record<string, unknown>)
+      : null;
+  const productId =
+    (typeof meta?.productId === 'string' && meta.productId) ||
+    (typeof meta?.product_id === 'string' && meta.product_id) ||
+    null;
+  const sourceUrl =
+    (typeof meta?.sourceUrl === 'string' && meta.sourceUrl) ||
+    (typeof meta?.url === 'string' && meta.url) ||
+    null;
   const rawCandidates = extractRawImages(productData);
   const seenUrls = new Set<string>();
   const allValidImages: NormalizedImage[] = [];
@@ -105,6 +117,8 @@ export function createProductImageLibrary(productData: unknown, customGenId?: st
 
   return {
     generationId,
+    productId,
+    sourceUrl,
     allValidImages,
     heroCandidates: heroCandidates.length > 0 ? heroCandidates : allValidImages,
     galleryCandidates,

@@ -806,6 +806,10 @@ export async function fetchAliExpressProductViaApify(
   let matchRes: ReturnType<typeof matchDatasetItemByProductId> | null = null;
 
   for (const actorId of actors) {
+    if (isDirectUrl && SEARCH_CARD_ONLY_ACTORS.has(actorId)) {
+      trace.failureReasons.push(`Actor ${actorId} is search-card only and cannot satisfy direct product URL imports.`);
+      continue;
+    }
     try {
       console.log(`[Apify Service] Invoking Actor: ${actorId} for URL: ${targetUrl.slice(0, 80)}...`);
       const runUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyToken}&timeout=60`;

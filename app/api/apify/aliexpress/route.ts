@@ -166,6 +166,8 @@ export async function POST(req: NextRequest) {
     const imageLib = await buildCachedProductImageLibrary({
       images: finalProduct.images,
       title: finalProduct.title,
+      productId: requestedProductId,
+      sourceUrl: targetUrl,
     });
     const extractedCount = imageLib.validUniqueCount || imageLib.originalSourceCount;
     const persistedCount = imageLib.cachedImageCount || 0;

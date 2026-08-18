@@ -207,6 +207,7 @@ export function buildStorefrontSpec(
         section_image: sectionImageMap[sec.sectionId] || storyImageResolved,
         showcase_image: showcaseImageResolved,
         comparison_image: comparisonImageResolved,
+        final_cta_image: finalCtaImageResolved,
       },
       blocks: sectionBlocks,
     };
